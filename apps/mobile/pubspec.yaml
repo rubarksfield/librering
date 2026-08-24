@@ -1,0 +1,30 @@
+name: librering_mobile
+description: LibreRing evidence-first mobile application.
+publish_to: none
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.13.1
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  flutter_riverpod: 3.4.2
+  go_router: 18.0.0
+  intl: ^0.20.2
+  ring_core:
+    path: ../../packages/ring_core
+  ring_demo:
+    path: ../../packages/ring_demo
+  ring_design_system:
+    path: ../../packages/ring_design_system
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true

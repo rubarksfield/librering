@@ -4,11 +4,12 @@ Last updated: 2026-08-24
 
 ## Current status
 
-`DESIGN_AND_SCORING_APPROVED`
+`IMPLEMENTATION`
 
 - Visual direction: **approved for V1 on 2026-08-24**
 - Scoring model: **approved for V1 on 2026-08-24**
-- Production implementation: **unlocked after freeze verification**
+- Design/scoring freeze: **complete in commit `04563fe`**
+- Phase 5 production foundation: **complete and verified**
 
 ## Completed
 
@@ -56,16 +57,33 @@ Last updated: 2026-08-24
   edge-case reference until every journey is mapped during implementation.
 - Received unmistakable approval of both V1 design and scoring after explicitly
   stating that scoring approval remained outstanding.
+- Frozen the approved design exports, tokens, specifications, scoring V1, and
+  model cards as a separate root commit (`04563fe`).
+- Installed and verified Flutter 3.47.1 / Dart 3.13.1 without enabling analytics.
+- Created `apps/mobile`, `ring_core`, `ring_demo`, and `ring_design_system` with
+  one-way dependency boundaries and no BLE/storage/health/scoring implementation.
+- Implemented all twelve approved routes with the exact warm-paper, Helvetica,
+  flat-card, oversized-number, coral-mark, and original vector-art direction.
+- Added an explicit `LIBRERING_DEMO` boundary: production mode fails closed and
+  never substitutes bundled health values.
+- Added English and pt-PT copy, reduced-motion-aware route transitions, semantic
+  summaries, 48 dp controls, contrast assertions, and scroll-safe layouts.
+- Added local-only swim journal and cycle privacy state with separate provenance.
+- Generated and visually inspected four 390×844 Helvetica golden baselines.
+- Built, installed, launched, and visually inspected the demo app on an iPhone
+  17 Pro simulator. The archived screenshot hash is
+  `a83c306d442d7391b9a90208fb3142d83975b6bbada4eb93dc239d35d2e2bece`.
 
 ## In progress
 
-- Freezing approved V1 design and scoring artifacts before Phase 5 production
-  foundation work.
+- Preparing the clean-room Phase 6 BLE/protocol implementation boundary.
 
 ## Blocked
 
-- None. Flutter/Android/iOS toolchain completeness is being verified as part of
-  Phase 5 and may limit platform builds without limiting pure Flutter tests.
+- Android native compilation is machine-blocked before Gradle because no Android
+  SDK is installed. Licence acceptance is a user-controlled external gate.
+- Physical COLMI R12 behavior remains unverified because no owned device or
+  packet capture is available.
 
 ## Decisions
 
@@ -114,6 +132,14 @@ Last updated: 2026-08-24
 | 2026-08-24 | Final syntax/model/dependency checks | JS syntax passed; scoring 13/13; HTTP 200; CSS braces balanced; zero external network references |
 | 2026-08-24 | Approved Open Design visual artifact | 12/12 screens reachable; heading/target structure passed; unique IDs passed; JS/CSS checks passed; no external assets or banned effects; tested body contrast ≥4.72:1 |
 | 2026-08-24 | Approved visual interaction review | Sleep → Evidence → no-result → Trend → Swim → Privacy passed; swim save and consent toggle passed; navigation centring and heatmap clearance visually confirmed |
+| 2026-08-24 | Frozen design/scoring commit | `04563fe chore: freeze approved V1 design and scoring` |
+| 2026-08-24 | Flutter static analysis | no issues across app and local packages |
+| 2026-08-24 | Production route/flow tests | 12/12 routes; evidence-to-privacy flow; production fail-closed; pt-PT copy passed |
+| 2026-08-24 | Production 200% text test | Welcome, Today, Metrics, Sleep, Evidence, and Cycle privacy rendered without overflow |
+| 2026-08-24 | Design-system/domain/demo tests | 3/3 + 1/1 + 1/1 passed; token, contrast, target, and provenance assertions |
+| 2026-08-24 | Golden regression | 4/4 generated with system Helvetica Neue and rechecked at 390×844 |
+| 2026-08-24 | iOS simulator build | Xcode build passed; Runner.app installed/launched on iPhone 17 Pro simulator |
+| 2026-08-24 | Android debug build | correctly stopped: Android SDK unavailable on this Mac |
 
 ## Known limitations
 
@@ -123,7 +149,9 @@ Last updated: 2026-08-24
 - Competitor detail can change; sources are dated and should be refreshed for release.
 - Synthetic checks establish deterministic face/safety behaviour, not calibration,
   demographic fairness, medical validity, or user comprehension.
-- No production application exists; this is required by the approval gate.
+- Phase 5 is a production-code foundation, not a complete device application.
+  BLE, database, health bridges, scoring execution, export, and deletion are not
+  implemented yet.
 - The prototype is interaction-complete but not a usability study with external
   participants or a screen-reader/device-lab certification.
 - Penpot remains a verified local auxiliary environment, not the first-gate visual
@@ -133,6 +161,5 @@ Last updated: 2026-08-24
 
 ## Next concrete action
 
-Complete the immutable V1 freeze and its verification, then create the Phase 5
-Flutter workspace without pulling BLE, database, health-platform, or scoring
-implementation forward from later phases.
+Implement the Phase 6 clean-room BLE protocol package from documented evidence
+and fixtures. Do not claim R12 compatibility until physical-device checks pass.

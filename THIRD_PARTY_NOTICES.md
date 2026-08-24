@@ -1,12 +1,10 @@
 # Third-party notices
 
-Status: first-stage research and prototype, reviewed 2026-08-23.
+Status: Phase 5 production foundation, reviewed 2026-08-24.
 
-LibreRing is licensed under Apache-2.0. The current repository does not copy,
-vendor, link, or distribute source code or visual assets from the reference
-projects below. Repository inspection informed factual protocol, architecture,
-and risk notes only. Any future implementation must repeat this audit at the
-exact dependency revision and preserve all applicable notices.
+LibreRing original code is licensed under Apache-2.0. The repository does not
+copy or vendor source code or visual assets from the protocol/design references
+below. Repository inspection informed facts, architecture, and risk notes only.
 
 | Reference | Revision reviewed | Licence observed | Use in LibreRing |
 | --- | --- | --- | --- |
@@ -20,6 +18,16 @@ exact dependency revision and preserve all applicable notices.
 | atc1441/ATC_RF03_Ring | `7b2e78e0e9f42b7cec95dd1e733670f533089bbb` | GPL-3.0 | Hardware facts only; no firmware/code/assets |
 | Penpot | 2.17.1 | MPL-2.0 and component licences | External local design tool; not distributed here |
 
-The scoring sandbox uses only Python's standard library. Penpot runtime images,
-state, credentials, and backups are gitignored local tooling and are not part of
-the LibreRing distribution.
+The Phase 5 Flutter application links these package dependencies through the
+standard Dart package resolver:
+
+| Package | Version | Licence |
+| --- | --- | --- |
+| Flutter / `flutter_localizations` | 3.47.1 SDK | BSD-3-Clause |
+| `flutter_riverpod` | 3.4.2 | MIT |
+| `go_router` | 18.0.0 | BSD-3-Clause |
+| `intl` | 0.20.3 | BSD-3-Clause |
+
+Full transitive notices are generated into Flutter build artifacts. The scoring
+sandbox uses only Python's standard library. Penpot runtime images, state,
+credentials, and backups are gitignored and are not distributed.

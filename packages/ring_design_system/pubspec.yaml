@@ -1,0 +1,17 @@
+name: ring_design_system
+description: Frozen V1 visual tokens and primitives for LibreRing.
+version: 1.0.0
+publish_to: none
+
+environment:
+  sdk: ^3.13.1
+  flutter: ">=3.47.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0

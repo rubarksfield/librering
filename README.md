@@ -1,13 +1,37 @@
-# LibreRing V1 — design and scoring review
+# LibreRing V1
 
-Status: **`DESIGN_AND_SCORING_APPROVED`**
+Status: **`IMPLEMENTATION` — Phase 5 production foundation complete**
 
 Visual direction: **approved for V1 on 2026-08-24**  
 Scoring model: **approved for V1 on 2026-08-24**
 
-LibreRing V1 has an approved product-design and scientific-model foundation for
-the COLMI R12. Production Flutter implementation is authorised after the frozen
-V1 sources are verified.
+LibreRing V1 has an approved and separately committed product-design and
+scientific-model foundation for the COLMI R12. The first production Flutter
+vertical slice implements the twelve priority screens, deterministic demo mode,
+local privacy/journal state, and English/pt-PT locale plumbing.
+
+## Run the mobile foundation
+
+Flutter 3.47.1 is installed at `/Users/zoerichardson/develop/flutter`.
+
+```sh
+cd apps/mobile
+/Users/zoerichardson/develop/flutter/bin/flutter run \
+  --dart-define=LIBRERING_DEMO=true
+```
+
+Omit the flag to verify the fail-closed production state. It never substitutes
+demo health values when a real repository is unavailable.
+
+```sh
+/Users/zoerichardson/develop/flutter/bin/flutter analyze
+/Users/zoerichardson/develop/flutter/bin/flutter test
+/Users/zoerichardson/develop/flutter/bin/flutter build ios --simulator --debug \
+  --dart-define=LIBRERING_DEMO=true
+```
+
+The verified native render is archived at
+`docs/testing/screenshots/ios-welcome.png`.
 
 ## Review the interactive prototype
 
@@ -31,6 +55,7 @@ See:
 - [Approved scoring model](docs/science/scoring-model-v1.md)
 - [Model evaluation](docs/science/model-evaluation.md)
 - [Progress and limitations](docs/PROGRESS.md)
+- [Production architecture](docs/architecture/system-overview.md)
 
 ## Reproduce the scoring research
 
@@ -54,4 +79,5 @@ APPROVE DESIGN AND SCORING V1
 ```
 
 Future design or scoring changes require an explicit versioned revision and must
-not silently alter the frozen V1 implementation contract.
+not silently alter the frozen V1 implementation contract. BLE, persistent data,
+health bridges, and scoring execution remain later-phase work.

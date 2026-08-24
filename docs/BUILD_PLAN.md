@@ -1,9 +1,9 @@
 # LibreRing first-stage build plan
 
-Status: `DESIGN_AND_SCORING_APPROVED`
+Status: `IMPLEMENTATION`
 
-Visual direction and scoring are approved for V1. The required freeze artifacts
-are being completed before production code begins.
+Visual direction and scoring are approved and frozen for V1. Phase 5 production
+foundation work is implemented and verified; Phase 6 protocol work is next.
 
 The user supplied an unmistakably equivalent approval of both design and scoring
 on 2026-08-24.
@@ -21,8 +21,10 @@ on 2026-08-24.
 | Prototyping | Complete | Eight interactive web journeys, alternate states, light/dark/large-text coverage |
 | Visual direction decision | Accepted | Approved Open Design artifact archived under `docs/design/approved-reference-led/` |
 | User review | Approved | Visual and scoring approval recorded on 2026-08-24 |
-| Design and scoring freeze | In progress | Exports, tokens, specifications, mapping, and scoring V1 |
-| Production implementation | Unlocked after freeze | Begin Phase 5 only after freeze verification |
+| Design and scoring freeze | Complete | Commit `04563fe`; exports, tokens, specifications, mapping, and scoring V1 |
+| Phase 5 production foundation | Complete | Flutter workspace, approved twelve routes, demo boundary, locale/state plumbing, tests, iOS simulator build |
+| Android build environment | Machine gap | Android SDK must be installed and its licences accepted by the user |
+| Phase 6 protocol implementation | Not started | Clean-room BLE fixtures and driver tests; no device claim without hardware evidence |
 
 ## Verification strategy
 
@@ -35,6 +37,5 @@ on 2026-08-24.
 
 ## Current gate
 
-Complete and verify the V1 design/scoring freeze, commit it separately, then begin
-Phase 5: Flutter workspace, design system, deterministic demo mode, approved
-navigation/screens, and tests.
+Phase 5 is complete. Begin Phase 6 without adding database, scoring, or health
+platform behavior. Physical COLMI R12 validation remains explicitly unavailable.

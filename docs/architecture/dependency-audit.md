@@ -1,13 +1,32 @@
 # Dependency audit
 
-Reviewed: 2026-08-23.
+Reviewed: 2026-08-24.
 
 ## Current repository
 
-There is no production application and therefore no production dependency
-graph. This is intentional: the design-and-scoring approval gate remains locked.
-The scoring sandbox uses Python 3 standard-library modules only. Its generated
-CSV/JSON/SVG artifacts are reproducible and require no notebook runtime.
+The approved production foundation uses Flutter 3.47.1 and Dart 3.13.1. The
+scoring sandbox remains Python-standard-library only and is not imported by the
+mobile application.
+
+| Direct dependency | Resolved version | Licence | Purpose / removal path |
+| --- | --- | --- | --- |
+| Flutter SDK | 3.47.1 stable | BSD-3-Clause | Mobile UI/runtime; platform foundation |
+| `flutter_riverpod` | 3.4.2 | MIT | Explicit local state and dependency boundaries; replace with inherited state if removed |
+| `go_router` | 18.0.0 | BSD-3-Clause | Deep-linkable twelve-route map; replace with Router API if removed |
+| `intl` | 0.20.3 | BSD-3-Clause | Locale support required by Flutter localizations; SDK-aligned |
+| `flutter_localizations` | SDK | BSD-3-Clause | English and pt-PT platform localization delegates |
+
+Local path packages are original Apache-2.0 project code:
+
+- `ring_core` — immutable records, with no Flutter/BLE/scoring dependency.
+- `ring_demo` — deterministic records whose provenance is always `demo`.
+- `ring_design_system` — frozen tokens, theme, components, and original vector art.
+
+The mobile lockfile SHA-256 is
+`ef918a162a2d76198fec1c58acd54671a5dbce605b3849c59bd7acf0e2b8dada`.
+Source inspection found no `dart:io`, `dart:html`, HTTP client, method channel,
+or event channel usage in production libraries. These dependencies add no app
+permissions, analytics, runtime networking, or native binaries in Phase 5.
 
 ## Local design tooling
 
@@ -16,10 +35,11 @@ Runtime configuration, database, object storage, credentials, and backups live
 under gitignored `.tools/penpot/`. A compose-file licence inventory is still
 required before anyone redistributes those images; LibreRing does not do so.
 
-## Future production decision record
+## Later-phase decision record
 
-No package is approved yet. After `APPROVE DESIGN AND SCORING V1`, evaluate the
-minimum Flutter package set against these gates:
+No BLE, storage, health, chart, crypto, analytics, crash-reporting, authentication,
+or database package is approved yet. Evaluate the minimum later-phase set against
+these gates:
 
 | Area | Required checks |
 | --- | --- |
@@ -45,5 +65,7 @@ dependency saves little code.
 ## Verification
 
 `python3 -m unittest discover research/scoring/tests -v` is the dependency-free
-verification entry point. A future production dependency audit must be repeated
-after a lockfile exists and before the first distributable build.
+research entry point. `flutter analyze`, the package tests, the application
+tests, and the iOS simulator build verify the current dependency graph. Repeat
+this audit before every new platform package and before the first distributable
+build; no automated CVE database was available in this phase.
