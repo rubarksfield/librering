@@ -1,0 +1,31 @@
+# Local tooling and credentials
+.tools/
+.playwright-mcp/
+
+# Research caches and generated notebook state
+.cache/
+**/.ipynb_checkpoints/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.venv/
+
+# Large raster scoring outputs (CSV/JSON/SVG research artifacts are committed)
+research/scoring/outputs/*.png
+
+# OS/editor state
+.DS_Store
+.idea/
+.vscode/
+
+# Flutter / Dart generated state
+**/.dart_tool/
+**/.flutter-plugins
+**/.flutter-plugins-dependencies
+**/build/
+**/coverage/
+**/android/.gradle/
+**/android/local.properties
+**/ios/Pods/
+**/ios/.symlinks/

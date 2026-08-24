@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en" data-theme="light" data-text-size="standard">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark light" />
+    <meta
+      name="description"
+      content="LibreRing V1 interactive design and scientific-model prototype. Fictional demo data only."
+    />
+    <title>LibreRing — Product & Scientific Model V1</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="styles.css?v=20260824-structured-v2" />
+  </head>
+  <body>
+    <a class="skip-link" href="#screen">Skip to prototype</a>
+
+    <div class="ambient-scene" aria-hidden="true">
+      <span class="ambient-orb ambient-orb--sleep"></span>
+      <span class="ambient-orb ambient-orb--recovery"></span>
+      <span class="ambient-orb ambient-orb--movement"></span>
+      <span class="ambient-grid"></span>
+    </div>
+
+    <main class="review-shell">
+      <aside class="review-rail" aria-label="Prototype review controls">
+        <div class="review-brand">
+          <span class="brand-mark" aria-hidden="true">
+            <svg class="brand-glyph" viewBox="0 0 48 48" focusable="false">
+              <path class="glyph-arc glyph-arc--outer" d="M36.8 10.5A17 17 0 1 0 39 33" />
+              <path class="glyph-arc glyph-arc--middle" d="M31.2 15.2A11.5 11.5 0 1 0 34.2 30" />
+              <path class="glyph-arc glyph-arc--inner" d="M26.4 20A6 6 0 1 0 28 27" />
+              <circle class="glyph-node" cx="38.5" cy="9.5" r="2.2" />
+            </svg>
+          </span>
+          <div class="brand-copy">
+            <span class="brand-word" aria-label="LibreRing"><em aria-hidden="true">Libre</em><strong aria-hidden="true">Ring</strong></span>
+            <span class="brand-tagline">Signals, made legible.</span>
+          </div>
+        </div>
+
+        <p class="review-kicker">Recommended playtest</p>
+        <nav class="journey-list" aria-label="Playtest journeys">
+          <button type="button" data-jump="onboarding"><b>01</b><span>Pair a ring</span></button>
+          <button type="button" data-jump="morning"><b>02</b><span>Read the morning</span></button>
+          <button type="button" data-jump="evidence"><b>03</b><span>Inspect evidence</span></button>
+          <button type="button" data-jump="swim"><b>04</b><span>Log a swim</span></button>
+          <button type="button" data-jump="trends"><b>05</b><span>Check a trend</span></button>
+          <button type="button" data-jump="device"><b>06</b><span>Resolve a sync issue</span></button>
+          <button type="button" data-jump="export"><b>07</b><span>Export your data</span></button>
+          <button type="button" data-jump="cycle"><b>08</b><span>Review Cycle Context</span></button>
+        </nav>
+
+        <div class="review-controls" aria-label="Display controls">
+          <button type="button" id="theme-toggle" class="quiet-control">
+            <span aria-hidden="true">◐</span> Use dark theme
+          </button>
+          <button type="button" id="text-toggle" class="quiet-control">
+            <span aria-hidden="true">Aa</span> Use large text
+          </button>
+        </div>
+
+        <div class="review-note">
+          <span>Research build</span>
+          <p>Fictional data. No diagnosis, treatment advice, fertility status, or production device connection.</p>
+        </div>
+      </aside>
+
+      <section class="stage" aria-label="Interactive mobile prototype">
+        <div class="stage-meta" aria-hidden="true">
+          <span>Structured health dashboard · selected direction</span>
+          <span>390 × 844 reference viewport</span>
+        </div>
+        <div class="phone" id="phone">
+          <span class="phone-control phone-control--action" aria-hidden="true"></span>
+          <span class="phone-control phone-control--volume-a" aria-hidden="true"></span>
+          <span class="phone-control phone-control--volume-b" aria-hidden="true"></span>
+          <div class="phone-speaker" aria-hidden="true"></div>
+          <div id="screen" class="screen" tabindex="-1" aria-live="polite"></div>
+        </div>
+      </section>
+
+      <aside class="evidence-rail" aria-label="Current screen notes">
+        <p class="review-kicker">Review notes</p>
+        <h1 id="review-title">Pair a ring</h1>
+        <p id="review-purpose">Start with the privacy promise, then pair only when the benefit and permission are clear.</p>
+        <dl class="review-facts">
+          <div><dt>Journey</dt><dd id="review-progress">Step 1 of 8</dd></div>
+          <div><dt>Evidence</dt><dd id="review-evidence">Visible provenance and confidence</dd></div>
+          <div><dt>Constraint</dt><dd id="review-constraint">COLMI R12 capability boundary</dd></div>
+        </dl>
+        <div class="review-check">
+          <span aria-hidden="true">✓</span>
+          <p><strong>Gate discipline</strong>Design and scoring only. Production Flutter remains locked.</p>
+        </div>
+        <p class="keyboard-hint">Use the visible controls or ← / → to move through a journey.</p>
+      </aside>
+    </main>
+
+    <noscript>This prototype requires JavaScript for its click-through journeys.</noscript>
+    <script src="app.js?v=20260824-structured-v2" defer></script>
+  </body>
+</html>

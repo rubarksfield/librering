@@ -1,0 +1,10 @@
+[project]
+name = "librering-scoring-research"
+version = "0.1.0"
+description = "Deterministic research sandbox for transparent LibreRing models"
+requires-python = ">=3.11"
+dependencies = []
+
+[tool.ruff]
+line-length = 100
+

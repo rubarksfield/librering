@@ -1,0 +1,16 @@
+{
+  "seed": 1729,
+  "scenario_count": 33,
+  "days_per_scenario": 90,
+  "records": 2970,
+  "profiles": [
+    "typical_schedule",
+    "late_chronotype",
+    "rotating_shift",
+    "endurance_training",
+    "lower_mobility_pattern",
+    "cycle_context"
+  ],
+  "synthetic_only": true,
+  "calculation_version": "0.1.0-research"
+}

@@ -1,0 +1,10 @@
+input,value,score,delta,confidence
+overnight_rhr_bpm,52,75.6,-16.9,0.748
+overnight_rhr_bpm,58,95.5,3.0,0.748
+overnight_rhr_bpm,64,75.6,-16.9,0.748
+overnight_rhr_bpm,70,24.0,-68.5,0.748
+recent_load_ratio,0.4,83.8,-8.7,0.748
+recent_load_ratio,1.0,93.8,1.3,0.748
+recent_load_ratio,1.6,83.8,-8.7,0.748
+recent_load_ratio,2.2,62.9,-29.6,0.748
+overnight_rhr_bpm,,93.6,1.1,0.568

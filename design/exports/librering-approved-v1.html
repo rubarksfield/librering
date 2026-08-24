@@ -1,0 +1,650 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#F4F1EA">
+  <title>LibreRing — Reference-led mobile prototype</title>
+  <!--
+    DESIGN NOTES
+    - Canonical product viewport: 390 × 844. Gallery and focus mode share the same render functions.
+    - Visual contract: warm paper, flat mineral cards, one coral data signal, no blur/gradient/glow/shadow.
+    - Product contract: demonstration data is labelled; unsupported readings remain honest no-results.
+    - Motion exists only for navigation/state feedback and is removed when reduced motion is requested.
+  -->
+  <style>
+    :root {
+      --bg: oklch(0.9585 0.0098 87.47);
+      --surface: oklch(0.9132 0.0058 84.57);
+      --fg: oklch(0.2034 0.0058 106.91);
+      --muted: oklch(0.4958 0.0112 93.69);
+      --border: oklch(0.8518 0.0101 87.48);
+      --accent: oklch(0.5973 0.1511 33.88);
+      --white: oklch(1 0 0);
+      --soft: oklch(0.979 0.004 88);
+      --font-display: "Helvetica Neue", "Neue Haas Grotesk Text Pro", "Nimbus Sans Narrow", sans-serif;
+      --font-body: "Helvetica Neue", "Nimbus Sans", sans-serif;
+      --font-mono: "SFMono-Regular", "SF Mono", "IBM Plex Mono", monospace;
+      --ease: cubic-bezier(.2, 0, 0, 1);
+      --r-card: 16px;
+      --tap: 44px;
+    }
+
+    * { box-sizing: border-box; }
+    html { color-scheme: light; background: var(--bg); }
+    body {
+      margin: 0;
+      min-width: 320px;
+      color: var(--fg);
+      background: var(--bg);
+      font-family: var(--font-body);
+      font-size: 16px;
+      line-height: 1.55;
+      text-rendering: optimizeLegibility;
+    }
+    button, input, select { font: inherit; color: inherit; }
+    button { cursor: pointer; }
+    button:focus-visible, input:focus-visible, select:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 3px;
+    }
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    /* Gallery shell — presentation only, never imported into the phone UI. */
+    .gallery-shell { max-width: 1840px; margin: 0 auto; padding: 40px clamp(20px, 4vw, 72px) 96px; }
+    .gallery-header {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 32px;
+      padding-bottom: 40px;
+      border-bottom: 1px solid var(--border);
+    }
+    .gallery-kicker, .eyebrow {
+      margin: 0 0 10px;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 550;
+      line-height: 1.4;
+      letter-spacing: .09em;
+      text-transform: uppercase;
+    }
+    .gallery-title {
+      max-width: 760px;
+      margin: 0;
+      font-family: var(--font-display);
+      font-size: clamp(40px, 5vw, 72px);
+      font-weight: 300;
+      line-height: 1.02;
+      letter-spacing: -.035em;
+    }
+    .gallery-intro { max-width: 58ch; margin: 20px 0 0; color: var(--muted); }
+    .mode-button, .gallery-open, .host-icon {
+      min-height: var(--tap);
+      border: 1px solid var(--fg);
+      border-radius: 8px;
+      background: transparent;
+      font-size: 13px;
+      font-weight: 550;
+      letter-spacing: .02em;
+      transition: transform 120ms var(--ease), background-color 180ms var(--ease), color 180ms var(--ease);
+    }
+    .mode-button { flex: 0 0 auto; padding: 0 18px; background: var(--fg); color: var(--white); }
+    .gallery-open { padding: 0 14px; border-color: var(--border); background: var(--soft); }
+    .host-icon { width: 44px; padding: 0; display: grid; place-items: center; border-color: var(--border); }
+    .mode-button:active, .gallery-open:active, .host-icon:active { transform: scale(.97); }
+    @media (hover:hover) and (pointer:fine) {
+      .mode-button:hover { background: oklch(0.29 0.006 106.91); }
+      .gallery-open:hover, .host-icon:hover { background: var(--surface); }
+    }
+    .gallery-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(390px, 1fr));
+      gap: 64px 32px;
+      align-items: start;
+      padding-top: 64px;
+    }
+    .gallery-item { display: grid; justify-items: center; gap: 16px; min-width: 0; }
+    .gallery-meta { width: 390px; max-width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .gallery-name { margin: 0; font-size: 14px; font-weight: 550; letter-spacing: .01em; }
+    .gallery-number { margin-right: 9px; color: var(--muted); font-family: var(--font-mono); font-size: 11px; }
+
+    /* Canonical device surface. */
+    .phone {
+      position: relative;
+      width: 390px;
+      height: 844px;
+      overflow: hidden;
+      border: 1px solid oklch(0.77 0.009 86);
+      border-radius: 38px;
+      background: var(--bg);
+      color: var(--fg);
+      container-type: inline-size;
+    }
+    .gallery-phone { max-width: 100%; }
+    .screen {
+      position: absolute;
+      inset: 0;
+      overflow: hidden;
+      border-radius: 37px;
+      background: var(--bg);
+    }
+    .screen-scroll {
+      height: 100%;
+      overflow-x: hidden;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      scrollbar-width: none;
+      padding: 28px 24px 116px;
+    }
+    .screen-scroll::-webkit-scrollbar { display: none; }
+    .screen--onboarding .screen-scroll { padding-bottom: 28px; display: flex; flex-direction: column; }
+    .screen-enter { animation: screen-in 240ms var(--ease) both; }
+    @keyframes screen-in { from { opacity: 0; transform: translateX(8px); } to { opacity: 1; transform: translateX(0); } }
+    .wordmark { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; font-size: 17px; font-weight: 550; letter-spacing: -.01em; }
+    .wordmark-mark { position: relative; width: 20px; height: 20px; border: 2px solid currentColor; border-radius: 50%; }
+    .wordmark-mark::after { content: ""; position: absolute; right: -3px; top: 7px; width: 8px; height: 4px; background: var(--bg); border-top: 2px solid currentColor; transform: rotate(-20deg); }
+    .onboard-top, .topbar { display: flex; min-height: 44px; align-items: center; justify-content: space-between; gap: 16px; }
+    .text-button, .icon-button, .row-button, .metric-card, .nav-button, .segment-button, .toggle-button {
+      border: 0;
+      background: transparent;
+    }
+    .text-button { min-width: 44px; min-height: 44px; padding: 0 8px; color: var(--muted); font-size: 13px; font-weight: 550; letter-spacing: .02em; }
+    .icon-button { display: grid; width: 44px; height: 44px; place-items: center; border-radius: 50%; color: var(--fg); }
+    .icon-button svg, .nav-button svg, .row-icon svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+    .onboard-copy { margin-top: auto; }
+    .onboard-title, .screen-title {
+      margin: 0;
+      font-family: var(--font-display);
+      font-weight: 300;
+      letter-spacing: -.028em;
+    }
+    .onboard-title { max-width: 9ch; font-size: 48px; line-height: 1.04; }
+    .onboard-sub { max-width: 30ch; margin: 14px 0 22px; color: var(--muted); font-size: 15px; }
+    .primary-button {
+      display: flex;
+      width: 100%;
+      min-height: 56px;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 0 18px 0 20px;
+      border: 0;
+      border-radius: 14px;
+      background: var(--fg);
+      color: var(--white);
+      font-size: 15px;
+      font-weight: 550;
+      letter-spacing: .02em;
+      transition: transform 120ms var(--ease), background-color 180ms var(--ease);
+    }
+    .primary-button:active { transform: scale(.98); }
+    .primary-button svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 1.8; }
+    @media (hover:hover) and (pointer:fine) { .primary-button:hover { background: oklch(0.29 0.006 106.91); } }
+
+    /* Original ring artwork: layered flat geometry, no gradients or image dependencies. */
+    .ring-stage { display: grid; flex: 1; min-height: 390px; place-items: center; }
+    .ring-art { width: 100%; max-width: 320px; color: var(--fg); overflow: visible; }
+    .ring-back { fill: none; stroke: oklch(0.72 0.008 86); stroke-width: 62; }
+    .ring-body { fill: none; stroke: oklch(0.89 0.008 84); stroke-width: 55; }
+    .ring-light { fill: none; stroke: oklch(0.985 0.004 91); stroke-width: 8; stroke-dasharray: 138 520; stroke-linecap: round; }
+    .ring-inner { fill: none; stroke: oklch(0.76 0.01 82); stroke-width: 6; }
+    .ring-sensor { fill: var(--accent); }
+    .privacy-art { min-height: 390px; display: grid; place-items: center; }
+    .privacy-disc { position: relative; display: grid; width: 262px; height: 262px; place-items: center; border: 1px solid var(--border); border-radius: 50%; }
+    .privacy-disc::before { content: ""; width: 132px; height: 132px; border: 30px solid var(--surface); border-radius: 50%; }
+    .privacy-lock { position: absolute; width: 68px; height: 76px; border: 2px solid var(--fg); border-radius: 18px; background: var(--bg); }
+    .privacy-lock::before { content: ""; position: absolute; left: 17px; top: -35px; width: 30px; height: 42px; border: 2px solid var(--fg); border-bottom: 0; border-radius: 20px 20px 0 0; }
+    .privacy-lock::after { content: ""; position: absolute; left: 30px; top: 29px; width: 6px; height: 16px; border-radius: 3px; background: var(--fg); }
+
+    .scan-stage { flex: 1; display: grid; min-height: 460px; place-items: center; text-align: center; }
+    .scan-field { position: relative; display: grid; width: 286px; height: 286px; place-items: center; }
+    .scan-circle { position: absolute; border: 1px solid var(--border); border-radius: 50%; }
+    .scan-circle:nth-child(1) { width: 286px; height: 286px; }
+    .scan-circle:nth-child(2) { width: 212px; height: 212px; }
+    .scan-circle:nth-child(3) { width: 140px; height: 140px; }
+    .scan-ring { width: 72px; height: 96px; border: 17px solid var(--surface); border-radius: 50%; transform: rotate(-22deg); }
+    .scan-copy { margin-top: -46px; }
+    .scan-copy h1 { margin: 0; font-family: var(--font-display); font-size: 34px; font-weight: 300; letter-spacing: -.02em; }
+    .scan-copy p { margin: 8px auto 0; max-width: 29ch; color: var(--muted); font-size: 14px; }
+    .found-mark { display: grid; width: 52px; height: 52px; margin: 0 auto 16px; place-items: center; border-radius: 50%; background: var(--accent); color: var(--white); }
+    .found-mark svg { width: 24px; height: 24px; stroke: currentColor; fill: none; stroke-width: 2; }
+
+    .date-label { margin: 20px 0 2px; color: var(--muted); font-size: 12px; letter-spacing: .04em; }
+    .screen-title { font-size: 36px; line-height: 1.08; }
+    .screen-lede { max-width: 33ch; margin: 10px 0 0; color: var(--muted); font-size: 14px; }
+    .score-block { margin: 42px 0 28px; }
+    .score-line { display: flex; align-items: flex-end; gap: 14px; }
+    .mega-number, .card-number, .detail-number {
+      display: inline-block;
+      font-family: var(--font-display);
+      font-weight: 200;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: -.065em;
+      line-height: .82;
+      font-stretch: condensed;
+    }
+    .mega-number { font-size: 112px; }
+    .score-word { padding-bottom: 8px; font-size: 15px; font-weight: 550; }
+    .score-note { max-width: 31ch; margin: 16px 0 0; color: var(--muted); font-size: 13px; }
+    .metric-num { animation: number-in 300ms var(--ease) both; transform-origin: left bottom; }
+    @keyframes number-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+    .section-label { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 0 0 12px; }
+    .section-label h2 { margin: 0; font-size: 13px; font-weight: 550; letter-spacing: .01em; }
+    .section-label span { color: var(--muted); font-size: 11px; }
+    .heatmap-button { display: block; width: 276px; max-width: 100%; margin: 0 auto; padding: 0; border: 0; border-radius: 12px; background: transparent; }
+    .heatmap { display: grid; width: 100%; aspect-ratio: 1; grid-template-columns: repeat(8, 1fr); gap: 5px; }
+    .heat-cell { border-radius: 3px; background: var(--surface); animation: cell-in 260ms var(--ease) both; }
+    .heat-cell.l1 { background: oklch(0.82 0.055 33.88); }
+    .heat-cell.l2 { background: oklch(0.70 0.10 33.88); }
+    .heat-cell.l3 { background: var(--accent); }
+    @keyframes cell-in { from { opacity: 0; transform: scale(.92); } to { opacity: 1; transform: scale(1); } }
+    .inline-link { min-height: 44px; padding: 0; border: 0; background: transparent; color: var(--fg); font-size: 13px; font-weight: 550; text-decoration: underline; text-underline-offset: 4px; }
+
+    .metrics-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 32px; }
+    .metric-card {
+      display: flex;
+      min-height: 222px;
+      flex-direction: column;
+      align-items: stretch;
+      justify-content: space-between;
+      padding: 18px;
+      border-radius: var(--r-card);
+      background: var(--surface);
+      text-align: left;
+      transition: transform 180ms var(--ease), background-color 180ms var(--ease);
+    }
+    .metric-card:active { transform: scale(.985); }
+    @media (hover:hover) and (pointer:fine) { .metric-card:hover { background: oklch(0.89 0.006 84.57); } }
+    .metric-top { display: flex; min-height: 28px; align-items: center; justify-content: space-between; gap: 8px; }
+    .metric-name { max-width: 9ch; font-size: 12px; font-weight: 550; line-height: 1.25; }
+    .metric-unit { color: var(--muted); font-size: 11px; }
+    .card-number { font-size: 60px; }
+    .metric-foot { color: var(--muted); font-size: 11px; line-height: 1.4; }
+    .mini-line { width: 44px; height: 20px; }
+    .mini-line path { fill: none; stroke: var(--accent); stroke-width: 2; }
+
+    .detail-hero { margin: 38px 0 32px; }
+    .detail-number { font-size: 92px; }
+    .detail-unit { margin-left: 8px; color: var(--muted); font-size: 13px; }
+    .detail-summary { max-width: 31ch; margin: 14px 0 0; color: var(--muted); font-size: 14px; }
+    .flat-card { padding: 20px; border-radius: var(--r-card); background: var(--surface); }
+    .sleep-track { display: flex; height: 118px; align-items: flex-end; gap: 4px; margin: 24px 0 14px; }
+    .sleep-segment { flex: 1; min-width: 5px; border-radius: 3px 3px 0 0; background: var(--accent); opacity: var(--alpha); }
+    .axis-row { display: flex; justify-content: space-between; color: var(--muted); font-family: var(--font-mono); font-size: 10px; }
+    .detail-list { margin-top: 18px; border-top: 1px solid var(--border); }
+    .row-button, .data-row { display: flex; width: 100%; min-height: 60px; align-items: center; justify-content: space-between; gap: 14px; padding: 8px 0; border-bottom: 1px solid var(--border); text-align: left; }
+    .row-main { display: flex; min-width: 0; align-items: center; gap: 12px; }
+    .row-icon { display: grid; width: 36px; height: 36px; flex: 0 0 auto; place-items: center; border-radius: 50%; background: var(--surface); }
+    .row-title { display: block; font-size: 13px; font-weight: 550; }
+    .row-meta { display: block; margin-top: 2px; color: var(--muted); font-size: 11px; }
+    .row-value { flex: 0 0 auto; color: var(--muted); font-size: 12px; }
+    .confidence { display: inline-flex; min-height: 28px; align-items: center; padding: 0 9px; border-radius: 999px; background: var(--surface); font-size: 10px; font-weight: 550; letter-spacing: .06em; text-transform: uppercase; }
+
+    .no-result { min-height: 590px; display: flex; flex-direction: column; }
+    .no-result-art { display: grid; flex: 1; place-items: center; }
+    .unsupported-ring { position: relative; width: 216px; height: 216px; border: 1px solid var(--border); border-radius: 50%; }
+    .unsupported-ring::before { content: ""; position: absolute; inset: 48px; border: 20px solid var(--surface); border-radius: 50%; }
+    .unsupported-ring::after { content: ""; position: absolute; left: 38px; top: 104px; width: 140px; height: 5px; border-radius: 3px; background: var(--accent); transform: rotate(-38deg); }
+    .no-result h1 { max-width: 8ch; margin: 0; font-family: var(--font-display); font-size: 44px; font-weight: 300; line-height: 1.02; letter-spacing: -.03em; }
+    .no-result p { max-width: 32ch; margin: 14px 0 8px; color: var(--muted); font-size: 14px; }
+
+    .trend-chart { width: 100%; height: 250px; margin: 22px 0 4px; overflow: visible; }
+    .trend-chart .grid { stroke: var(--border); stroke-width: 1; }
+    .trend-chart .area { fill: var(--accent); opacity: .22; }
+    .trend-chart .line { fill: none; stroke: var(--accent); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 420; animation: draw-line 320ms var(--ease) both; }
+    .trend-chart .point { fill: var(--accent); }
+    @keyframes draw-line { from { stroke-dashoffset: 420; } to { stroke-dashoffset: 0; } }
+    .trend-range { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; padding: 4px; border-radius: 12px; background: var(--surface); }
+    .segment-button { min-height: 44px; border-radius: 9px; color: var(--muted); font-size: 12px; font-weight: 550; }
+    .segment-button[aria-pressed="true"] { background: var(--white); color: var(--fg); }
+
+    .form-stack { display: grid; gap: 18px; margin-top: 34px; }
+    .field-label { display: block; margin-bottom: 8px; font-size: 12px; font-weight: 550; }
+    .field { display: grid; grid-template-columns: 1fr auto; align-items: center; min-height: 58px; padding: 0 16px; border: 1px solid var(--border); border-radius: 14px; background: var(--soft); }
+    .field input, .field select { width: 100%; min-height: 44px; padding: 0; border: 0; outline: 0; background: transparent; font-size: 19px; font-weight: 400; }
+    .field span { color: var(--muted); font-size: 12px; }
+    .segment-wide { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; padding: 4px; border: 1px solid var(--border); border-radius: 14px; }
+    .save-note { min-height: 24px; margin: 10px 0 0; color: var(--muted); font-size: 12px; text-align: center; }
+
+    .privacy-list { margin-top: 36px; border-top: 1px solid var(--border); }
+    .privacy-row { display: grid; grid-template-columns: 1fr auto; gap: 16px; align-items: center; min-height: 88px; border-bottom: 1px solid var(--border); }
+    .privacy-row h2 { margin: 0; font-size: 14px; font-weight: 550; }
+    .privacy-row p { max-width: 30ch; margin: 4px 0 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
+    .toggle-button { display: grid; width: 52px; height: 44px; place-items: center; }
+    .toggle-track { position: relative; width: 48px; height: 28px; border-radius: 999px; background: var(--border); transition: background-color 180ms var(--ease); }
+    .toggle-track::after { content: ""; position: absolute; top: 4px; left: 4px; width: 20px; height: 20px; border-radius: 50%; background: var(--white); transition: transform 180ms var(--ease); }
+    .toggle-button[aria-checked="true"] .toggle-track { background: var(--fg); }
+    .toggle-button[aria-checked="true"] .toggle-track::after { transform: translateX(20px); }
+    .privacy-note { margin: 24px 0; padding-left: 14px; border-left: 2px solid var(--accent); color: var(--muted); font-size: 12px; }
+
+    .bottom-nav {
+      position: absolute;
+      z-index: 2;
+      left: 50%;
+      bottom: 22px;
+      display: flex;
+      width: 244px;
+      height: 64px;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      padding: 6px;
+      border: 1px solid var(--fg);
+      border-radius: 22px;
+      background: var(--fg);
+      color: var(--white);
+      transform: translateX(-50%);
+    }
+    .nav-button { position: relative; display: grid; width: 54px; height: 50px; place-items: center; border-radius: 16px; color: oklch(0.78 0.006 90); transition: transform 120ms var(--ease), color 180ms var(--ease), background-color 180ms var(--ease); }
+    .nav-button[aria-current="page"] { background: oklch(0.34 0.007 106); color: var(--white); }
+    .nav-button:active { transform: scale(.95); }
+
+    /* Focused phone mode. */
+    .focus-layer { position: fixed; z-index: 20; inset: 0; display: grid; grid-template-rows: 72px 1fr; background: oklch(0.90 0.009 86); }
+    .focus-layer[hidden] { display: none; }
+    .focus-bar { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 16px; padding: 12px clamp(16px, 3vw, 36px); border-bottom: 1px solid oklch(0.82 0.01 86); }
+    .focus-back { justify-self: start; }
+    .focus-title { margin: 0; font-size: 13px; font-weight: 550; letter-spacing: .01em; text-align: center; }
+    .focus-count { display: block; color: var(--muted); font-family: var(--font-mono); font-size: 10px; font-weight: 400; }
+    .focus-arrows { justify-self: end; display: flex; gap: 8px; }
+    .focus-stage { display: grid; min-height: 0; place-items: center; overflow: hidden; padding: 14px; }
+    .focus-phone-wrap { position: relative; }
+    .focus-phone { position: absolute; transform-origin: top left; }
+
+    @media (max-width: 520px) {
+      .gallery-shell { padding: 24px 16px 64px; }
+      .gallery-header { align-items: flex-start; flex-direction: column; padding-bottom: 28px; }
+      .gallery-grid { grid-template-columns: 1fr; gap: 48px; padding-top: 40px; }
+      .gallery-item { overflow: hidden; }
+      .gallery-phone { transform-origin: top center; }
+      .focus-bar { grid-template-columns: auto 1fr auto; }
+      .focus-title { text-align: left; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: 80ms !important; }
+      .screen-enter, .metric-num, .heat-cell, .trend-chart .line { transform: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <main class="gallery-shell" id="gallery-shell" data-od-id="prototype-gallery">
+    <header class="gallery-header" data-od-id="gallery-header">
+      <div>
+        <p class="gallery-kicker">LibreRing / First design gate</p>
+        <h1 class="gallery-title" data-od-id="gallery-title">Twelve quiet moments, one evidence-first journey.</h1>
+        <p class="gallery-intro">A reference-led mobile prototype built around clear readings, original ring artwork, honest sensor boundaries, and privacy that appears exactly where it matters.</p>
+      </div>
+      <button class="mode-button" type="button" data-open-focus="0" data-od-id="enter-phone-mode">Enter phone mode</button>
+    </header>
+    <section class="gallery-grid" id="gallery" aria-label="LibreRing screen gallery"></section>
+  </main>
+
+  <section class="focus-layer" id="focus-layer" role="dialog" aria-modal="true" aria-labelledby="focus-title" hidden>
+    <header class="focus-bar">
+      <button class="gallery-open focus-back" type="button" data-close-focus data-od-id="leave-phone-mode">All screens</button>
+      <p class="focus-title" id="focus-title">Welcome<span class="focus-count" id="focus-count">01 / 12</span></p>
+      <div class="focus-arrows" aria-label="Screen navigation">
+        <button class="host-icon" type="button" data-prev aria-label="Previous screen">←</button>
+        <button class="host-icon" type="button" data-next aria-label="Next screen">→</button>
+      </div>
+    </header>
+    <div class="focus-stage" id="focus-stage">
+      <div class="focus-phone-wrap" id="focus-phone-wrap">
+        <div class="phone focus-phone" id="focus-phone" aria-live="polite"></div>
+      </div>
+    </div>
+  </section>
+
+  <script>
+    const icon = (name) => {
+      const paths = {
+        arrow: '<path d="M5 12h14M14 6l6 6-6 6"/>',
+        back: '<path d="M19 12H5m6-6-6 6 6 6"/>',
+        check: '<path d="m5 12 4 4L19 6"/>',
+        home: '<path d="m4 11 8-7 8 7v8H5v-8"/><path d="M9 19v-5h6v5"/>',
+        grid: '<rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><rect x="14" y="14" width="6" height="6" rx="1"/>',
+        trend: '<path d="M4 17 9 12l4 3 7-9"/><path d="M15 6h5v5"/>',
+        lock: '<rect x="5" y="10" width="14" height="10" rx="3"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>',
+        moon: '<path d="M19 15.5A8 8 0 0 1 8.5 5 7 7 0 1 0 19 15.5Z"/>',
+        source: '<path d="M6 3h9l3 3v15H6z"/><path d="M14 3v5h5M9 12h6M9 16h6"/>',
+        sensor: '<circle cx="12" cy="12" r="3"/><path d="M5.6 5.6a9 9 0 0 0 0 12.8M18.4 5.6a9 9 0 0 1 0 12.8"/>',
+        edit: '<path d="m4 20 4-1 11-11-3-3L5 16l-1 4Z"/><path d="m14 7 3 3"/>'
+      };
+      return `<svg viewBox="0 0 24 24" aria-hidden="true">${paths[name] || paths.arrow}</svg>`;
+    };
+
+    const wordmark = () => '<span class="wordmark" aria-label="LibreRing"><span class="wordmark-mark" aria-hidden="true"></span>LibreRing</span>';
+    const backButton = (to, label) => `<button class="icon-button" type="button" data-go="${to}" aria-label="${label || 'Go back'}">${icon('back')}</button>`;
+    const primary = (label, to, id) => `<button class="primary-button" type="button" data-go="${to}" data-od-id="${id}"><span>${label}</span>${icon('arrow')}</button>`;
+    const nav = (active) => {
+      const items = [
+        ['today', 4, 'home', 'Today'], ['metrics', 5, 'grid', 'Metrics'], ['trends', 9, 'trend', 'Trends'], ['privacy', 11, 'lock', 'Privacy']
+      ];
+      return `<nav class="bottom-nav" aria-label="Primary">${items.map(([key, to, ic, label]) => `<button class="nav-button" type="button" data-go="${to}" aria-label="${label}" ${key === active ? 'aria-current="page"' : ''}>${icon(ic)}</button>`).join('')}</nav>`;
+    };
+    const ringArt = (small = false) => `<svg class="ring-art" style="${small ? 'max-width:210px' : ''}" viewBox="0 0 320 360" role="img" aria-label="Original illustration of a matte silver LibreRing">
+      <g transform="rotate(-18 160 180)"><ellipse class="ring-back" cx="160" cy="180" rx="82" ry="116"/><ellipse class="ring-body" cx="160" cy="174" rx="82" ry="116"/><ellipse class="ring-inner" cx="160" cy="174" rx="54" ry="88"/><ellipse class="ring-light" cx="160" cy="174" rx="82" ry="116"/><circle class="ring-sensor" cx="160" cy="280" r="5"/></g>
+    </svg>`;
+    const heatmap = () => {
+      const levels = [0,0,1,1,2,2,2,1,0,1,1,2,3,3,2,1,1,1,2,3,3,2,2,1,0,1,2,2,3,3,2,1,0,0,1,2,2,3,2,1,0,1,1,2,3,2,1,0,0,0,1,1,2,2,1,0,0,0,0,1,1,1,0,0];
+      return `<button class="heatmap-button" type="button" data-go="9" aria-label="Open 8 week recovery trend"><span class="heatmap" aria-hidden="true">${levels.map((v,i) => `<span class="heat-cell ${v ? `l${v}` : ''}" style="animation-delay:${i * 4}ms"></span>`).join('')}</span></button>`;
+    };
+    const metricCard = (id, name, value, unit, foot, to, spark = false) => `<button class="metric-card" type="button" data-go="${to}" data-od-id="metric-card-${id}">
+      <span class="metric-top"><span class="metric-name">${name}</span>${spark ? '<svg class="mini-line" viewBox="0 0 44 20" aria-hidden="true"><path d="M1 15 8 10l7 3 7-9 7 7 7-5 7 2"/></svg>' : `<span class="metric-unit">${unit}</span>`}</span>
+      <span><span class="card-number metric-num">${value}</span>${unit ? `<span class="metric-unit"> ${unit}</span>` : ''}</span><span class="metric-foot">${foot}</span>
+    </button>`;
+
+    const screens = [
+      {
+        id: 'welcome', title: 'Welcome / product introduction', render: () => `<section class="screen screen--onboarding" data-od-id="screen-welcome"><div class="screen-scroll">
+          <div class="onboard-top">${wordmark()}<button class="text-button" type="button" data-go="4">Skip</button></div>
+          <div class="ring-stage">${ringArt()}</div>
+          <div class="onboard-copy"><h1 class="onboard-title" data-od-id="welcome-heading">Know what your ring knows.</h1><p class="onboard-sub">Clear daily signals, with the evidence kept close.</p>${primary('Set up LibreRing', 1, 'welcome-start')}</div>
+        </div></section>`
+      },
+      {
+        id: 'privacy-promise', title: 'Privacy promise', render: () => `<section class="screen screen--onboarding" data-od-id="screen-privacy-promise"><div class="screen-scroll">
+          <div class="onboard-top">${wordmark()}${backButton(0, 'Back to welcome')}</div>
+          <div class="privacy-art" aria-hidden="true"><div class="privacy-disc"><span class="privacy-lock"></span></div></div>
+          <div class="onboard-copy"><h1 class="onboard-title" data-od-id="privacy-heading">Your body data stays yours.</h1><p class="onboard-sub">Stored on this device by default. Sharing always requires a clear choice.</p>${primary('Continue privately', 2, 'privacy-continue')}</div>
+        </div></section>`
+      },
+      {
+        id: 'ring-scan', title: 'Ring scan', render: () => `<section class="screen screen--onboarding" data-od-id="screen-ring-scan"><div class="screen-scroll">
+          <div class="onboard-top">${backButton(1, 'Back to privacy')}<span class="eyebrow">Pairing</span><span style="width:44px"></span></div>
+          <div class="scan-stage"><div><div class="scan-field" aria-hidden="true"><span class="scan-circle"></span><span class="scan-circle"></span><span class="scan-circle"></span><span class="scan-ring"></span></div><div class="scan-copy"><h1 data-od-id="scan-heading">Bring your ring close</h1><p>LibreRing scans locally. No health data leaves this phone.</p></div></div></div>
+          ${primary('Scan now', 3, 'scan-now')}
+        </div></section>`
+      },
+      {
+        id: 'ring-found', title: 'Ring found', render: () => `<section class="screen screen--onboarding" data-od-id="screen-ring-found"><div class="screen-scroll">
+          <div class="onboard-top">${wordmark()}<span class="eyebrow">Connected</span></div>
+          <div class="ring-stage" style="min-height:420px">${ringArt(true)}</div>
+          <div class="onboard-copy"><span class="found-mark" aria-hidden="true">${icon('check')}</span><h1 class="onboard-title" style="max-width:none;text-align:center" data-od-id="found-heading">LibreRing found</h1><p class="onboard-sub" style="margin-left:auto;margin-right:auto;text-align:center">Signal strong · Battery 78%</p>${primary('View today', 4, 'found-view-today')}</div>
+        </div></section>`
+      },
+      {
+        id: 'stats-lead', title: 'Stats lead / recovery', render: () => `<section class="screen" data-od-id="screen-stats-lead"><div class="screen-scroll">
+          <div class="topbar">${wordmark()}<button class="icon-button" type="button" data-go="11" aria-label="Open privacy controls">${icon('lock')}</button></div>
+          <h1 class="sr-only">Today’s recovery</h1>
+          <p class="date-label">Monday, 24 August · Demo data</p>
+          <div class="score-block"><div class="score-line"><span class="mega-number metric-num" data-od-id="recovery-score">82</span><span class="score-word">Ready</span></div><p class="score-note">Recovery is steady. Your recent sleep and resting pulse support a normal day.</p></div>
+          <div class="section-label"><h2 data-od-id="heatmap-heading">Eight-week recovery</h2><button class="inline-link" type="button" data-go="5">View metrics</button></div>
+          ${heatmap()}
+        </div>${nav('today')}</section>`
+      },
+      {
+        id: 'health-metrics', title: 'Health metrics / 2×2 grid', render: () => `<section class="screen" data-od-id="screen-health-metrics"><div class="screen-scroll">
+          <div class="topbar">${wordmark()}<span class="eyebrow">Today</span></div><p class="date-label">Last sync 08:42 · Demo data</p><h1 class="screen-title" data-od-id="metrics-heading">Four signals.<br>Nothing extra.</h1>
+          <div class="metrics-grid">${metricCard('hrv','Heart-rate variability','62','ms','Within your 30-day range',9,true)}${metricCard('pulse','Resting pulse','54','bpm','3 bpm below your baseline',9)}${metricCard('sleep','Sleep','7:42','','86 sleep score',6)}${metricCard('active','Active time','83','min','Includes a manual swim',10)}</div>
+        </div>${nav('metrics')}</section>`
+      },
+      {
+        id: 'sleep-detail', title: 'Sleep detail', render: () => `<section class="screen" data-od-id="screen-sleep-detail"><div class="screen-scroll">
+          <div class="topbar">${backButton(5, 'Back to metrics')}<span class="eyebrow">Sleep</span><button class="icon-button" type="button" data-go="7" aria-label="View sleep evidence">${icon('source')}</button></div>
+          <p class="date-label">Last night · Demo data</p><h1 class="screen-title" data-od-id="sleep-heading">Well-timed rest</h1>
+          <div class="detail-hero"><span class="detail-number metric-num">7:42</span><span class="detail-unit">asleep</span><p class="detail-summary">A consistent bedtime and fewer interruptions supported this result.</p></div>
+          <div class="flat-card" data-od-id="sleep-stage-chart"><div class="section-label"><h2>Sleep continuity</h2><span>22:48–06:57</span></div><div class="sleep-track" aria-label="Sleep continuity chart"><span class="sleep-segment" style="height:66%;--alpha:.44"></span><span class="sleep-segment" style="height:84%;--alpha:.65"></span><span class="sleep-segment" style="height:92%;--alpha:1"></span><span class="sleep-segment" style="height:76%;--alpha:.74"></span><span class="sleep-segment" style="height:96%;--alpha:1"></span><span class="sleep-segment" style="height:88%;--alpha:.84"></span><span class="sleep-segment" style="height:62%;--alpha:.54"></span><span class="sleep-segment" style="height:78%;--alpha:.72"></span></div><div class="axis-row"><span>22:48</span><span>02:52</span><span>06:57</span></div></div>
+          <div class="detail-list"><button class="row-button" type="button" data-go="7"><span class="row-main"><span class="row-icon">${icon('source')}</span><span><span class="row-title">How this was calculated</span><span class="row-meta">Signals, confidence, and source</span></span></span><span aria-hidden="true">→</span></button></div>
+        </div>${nav('metrics')}</section>`
+      },
+      {
+        id: 'evidence-detail', title: 'Evidence / provenance detail', render: () => `<section class="screen" data-od-id="screen-evidence-detail"><div class="screen-scroll">
+          <div class="topbar">${backButton(6, 'Back to sleep')}<span class="eyebrow">Evidence</span><span class="confidence">Good confidence</span></div>
+          <p class="date-label">Sleep result · 23–24 August</p><h1 class="screen-title" data-od-id="evidence-heading">What supports 7:42</h1><p class="screen-lede">LibreRing combines available ring signals. It does not diagnose a sleep condition.</p>
+          <div class="detail-list" style="margin-top:34px"><div class="data-row"><span class="row-main"><span class="row-icon">${icon('sensor')}</span><span><span class="row-title">Motion continuity</span><span class="row-meta">LibreRing IMU · complete</span></span></span><span class="row-value">Primary</span></div><div class="data-row"><span class="row-main"><span class="row-icon">${icon('trend')}</span><span><span class="row-title">Pulse pattern</span><span class="row-meta">Optical pulse · 94% coverage</span></span></span><span class="row-value">Supporting</span></div><div class="data-row"><span class="row-main"><span class="row-icon">${icon('edit')}</span><span><span class="row-title">User correction</span><span class="row-meta">None recorded</span></span></span><span class="row-value">—</span></div><button class="row-button" type="button" data-go="8"><span class="row-main"><span class="row-icon">${icon('sensor')}</span><span><span class="row-title">Unsupported reading example</span><span class="row-meta">See how LibreRing handles missing evidence</span></span></span><span aria-hidden="true">→</span></button></div>
+          <p class="privacy-note">Source records remain attached to this result so later corrections do not erase the original evidence.</p>
+        </div>${nav('metrics')}</section>`
+      },
+      {
+        id: 'no-result', title: 'No-result / unsupported reading', render: () => `<section class="screen" data-od-id="screen-no-result"><div class="screen-scroll">
+          <div class="topbar">${backButton(7, 'Back to evidence')}<span class="eyebrow">Sensor limit</span><span style="width:44px"></span></div>
+          <div class="no-result"><div class="no-result-art"><span class="unsupported-ring" aria-hidden="true"></span></div><h1 data-od-id="no-result-heading">No reading is the right result.</h1><p>This ring does not provide blood-oxygen evidence. LibreRing will not estimate or fill the gap.</p><button class="inline-link" type="button" data-go="9">View a supported HRV trend</button></div>
+        </div></section>`
+      },
+      {
+        id: 'trend-detail', title: 'Trend detail', render: () => `<section class="screen" data-od-id="screen-trend-detail"><div class="screen-scroll">
+          <div class="topbar">${backButton(4, 'Back to today')}<span class="eyebrow">Trend</span><span class="confidence">Measured</span></div>
+          <p class="date-label">Heart-rate variability · Demo data</p><h1 class="screen-title" data-od-id="trend-heading">Stable over eight weeks</h1>
+          <div class="detail-hero" style="margin-bottom:8px"><span class="detail-number metric-num">62</span><span class="detail-unit">ms average</span></div>
+          <svg class="trend-chart" viewBox="0 0 330 250" role="img" aria-label="Eight week HRV trend ranging from 55 to 68 milliseconds"><path class="grid" d="M8 58H322M8 126H322M8 194H322"/><path class="area" d="M8 170 52 144 97 158 142 111 187 127 232 82 277 104 322 66V218H8Z"/><path class="line" d="M8 170 52 144 97 158 142 111 187 127 232 82 277 104 322 66"/><circle class="point" cx="322" cy="66" r="5"/></svg>
+          <div class="trend-range" aria-label="Trend range"><button class="segment-button" type="button" aria-pressed="false">7 days</button><button class="segment-button" type="button" aria-pressed="true">8 weeks</button><button class="segment-button" type="button" aria-pressed="false">6 months</button></div>
+          <div style="margin-top:22px">${primary('Add swim context', 10, 'trend-add-context')}</div>
+        </div>${nav('trends')}</section>`
+      },
+      {
+        id: 'swim-entry', title: 'Swim / activity entry', render: () => `<section class="screen" data-od-id="screen-swim-entry"><div class="screen-scroll">
+          <div class="topbar">${backButton(9, 'Back to trend')}<span class="eyebrow">Manual context</span><span style="width:44px"></span></div>
+          <p class="date-label">Activity entry</p><h1 class="screen-title" data-od-id="swim-heading">Add a swim</h1><p class="screen-lede">Manual context is stored separately from ring measurements and can be deleted on its own.</p>
+          <form class="form-stack" data-swim-form><label><span class="field-label">Duration</span><span class="field"><input type="number" min="1" max="300" value="42" aria-label="Swim duration in minutes"><span>minutes</span></span></label><label><span class="field-label">Pool length</span><span class="field"><select aria-label="Pool length"><option>25 metres</option><option>50 metres</option><option>Open water</option></select><span>pool</span></span></label><fieldset style="border:0;padding:0;margin:0"><legend class="field-label">Effort</legend><div class="segment-wide"><button class="segment-button" type="button" aria-pressed="false">Easy</button><button class="segment-button" type="button" aria-pressed="true">Steady</button><button class="segment-button" type="button" aria-pressed="false">Hard</button></div></fieldset><button class="primary-button" type="submit" data-od-id="save-swim"><span>Save entry</span>${icon('check')}</button></form><p class="save-note" data-save-note aria-live="polite">Not yet saved</p>
+        </div>${nav('trends')}</section>`
+      },
+      {
+        id: 'cycle-privacy', title: 'Cycle-data privacy controls', render: () => `<section class="screen" data-od-id="screen-cycle-privacy"><div class="screen-scroll">
+          <div class="topbar">${backButton(4, 'Back to today')}<span class="eyebrow">Privacy</span><span style="width:44px"></span></div>
+          <p class="date-label">Cycle data</p><h1 class="screen-title" data-od-id="cycle-heading">Choose what stays available</h1><p class="screen-lede">Cycle entries are optional, stored locally, and excluded from recovery scoring.</p>
+          <div class="privacy-list"><div class="privacy-row"><div><h2>Keep cycle entries on this phone</h2><p>Turning this off removes local cycle entries from future views.</p></div><button class="toggle-button" type="button" role="switch" aria-checked="true" data-toggle="cycle-local" aria-label="Keep cycle entries on this phone"><span class="toggle-track" aria-hidden="true"></span></button></div><div class="privacy-row"><div><h2>Use for personal trend context</h2><p>Shows user-entered cycle context beside supported trends. Never changes measured values.</p></div><button class="toggle-button" type="button" role="switch" aria-checked="false" data-toggle="cycle-context" aria-label="Use cycle entries for personal trend context"><span class="toggle-track" aria-hidden="true"></span></button></div><div class="privacy-row"><div><h2>Allow export</h2><p>Requires a separate confirmation each time an export is created.</p></div><button class="toggle-button" type="button" role="switch" aria-checked="false" data-toggle="cycle-export" aria-label="Allow cycle data export"><span class="toggle-track" aria-hidden="true"></span></button></div></div>
+          <p class="privacy-note">No cycle data is shared by changing these controls.</p>${primary('Done', 4, 'privacy-done')}
+        </div>${nav('privacy')}</section>`
+      }
+    ];
+
+    const prefixIds = (html, prefix) => html.replaceAll('data-od-id="', `data-od-id="${prefix}-`);
+    const renderScreen = (index, prefix, animate = false) => {
+      const html = prefixIds(screens[index].render(), prefix);
+      return animate ? html.replace('class="screen', 'class="screen screen-enter') : html;
+    };
+
+    const gallery = document.getElementById('gallery');
+    gallery.innerHTML = screens.map((screen, index) => `<article class="gallery-item" data-od-id="gallery-item-${screen.id}"><div class="phone gallery-phone" inert>${renderScreen(index, `gallery-${screen.id}`)}</div><div class="gallery-meta"><p class="gallery-name"><span class="gallery-number">${String(index + 1).padStart(2, '0')}</span>${screen.title}</p><button class="gallery-open" type="button" data-open-focus="${index}">Open screen</button></div></article>`).join('');
+
+    const focusLayer = document.getElementById('focus-layer');
+    const galleryShell = document.getElementById('gallery-shell');
+    const focusPhone = document.getElementById('focus-phone');
+    const focusWrap = document.getElementById('focus-phone-wrap');
+    const focusTitle = document.getElementById('focus-title');
+    const focusCount = document.getElementById('focus-count');
+    let current = Math.max(0, Math.min(screens.length - 1, Number(localStorage.getItem('librering-screen')) || 0));
+    let lastFocus = null;
+
+    function fitPhone() {
+      if (focusLayer.hidden) return;
+      const stage = document.getElementById('focus-stage');
+      const scale = Math.min(1, (stage.clientWidth - 28) / 390, (stage.clientHeight - 28) / 844);
+      focusWrap.style.width = `${390 * scale}px`;
+      focusWrap.style.height = `${844 * scale}px`;
+      focusPhone.style.transform = `scale(${scale})`;
+    }
+    function go(index, animate = true) {
+      current = (index + screens.length) % screens.length;
+      localStorage.setItem('librering-screen', String(current));
+      focusPhone.innerHTML = renderScreen(current, `focus-${screens[current].id}`, animate);
+      focusTitle.firstChild.nodeValue = screens[current].title;
+      focusCount.textContent = `${String(current + 1).padStart(2, '0')} / ${String(screens.length).padStart(2, '0')}`;
+      const scrollArea = focusPhone.querySelector('.screen-scroll');
+      if (scrollArea) scrollArea.scrollTop = 0;
+      focusPhone.querySelectorAll('[data-toggle]').forEach(toggle => {
+        const stored = localStorage.getItem(`librering-${toggle.dataset.toggle}`);
+        if (stored !== null) toggle.setAttribute('aria-checked', stored);
+      });
+    }
+    function openFocus(index) {
+      lastFocus = document.activeElement;
+      focusLayer.hidden = false;
+      galleryShell.inert = true;
+      document.body.style.overflow = 'hidden';
+      go(index, false);
+      requestAnimationFrame(() => { fitPhone(); focusLayer.querySelector('[data-close-focus]').focus(); });
+    }
+    function closeFocus() {
+      focusLayer.hidden = true;
+      galleryShell.inert = false;
+      document.body.style.overflow = '';
+      if (lastFocus) lastFocus.focus();
+    }
+
+    document.addEventListener('click', (event) => {
+      const open = event.target.closest('[data-open-focus]');
+      if (open) return openFocus(Number(open.dataset.openFocus));
+      if (event.target.closest('[data-close-focus]')) return closeFocus();
+      if (event.target.closest('[data-prev]')) return go(current - 1);
+      if (event.target.closest('[data-next]')) return go(current + 1);
+      if (focusLayer.hidden) return;
+      const route = event.target.closest('[data-go]');
+      if (route) return go(Number(route.dataset.go));
+      const toggle = event.target.closest('[data-toggle]');
+      if (toggle) {
+        const next = toggle.getAttribute('aria-checked') !== 'true';
+        toggle.setAttribute('aria-checked', String(next));
+        localStorage.setItem(`librering-${toggle.dataset.toggle}`, String(next));
+        return;
+      }
+      const segment = event.target.closest('.segment-button');
+      if (segment) {
+        segment.parentElement.querySelectorAll('.segment-button').forEach(button => button.setAttribute('aria-pressed', String(button === segment)));
+      }
+    });
+
+    focusPhone.addEventListener('submit', (event) => {
+      if (!event.target.matches('[data-swim-form]')) return;
+      event.preventDefault();
+      const note = focusPhone.querySelector('[data-save-note]');
+      note.textContent = 'Saved locally · opening privacy controls';
+      window.setTimeout(() => go(11), window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 80 : 320);
+    });
+    document.addEventListener('keydown', (event) => {
+      if (focusLayer.hidden) return;
+      if (event.key === 'Escape') closeFocus();
+      if (event.key === 'ArrowLeft' && !/INPUT|SELECT/.test(event.target.tagName)) go(current - 1);
+      if (event.key === 'ArrowRight' && !/INPUT|SELECT/.test(event.target.tagName)) go(current + 1);
+    });
+    window.addEventListener('resize', fitPhone, { passive: true });
+    go(current, false);
+
+    // Fit 390 px gallery devices safely on narrow canvases without changing their internal design resolution.
+    function fitGalleryPhones() {
+      document.querySelectorAll('.gallery-item').forEach(item => {
+        const phone = item.querySelector('.gallery-phone');
+        const available = item.clientWidth;
+        const scale = Math.min(1, available / 390);
+        phone.style.transform = `scale(${scale})`;
+        phone.style.marginBottom = `${844 * (scale - 1)}px`;
+      });
+    }
+    fitGalleryPhones();
+    window.addEventListener('resize', fitGalleryPhones, { passive: true });
+  </script>
+</body>
+</html>
