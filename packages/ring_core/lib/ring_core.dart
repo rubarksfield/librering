@@ -5,6 +5,69 @@ library;
 
 enum DataOrigin { demo, ring, manual }
 
+enum DeviceCapability {
+  battery,
+  charging,
+  deviceClock,
+  heartRateHistory,
+  liveHeartRate,
+  oxygenHistory,
+  liveOxygen,
+  firmwareHrvIndex,
+  firmwareStressIndex,
+  steps,
+  distance,
+  calories,
+  sleep,
+  sleepStages,
+  displayControls,
+  findDevice,
+  measurementInterval,
+  rawPacketLogging,
+}
+
+enum CapabilityConfidence {
+  physicallyVerified,
+  modelSpecificSource,
+  familyCorroborated,
+  unavailable,
+}
+
+class RingAdvertisement {
+  const RingAdvertisement({
+    required this.deviceId,
+    required this.name,
+    this.serviceUuids = const <String>{},
+    this.rssi,
+  });
+
+  final String deviceId;
+  final String name;
+  final Set<String> serviceUuids;
+  final int? rssi;
+}
+
+class RingPeripheral {
+  const RingPeripheral({required this.deviceId, required this.name});
+
+  final String deviceId;
+  final String name;
+}
+
+class DeviceCapabilities {
+  DeviceCapabilities(Map<DeviceCapability, CapabilityConfidence> values)
+    : values = Map<DeviceCapability, CapabilityConfidence>.unmodifiable(values);
+
+  final Map<DeviceCapability, CapabilityConfidence> values;
+
+  bool supports(DeviceCapability capability) =>
+      values[capability] != null &&
+      values[capability] != CapabilityConfidence.unavailable;
+
+  CapabilityConfidence confidenceFor(DeviceCapability capability) =>
+      values[capability] ?? CapabilityConfidence.unavailable;
+}
+
 class MetricSummary {
   const MetricSummary({
     required this.label,

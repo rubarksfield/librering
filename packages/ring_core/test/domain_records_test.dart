@@ -13,4 +13,19 @@ void main() {
     expect(entry.origin, DataOrigin.manual);
     expect(entry.durationMinutes, 42);
   });
+
+  test('undeclared capabilities fail closed', () {
+    final capabilities = DeviceCapabilities(
+      <DeviceCapability, CapabilityConfidence>{
+        DeviceCapability.battery: CapabilityConfidence.familyCorroborated,
+      },
+    );
+
+    expect(capabilities.supports(DeviceCapability.battery), isTrue);
+    expect(capabilities.supports(DeviceCapability.sleep), isFalse);
+    expect(
+      capabilities.confidenceFor(DeviceCapability.sleep),
+      CapabilityConfidence.unavailable,
+    );
+  });
 }

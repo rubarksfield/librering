@@ -1,0 +1,15 @@
+name: ring_ble
+description: Protocol-independent LibreRing BLE transport and sync contracts.
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ^3.13.1
+
+dependencies:
+  ring_core:
+    path: ../ring_core
+
+dev_dependencies:
+  lints: ^6.0.0
+  test: ^1.25.6

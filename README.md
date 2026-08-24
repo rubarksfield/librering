@@ -81,3 +81,7 @@ APPROVE DESIGN AND SCORING V1
 Future design or scoring changes require an explicit versioned revision and must
 not silently alter the frozen V1 implementation contract. BLE, persistent data,
 health bridges, and scoring execution remain later-phase work.
+
+The Phase 6 protocol foundation is present under `packages/ring_ble` and
+`packages/ring_colmi_qring`, but platform BLE and physical R12 commands remain
+disabled pending SDK/licence and consented hardware-fixture gates.

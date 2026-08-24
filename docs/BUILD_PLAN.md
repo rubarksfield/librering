@@ -24,7 +24,7 @@ on 2026-08-24.
 | Design and scoring freeze | Complete | Commit `04563fe`; exports, tokens, specifications, mapping, and scoring V1 |
 | Phase 5 production foundation | Complete | Flutter workspace, approved twelve routes, demo boundary, locale/state plumbing, tests, iOS simulator build |
 | Android build environment | Machine gap | Android SDK must be installed and its licences accepted by the user |
-| Phase 6 protocol implementation | Not started | Clean-room BLE fixtures and driver tests; no device claim without hardware evidence |
+| Phase 6 protocol implementation | In progress | Pure-Dart driver/transport contracts, fail-closed QRing framing and synthetic fixtures complete; physical commands gated |
 
 ## Verification strategy
 
@@ -37,5 +37,6 @@ on 2026-08-24.
 
 ## Current gate
 
-Phase 5 is complete. Begin Phase 6 without adding database, scoring, or health
-platform behavior. Physical COLMI R12 validation remains explicitly unavailable.
+Phase 5 is complete. Phase 6 has a verified fail-closed protocol foundation;
+platform BLE wiring and command enablement require the Android/tooling and
+physical COLMI R12 fixture gates. Do not add database/scoring/health behavior yet.

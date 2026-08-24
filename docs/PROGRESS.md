@@ -73,10 +73,16 @@ Last updated: 2026-08-24
 - Built, installed, launched, and visually inspected the demo app on an iPhone
   17 Pro simulator. The archived screenshot hash is
   `a83c306d442d7391b9a90208fb3142d83975b6bbada4eb93dc239d35d2e2bece`.
+- Added protocol-independent BLE/driver contracts, bounded sync lifecycle and
+  retry/deduplication primitives, and a scripted transport covering slow and
+  failed connections, interruption, reconnect, and fixture-backed notifications.
+- Added exact R12 advertisement matching, inclusive QRing candidate discovery,
+  strict service validation, 16-byte checksum framing, bounded duplicate-safe
+  big-data assembly, and fail-closed command gates.
 
 ## In progress
 
-- Preparing the clean-room Phase 6 BLE/protocol implementation boundary.
+- Phase 6 platform BLE adapter and physical command-fixture acquisition.
 
 ## Blocked
 
@@ -140,6 +146,7 @@ Last updated: 2026-08-24
 | 2026-08-24 | Golden regression | 4/4 generated with system Helvetica Neue and rechecked at 390×844 |
 | 2026-08-24 | iOS simulator build | Xcode build passed; Runner.app installed/launched on iPhone 17 Pro simulator |
 | 2026-08-24 | Android debug build | correctly stopped: Android SDK unavailable on this Mac |
+| 2026-08-24 | Phase 6 protocol foundation | 12/12 BLE/sync tests + 11/11 QRing/framing tests + 2/2 capability tests passed; slow/failure/interruption/reconnect/unexpected-firmware cases covered |
 
 ## Known limitations
 
@@ -150,8 +157,11 @@ Last updated: 2026-08-24
 - Synthetic checks establish deterministic face/safety behaviour, not calibration,
   demographic fairness, medical validity, or user comprehension.
 - Phase 5 is a production-code foundation, not a complete device application.
-  BLE, database, health bridges, scoring execution, export, and deletion are not
-  implemented yet.
+  Platform BLE, device commands, database, health bridges, scoring execution,
+  export, and deletion are not implemented yet.
+- Low-battery and partial-history transport fixtures are intentionally pending:
+  no proven R12 battery response or history end/partial sentinel is available,
+  so the test layer does not invent either packet shape.
 - The prototype is interaction-complete but not a usability study with external
   participants or a screen-reader/device-lab certification.
 - Penpot remains a verified local auxiliary environment, not the first-gate visual
@@ -161,5 +171,5 @@ Last updated: 2026-08-24
 
 ## Next concrete action
 
-Implement the Phase 6 clean-room BLE protocol package from documented evidence
-and fixtures. Do not claim R12 compatibility until physical-device checks pass.
+Wire the audited platform BLE adapter only after the Android/licence gate, then
+capture consented physical R12 fixtures before enabling any command payload.

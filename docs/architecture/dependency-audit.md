@@ -55,6 +55,14 @@ licences, known CVEs, update cadence, permissions, network behaviour, binary
 size, alternatives, and removal plan. Prefer direct platform APIs where the
 dependency saves little code.
 
+### Audited BLE adapter candidate
+
+`flutter_reactive_ble` 5.5.0 was current on 2026-08-24 and is BSD-3-Clause.
+It supports iOS and Android scan, connect, service discovery, writes, and
+notifications, but brings federated native dependencies and platform permission
+work. Phase 6 keeps `ring_ble` pure Dart and does not link the candidate yet;
+adopt it only when the Android SDK and physical-fixture gates are available.
+
 ## Rejected first-stage dependencies
 
 - No third-party scoring/math packages: the formulas need to be readable.

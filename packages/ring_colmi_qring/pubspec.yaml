@@ -1,0 +1,17 @@
+name: ring_colmi_qring
+description: Clean-room, fail-closed COLMI QRing protocol foundation.
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ^3.13.1
+
+dependencies:
+  ring_ble:
+    path: ../ring_ble
+  ring_core:
+    path: ../ring_core
+
+dev_dependencies:
+  lints: ^6.0.0
+  test: ^1.25.6
