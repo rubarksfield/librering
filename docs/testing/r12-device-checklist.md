@@ -1,6 +1,11 @@
 # COLMI R12 physical-device checklist
 
-Status: not run; no owned physical device is available.
+Status: not run; an owned R12 is available but no physical phone/capture session
+has been connected or consented yet.
+
+Before capture, record the test phone/OS, ring size, advertised name, firmware,
+charge state, QRing contention state, and whether redacted packets may remain
+local-only or be committed as an anonymized fixture.
 
 - Record ring hardware and firmware identifiers without exposing personal data.
 - Capture permission, scan, connect, reconnect, timeout, and QRing-conflict states.

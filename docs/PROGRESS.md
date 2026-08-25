@@ -1,6 +1,6 @@
 # LibreRing progress
 
-Last updated: 2026-08-24
+Last updated: 2026-08-25
 
 ## Current status
 
@@ -79,6 +79,8 @@ Last updated: 2026-08-24
 - Added exact R12 advertisement matching, inclusive QRing candidate discovery,
   strict service validation, 16-byte checksum framing, bounded duplicate-safe
   big-data assembly, and fail-closed command gates.
+- Installed Google-signed Android Studio Quail 3 Patch 1 and its arm64 JDK,
+  Android SDK/platform/build/command-line tools, and verified a real debug APK.
 
 ## In progress
 
@@ -86,10 +88,8 @@ Last updated: 2026-08-24
 
 ## Blocked
 
-- Android native compilation is machine-blocked before Gradle because no Android
-  SDK is installed. Licence acceptance is a user-controlled external gate.
-- Physical COLMI R12 behavior remains unverified because no owned device or
-  packet capture is available.
+- Physical COLMI R12 behavior remains unverified pending a connected physical
+  phone and explicit packet-capture/retention consent for the user's owned ring.
 
 ## Decisions
 
@@ -147,11 +147,18 @@ Last updated: 2026-08-24
 | 2026-08-24 | iOS simulator build | Xcode build passed; Runner.app installed/launched on iPhone 17 Pro simulator |
 | 2026-08-24 | Android debug build | correctly stopped: Android SDK unavailable on this Mac |
 | 2026-08-24 | Phase 6 protocol foundation | 12/12 BLE/sync tests + 11/11 QRing/framing tests + 2/2 capability tests passed; slow/failure/interruption/reconnect/unexpected-firmware cases covered |
+| 2026-08-25 | Android toolchain | Android Studio Quail 3 Patch 1; arm64 JDK; SDK Platform 36/37, Build-Tools 36, Platform-Tools 37.0.1, and command-line tools 23 installed |
+| 2026-08-25 | Android debug APK | `flutter build apk --debug --dart-define=LIBRERING_DEMO=true` passed; 159 MB; SHA-256 `7f21f8ce898a3c5285f039f0fa93f2335a4ec923771fa8e7cdc96abf4511ce1a` |
 
 ## Known limitations
 
-- No owned physical COLMI R12, firmware capture, PSG, ECG, oximetry, or outcome-
-  labelled cohort was available. Hardware accuracy and score validity are unproven.
+- An owned physical COLMI R12 is now available, but no firmware capture, PSG,
+  ECG, oximetry, or outcome-labelled cohort has been collected. Hardware
+  compatibility, accuracy, and score validity remain unproven.
+- Flutter 3.47.1 still labels the Android licence status `unknown` because the
+  new Android CLI deprecates `sdkmanager --licenses`; that command exits 0 and
+  says the option is no longer needed. Gradle separately confirmed the Platform
+  36 licence as accepted and the debug APK build passed.
 - QRing findings are a desk/app-store audit, not direct task testing in its app.
 - Competitor detail can change; sources are dated and should be refreshed for release.
 - Synthetic checks establish deterministic face/safety behaviour, not calibration,
@@ -171,5 +178,5 @@ Last updated: 2026-08-24
 
 ## Next concrete action
 
-Wire the audited platform BLE adapter only after the Android/licence gate, then
-capture consented physical R12 fixtures before enabling any command payload.
+Wire the audited platform BLE adapter, then capture consented physical R12
+fixtures on a connected phone before enabling any command payload.
