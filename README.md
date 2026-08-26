@@ -1,6 +1,6 @@
 # LibreRing V1
 
-Status: **`IMPLEMENTATION` — Phase 5 production foundation complete**
+Status: **`IMPLEMENTATION` — Phase 6 physical validation in progress**
 
 Visual direction: **approved for V1 on 2026-08-24**  
 Scoring model: **approved for V1 on 2026-08-24**
@@ -9,6 +9,11 @@ LibreRing V1 has an approved and separately committed product-design and
 scientific-model foundation for the COLMI R12. The first production Flutter
 vertical slice implements the twelve priority screens, deterministic demo mode,
 local privacy/journal state, and English/pt-PT locale plumbing.
+
+Phase 6 now adds a bounded platform BLE adapter and production pairing flow.
+It scans only after a user action, displays candidates, requires an exact
+`COLMI R12_*` identity, and validates the service profile without sending a
+health or settings command. Raw packets are not retained.
 
 ## Run the mobile foundation
 
@@ -79,9 +84,12 @@ APPROVE DESIGN AND SCORING V1
 ```
 
 Future design or scoring changes require an explicit versioned revision and must
-not silently alter the frozen V1 implementation contract. BLE, persistent data,
-health bridges, and scoring execution remain later-phase work.
+not silently alter the frozen V1 implementation contract. Verified R12 command
+payloads, persistent data, health bridges, and scoring execution remain
+later-phase work.
 
 The Phase 6 protocol foundation is present under `packages/ring_ble` and
-`packages/ring_colmi_qring`, but platform BLE and physical R12 commands remain
-disabled pending SDK/licence and consented hardware-fixture gates.
+`packages/ring_colmi_qring`; the mobile app now links the audited platform BLE
+adapter. Physical R12 commands remain disabled pending consented hardware
+fixtures. The connected iPhone also requires Developer Mode before the current
+physical scan/service check can be installed.

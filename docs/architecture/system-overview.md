@@ -29,8 +29,12 @@ score calculation, export, deletion, network, analytics, or background service.
 The pairing route is interactive only in labelled demo mode. This prevents UI
 progress from being confused with physical COLMI R12 compatibility.
 
-Phase 6 adds pure-Dart BLE/QRing boundaries and synthetic framing tests. It does
-not yet link a platform plugin or emit an R12 command payload.
+Phase 6 adds pure-Dart BLE/QRing boundaries, synthetic framing tests, and a
+Flutter platform adapter for bounded scanning, connection, service discovery,
+notification subscription and transport writes. The production pairing flow
+accepts only exact `COLMI R12_*` identities and validates services without
+emitting an R12 protocol command. Command payloads remain fail-closed pending
+consented physical fixtures.
 
 ## Platform targets
 

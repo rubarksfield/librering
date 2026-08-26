@@ -7,6 +7,7 @@ import 'package:ring_core/ring_core.dart';
 import 'package:ring_design_system/ring_design_system.dart';
 
 import 'app_state.dart';
+import 'ble/r12_pairing_client.dart';
 import 'localized_copy.dart';
 
 class WelcomeScreen extends StatelessWidget {
@@ -92,6 +93,76 @@ class RingScanScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final demo = ref.watch(isDemoModeProvider);
+    final pairing = ref.watch(ringPairingProvider);
+
+    final productionSubtitle = switch (pairing.phase) {
+      RingPairingPhase.idle => copyFor(
+        context,
+        'Bluetooth starts only when you choose Scan. Nearby identifiers stay in memory and raw packets are not retained.',
+        'O Bluetooth só começa quando escolher Pesquisar. Os identificadores próximos ficam em memória e os pacotes brutos não são guardados.',
+      ),
+      RingPairingPhase.scanning => copyFor(
+        context,
+        'Looking for a nearby COLMI R12…',
+        'A procurar um COLMI R12 próximo…',
+      ),
+      RingPairingPhase.found => copyFor(
+        context,
+        pairing.selected == null
+            ? '${pairing.candidates.where((candidate) => candidate.exact).length} COLMI R12 rings found. Choose the one you own.'
+            : '${pairing.selected!.advertisement.name} is ready for a non-destructive service check.',
+        pairing.selected == null
+            ? '${pairing.candidates.where((candidate) => candidate.exact).length} anéis COLMI R12 encontrados. Escolha o seu.'
+            : '${pairing.selected!.advertisement.name} está pronto para uma verificação não destrutiva dos serviços.',
+      ),
+      RingPairingPhase.connecting => copyFor(
+        context,
+        'Confirming the ring service profile. No health or settings command is being sent.',
+        'A confirmar o perfil de serviços do anel. Não está a ser enviado qualquer comando de saúde ou de definições.',
+      ),
+      RingPairingPhase.failed => copyFor(
+        context,
+        pairing.message ?? 'The ring could not be verified. Try again.',
+        'Não foi possível verificar o anel. Feche o QRing e tente novamente.',
+      ),
+      RingPairingPhase.unavailable => copyFor(
+        context,
+        'Bluetooth is unavailable in this build.',
+        'O Bluetooth não está disponível nesta versão.',
+      ),
+      RingPairingPhase.connected => copyFor(
+        context,
+        'Ring service profile verified.',
+        'Perfil de serviços do anel verificado.',
+      ),
+    };
+    final actionLabel = switch (pairing.phase) {
+      RingPairingPhase.scanning => copyFor(
+        context,
+        'Scanning…',
+        'A pesquisar…',
+      ),
+      RingPairingPhase.found => copyFor(
+        context,
+        pairing.selected == null
+            ? 'Choose a ring above'
+            : 'Verify ${pairing.selected!.advertisement.name}',
+        pairing.selected == null
+            ? 'Escolha um anel acima'
+            : 'Verificar ${pairing.selected!.advertisement.name}',
+      ),
+      RingPairingPhase.connecting => copyFor(
+        context,
+        'Verifying…',
+        'A verificar…',
+      ),
+      RingPairingPhase.failed => copyFor(
+        context,
+        'Try scan again',
+        'Pesquisar novamente',
+      ),
+      _ => copyFor(context, 'Scan for ring', 'Pesquisar anel'),
+    };
     return _OnboardingScreen(
       key: const Key('screen-ring-scan'),
       top: Row(
@@ -112,11 +183,16 @@ class RingScanScreen extends ConsumerWidget {
               'Demo pairing is local and deterministic. No health data leaves this phone.',
               'O emparelhamento de demonstração é local. Nenhum dado de saúde sai deste telemóvel.',
             )
-          : copyFor(
-              context,
-              'Bluetooth pairing is not enabled in this UI foundation. No scan has started.',
-              'O emparelhamento Bluetooth ainda não está ativo nesta base de interface. A pesquisa não começou.',
-            ),
+          : productionSubtitle,
+      detail: !demo && pairing.candidates.length > 1
+          ? _RingCandidateList(
+              candidates: pairing.candidates,
+              selected: pairing.selected,
+              onSelected: ref
+                  .read(ringPairingProvider.notifier)
+                  .selectCandidate,
+            )
+          : null,
       action: LibreRingPrimaryButton(
         key: const Key('scan-now'),
         label: demo
@@ -125,47 +201,133 @@ class RingScanScreen extends ConsumerWidget {
                 'Run demo scan',
                 'Executar pesquisa de demonstração',
               )
-            : copyFor(context, 'Scan unavailable', 'Pesquisa indisponível'),
-        onPressed: demo ? () => context.go('/pairing/found') : null,
+            : actionLabel,
+        onPressed: demo
+            ? () => context.go('/pairing/found')
+            : switch (pairing.phase) {
+                RingPairingPhase.idle || RingPairingPhase.failed =>
+                  ref.read(ringPairingProvider.notifier).scan,
+                RingPairingPhase.found when pairing.selected != null =>
+                  () async {
+                    await ref.read(ringPairingProvider.notifier).connect();
+                    if (context.mounted &&
+                        ref.read(ringPairingProvider).phase ==
+                            RingPairingPhase.connected) {
+                      context.go('/pairing/found');
+                    }
+                  },
+                _ => null,
+              },
       ),
     );
   }
 }
 
-class RingFoundScreen extends StatelessWidget {
+class RingFoundScreen extends ConsumerWidget {
   const RingFoundScreen({super.key});
 
   @override
-  Widget build(BuildContext context) => _OnboardingScreen(
-    key: const Key('screen-ring-found'),
-    top: Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+  Widget build(BuildContext context, WidgetRef ref) {
+    final demo = ref.watch(isDemoModeProvider);
+    final pairing = ref.watch(ringPairingProvider);
+    final evidence = pairing.evidence;
+    return _OnboardingScreen(
+      key: const Key('screen-ring-found'),
+      top: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: <Widget>[
+          const Expanded(child: LibreRingWordmark()),
+          const SizedBox(width: 16),
+          LibreRingEyebrow(
+            demo
+                ? copyFor(context, 'Demo connected', 'Demonstração ligada')
+                : copyFor(context, 'Verified', 'Verificado'),
+          ),
+        ],
+      ),
+      art: const LibreRingArtwork(kind: LibreRingArtworkKind.ring, size: 210),
+      preTitle: const Icon(
+        Icons.check,
+        color: LibreRingTokens.onForeground,
+        size: 28,
+      ),
+      title: demo
+          ? copyFor(context, 'LibreRing found', 'LibreRing encontrado')
+          : evidence?.name ??
+                copyFor(context, 'Ring not verified', 'Anel não verificado'),
+      subtitle: demo
+          ? copyFor(
+              context,
+              'Simulated signal strong · Demo battery 78%',
+              'Sinal simulado forte · Bateria de demonstração 78%',
+            )
+          : evidence == null
+          ? copyFor(
+              context,
+              'Return to pairing to verify an exact R12 service profile.',
+              'Volte ao emparelhamento para verificar um perfil de serviços R12 exato.',
+            )
+          : copyFor(
+              context,
+              evidence.supportsBigData
+                  ? 'Command and history services confirmed · No commands sent'
+                  : 'Command service confirmed · History service unavailable · No commands sent',
+              evidence.supportsBigData
+                  ? 'Serviços de comandos e histórico confirmados · Nenhum comando enviado'
+                  : 'Serviço de comandos confirmado · Serviço de histórico indisponível · Nenhum comando enviado',
+            ),
+      centered: true,
+      action: LibreRingPrimaryButton(
+        key: const Key('found-view-today'),
+        label: copyFor(context, 'View today', 'Ver o dia de hoje'),
+        onPressed: () => context.go('/today'),
+      ),
+    );
+  }
+}
+
+class _RingCandidateList extends StatelessWidget {
+  const _RingCandidateList({
+    required this.candidates,
+    required this.selected,
+    required this.onSelected,
+  });
+
+  final List<RingPairingCandidate> candidates;
+  final RingPairingCandidate? selected;
+  final ValueChanged<RingPairingCandidate> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
       children: <Widget>[
-        const LibreRingWordmark(),
-        LibreRingEyebrow(
-          copyFor(context, 'Demo connected', 'Demonstração ligada'),
-        ),
+        for (final candidate in candidates)
+          ChoiceChip(
+            label: Text(
+              candidate.advertisement.name.trim().isEmpty
+                  ? copyFor(
+                      context,
+                      'Unnamed QRing candidate',
+                      'Candidato QRing sem nome',
+                    )
+                  : candidate.exact
+                  ? candidate.advertisement.name
+                  : copyFor(
+                      context,
+                      '${candidate.advertisement.name} · unconfirmed',
+                      '${candidate.advertisement.name} · não confirmado',
+                    ),
+            ),
+            selected:
+                selected?.advertisement.deviceId ==
+                candidate.advertisement.deviceId,
+            onSelected: candidate.exact ? (_) => onSelected(candidate) : null,
+          ),
       ],
-    ),
-    art: const LibreRingArtwork(kind: LibreRingArtworkKind.ring, size: 210),
-    preTitle: const Icon(
-      Icons.check,
-      color: LibreRingTokens.onForeground,
-      size: 28,
-    ),
-    title: copyFor(context, 'LibreRing found', 'LibreRing encontrado'),
-    subtitle: copyFor(
-      context,
-      'Simulated signal strong · Demo battery 78%',
-      'Sinal simulado forte · Bateria de demonstração 78%',
-    ),
-    centered: true,
-    action: LibreRingPrimaryButton(
-      key: const Key('found-view-today'),
-      label: copyFor(context, 'View today', 'Ver o dia de hoje'),
-      onPressed: () => context.go('/today'),
-    ),
-  );
+    );
+  }
 }
 
 class TodayScreen extends ConsumerWidget {
@@ -1007,6 +1169,7 @@ class _OnboardingScreen extends StatelessWidget {
     required this.subtitle,
     required this.action,
     this.preTitle,
+    this.detail,
     this.centered = false,
     super.key,
   });
@@ -1017,6 +1180,7 @@ class _OnboardingScreen extends StatelessWidget {
   final String subtitle;
   final Widget action;
   final Widget? preTitle;
+  final Widget? detail;
   final bool centered;
 
   @override
@@ -1067,6 +1231,10 @@ class _OnboardingScreen extends StatelessWidget {
                         style: Theme.of(context).textTheme.bodySmall
                             ?.copyWith(fontSize: 15),
                       ),
+                      if (detail != null) ...<Widget>[
+                        const SizedBox(height: 16),
+                        detail!,
+                      ],
                       const SizedBox(height: 22),
                       action,
                     ],

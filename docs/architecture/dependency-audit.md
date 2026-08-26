@@ -57,11 +57,16 @@ dependency saves little code.
 
 ### Audited BLE adapter candidate
 
-`flutter_reactive_ble` 5.5.0 was current on 2026-08-24 and is BSD-3-Clause.
-It supports iOS and Android scan, connect, service discovery, writes, and
-notifications, but brings federated native dependencies and platform permission
-work. Phase 6 keeps `ring_ble` pure Dart and does not link the candidate yet;
-adopt it only when the Android SDK and physical-fixture gates are available.
+`flutter_reactive_ble` 5.5.0 was the published candidate audited on 2026-08-24
+and is BSD-3-Clause. Its Android subpackage hard-codes compile SDK 33, which is
+incompatible with its current AndroidX graph. The mobile adapter therefore pins
+the official upstream 5.6.0 source at merged commit
+`6b81c85e7681e222080263992b0ab8f2bc6a6404`; that change updates the plugin for
+Flutter 3.47, built-in Kotlin, AGP 9 and Android SDK 37. The federated mobile and
+platform-interface packages are pinned to the same commit to keep the graph
+coherent. `pubspec.lock` records the resolved revisions. The adapter supports
+scan, connect, service discovery, writes and notifications while `ring_ble`
+remains pure Dart and protocol commands remain fail-closed.
 
 ## Rejected first-stage dependencies
 

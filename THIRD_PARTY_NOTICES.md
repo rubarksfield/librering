@@ -1,6 +1,6 @@
 # Third-party notices
 
-Status: Phase 5 production foundation, reviewed 2026-08-24.
+Status: Phase 6 BLE adapter, reviewed 2026-08-26.
 
 LibreRing original code is licensed under Apache-2.0. The repository does not
 copy or vendor source code or visual assets from the protocol/design references
@@ -27,6 +27,8 @@ standard Dart package resolver:
 | `flutter_riverpod` | 3.4.2 | MIT |
 | `go_router` | 18.0.0 | BSD-3-Clause |
 | `intl` | 0.20.3 | BSD-3-Clause |
+| `flutter_reactive_ble`, `reactive_ble_mobile`, `reactive_ble_platform_interface` | official 5.6.0 source pinned at `6b81c85e7681e222080263992b0ab8f2bc6a6404` | BSD-3-Clause |
+| Swift Protobuf | 1.38.1, revision `55d7a1cc5666b85c13464aea1c4b4a90feccb4c8` | Apache-2.0 |
 
 Full transitive notices are generated into Flutter build artifacts. The scoring
 sandbox uses only Python's standard library. Penpot runtime images, state,

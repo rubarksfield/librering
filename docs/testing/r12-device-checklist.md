@@ -1,7 +1,10 @@
 # COLMI R12 physical-device checklist
 
-Status: not run; an owned R12 is available but no physical phone/capture session
-has been connected or consented yet.
+Status: preflight partially run on 2026-08-26. An iPhone 15 Pro Max on iOS 26.5.2
+and an owned R12 are available. Flutter and Xcode see the phone, but Developer
+Mode is disabled, so the app has not been installed and the ring advertisement,
+services, firmware, battery or packets have not been observed. Packet capture
+and retention have not been consented.
 
 Before capture, record the test phone/OS, ring size, advertised name, firmware,
 charge state, QRing contention state, and whether redacted packets may remain

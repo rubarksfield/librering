@@ -1,6 +1,6 @@
 # LibreRing progress
 
-Last updated: 2026-08-25
+Last updated: 2026-08-26
 
 ## Current status
 
@@ -81,15 +81,27 @@ Last updated: 2026-08-25
   big-data assembly, and fail-closed command gates.
 - Installed Google-signed Android Studio Quail 3 Patch 1 and its arm64 JDK,
   Android SDK/platform/build/command-line tools, and verified a real debug APK.
+- Added the audited Flutter BLE adapter and production pairing flow with bounded
+  inclusive scanning, exact `COLMI R12_*` acceptance, connection/service
+  discovery, permission copy, QRing-conflict recovery, and no raw-packet
+  retention. Service validation subscribes for notifications but sends no
+  protocol health or settings command.
+- Pinned the official upstream `flutter_reactive_ble` 5.6.0 source at merged
+  commit `6b81c85e7681e222080263992b0ab8f2bc6a6404` after the published 5.5.0
+  Android package failed against its own modern AndroidX dependency graph.
+- Confirmed the user's iPhone 15 Pro Max on iOS 26.5.2 is physically connected
+  and visible to Flutter and Xcode.
 
 ## In progress
 
-- Phase 6 platform BLE adapter and physical command-fixture acquisition.
+- Phase 6 physical R12 service validation and command-fixture acquisition.
 
 ## Blocked
 
-- Physical COLMI R12 behavior remains unverified pending a connected physical
-  phone and explicit packet-capture/retention consent for the user's owned ring.
+- The connected iPhone has Developer Mode disabled, so LibreRing cannot yet be
+  installed for the physical scan/service check.
+- Raw physical COLMI R12 command/response acquisition remains gated by explicit
+  packet-capture/retention consent. No such capture or command has occurred.
 
 ## Decisions
 
@@ -149,6 +161,9 @@ Last updated: 2026-08-25
 | 2026-08-24 | Phase 6 protocol foundation | 12/12 BLE/sync tests + 11/11 QRing/framing tests + 2/2 capability tests passed; slow/failure/interruption/reconnect/unexpected-firmware cases covered |
 | 2026-08-25 | Android toolchain | Android Studio Quail 3 Patch 1; arm64 JDK; SDK Platform 36/37, Build-Tools 36, Platform-Tools 37.0.1, and command-line tools 23 installed |
 | 2026-08-25 | Android debug APK | `flutter build apk --debug --dart-define=LIBRERING_DEMO=true` passed; 159 MB; SHA-256 `7f21f8ce898a3c5285f039f0fa93f2335a4ec923771fa8e7cdc96abf4511ce1a` |
+| 2026-08-26 | Platform BLE adapter | static analysis passed; 13/13 mobile tests including bounded adapter mapping, explicit multi-ring selection and production no-command pairing flow passed |
+| 2026-08-26 | Production BLE builds | unsigned physical-iOS debug build passed; production-mode Android debug APK passed with API 28 minimum and SDK 37 compile target |
+| 2026-08-26 | Physical iPhone preflight | Flutter and Xcode detect iPhone 15 Pro Max, iOS 26.5.2; install stopped because Developer Mode is disabled |
 
 ## Known limitations
 
@@ -163,9 +178,12 @@ Last updated: 2026-08-25
 - Competitor detail can change; sources are dated and should be refreshed for release.
 - Synthetic checks establish deterministic face/safety behaviour, not calibration,
   demographic fairness, medical validity, or user comprehension.
-- Phase 5 is a production-code foundation, not a complete device application.
-  Platform BLE, device commands, database, health bridges, scoring execution,
-  export, and deletion are not implemented yet.
+- Phase 5 plus the Phase 6 scan/connect/service adapter are a production-code
+  foundation, not a complete device application. Verified R12 commands,
+  database, health bridges, scoring execution, export, and deletion are not
+  implemented yet.
+- Android runtime pairing has not been device-tested; only its manifest,
+  production compilation and APK output are verified.
 - Low-battery and partial-history transport fixtures are intentionally pending:
   no proven R12 battery response or history end/partial sentinel is available,
   so the test layer does not invent either packet shape.
@@ -178,5 +196,7 @@ Last updated: 2026-08-25
 
 ## Next concrete action
 
-Wire the audited platform BLE adapter, then capture consented physical R12
-fixtures on a connected phone before enabling any command payload.
+Enable Developer Mode on the connected iPhone, install LibreRing, approve its
+Bluetooth prompt, and run the exact-name scan/service check. Obtain explicit
+capture/retention consent before collecting any command fixture or enabling any
+command payload.

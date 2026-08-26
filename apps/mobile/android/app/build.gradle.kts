@@ -6,7 +6,9 @@ plugins {
 
 android {
     namespace = "org.librering.librering_mobile"
-    compileSdk = flutter.compileSdkVersion
+    // The pinned upstream BLE plugin targets SDK 37. This does not change the
+    // V1 minimum (API 28) or opt the app into newer target-SDK behaviour.
+    compileSdk = 37
     ndkVersion = flutter.ndkVersion
 
     compileOptions {

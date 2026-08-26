@@ -6,6 +6,7 @@ import 'package:ring_demo/ring_demo.dart';
 import 'package:ring_design_system/ring_design_system.dart';
 
 import 'src/app_state.dart';
+import 'src/ble/r12_pairing_client.dart';
 import 'src/screens.dart';
 
 class LibreRingApp extends StatelessWidget {
@@ -13,12 +14,14 @@ class LibreRingApp extends StatelessWidget {
     this.demoMode = false,
     this.initialLocation = '/welcome',
     this.locale,
+    this.pairingClient,
     super.key,
   });
 
   final bool demoMode;
   final String initialLocation;
   final Locale? locale;
+  final RingPairingClient? pairingClient;
 
   @override
   Widget build(BuildContext context) {
@@ -27,6 +30,8 @@ class LibreRingApp extends StatelessWidget {
         isDemoModeProvider.overrideWithValue(demoMode),
         if (demoMode)
           dailySnapshotProvider.overrideWithValue(demoDailySnapshot),
+        if (pairingClient != null)
+          ringPairingClientProvider.overrideWithValue(pairingClient),
       ],
       child: _LibreRingShell(initialLocation: initialLocation, locale: locale),
     );

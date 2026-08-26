@@ -12,6 +12,11 @@ dependencies:
   flutter_localizations:
     sdk: flutter
   flutter_riverpod: 3.4.2
+  flutter_reactive_ble:
+    git:
+      url: https://github.com/PhilipsHue/flutter_reactive_ble.git
+      ref: 6b81c85e7681e222080263992b0ab8f2bc6a6404
+      path: packages/flutter_reactive_ble
   go_router: 18.0.0
   intl: ^0.20.2
   ring_core:
@@ -20,6 +25,22 @@ dependencies:
     path: ../../packages/ring_demo
   ring_design_system:
     path: ../../packages/ring_design_system
+  ring_ble:
+    path: ../../packages/ring_ble
+  ring_colmi_qring:
+    path: ../../packages/ring_colmi_qring
+
+dependency_overrides:
+  reactive_ble_mobile:
+    git:
+      url: https://github.com/PhilipsHue/flutter_reactive_ble.git
+      ref: 6b81c85e7681e222080263992b0ab8f2bc6a6404
+      path: packages/reactive_ble_mobile
+  reactive_ble_platform_interface:
+    git:
+      url: https://github.com/PhilipsHue/flutter_reactive_ble.git
+      ref: 6b81c85e7681e222080263992b0ab8f2bc6a6404
+      path: packages/reactive_ble_platform_interface
 
 dev_dependencies:
   flutter_test:
