@@ -1,13 +1,15 @@
 # Production architecture
 
-Status: Phase 6 local sync implementation, 2026-08-26.
+Status: Product preview 1.1.0 (5), 2026-08-26.
 
 ```text
 apps/mobile
   ├── ring_core              immutable cross-layer records
   ├── ring_demo              deterministic demo records only
   ├── ring_design_system     frozen V1 tokens and visual primitives
-  └── local repository       versioned decoded history in Application Support
+  ├── local repository       versioned decoded history in Application Support
+  ├── local Journal          separately versioned manual context
+  └── local export           portable JSON/CSV plus SHA-256 manifest
 
 future acquisition/storage/scoring packages
   └── ring_core              never import app or design packages
@@ -30,27 +32,29 @@ platform adapter, and a versioned local decoded-history repository. The
 production pairing flow accepts only exact `COLMI R12_*` identities. Sync is
 enabled only for the physically verified firmware, stores no raw packets or BLE
 identifier, and preserves idempotency across relaunch. Local deletion is
-available with confirmation. HealthKit, Health Connect, scoring, export,
-networking, analytics, accounts and background sync remain absent.
+available with confirmation. HealthKit, Health Connect, validated scoring,
+networking, analytics, accounts and continuous background sync remain absent.
+Portable local export and quiet foreground refresh are present.
 
 ## Platform targets
 
 - iOS deployment target 16.0; simulator build verified with Xcode 26.6.
-- Android minimum SDK 28; native build awaits an installed Android SDK and user
-  acceptance of its licences.
+- Android minimum SDK 28; production-mode debug APK compilation is verified.
 - Portrait-first canonical layout 390×844, with scrolling and scaling for text.
 - Supported locales: English and Portuguese (Portugal).
 
 ## State and navigation
 
-`go_router` owns twelve stable paths. Riverpod owns the demo-data boundary,
-decoded local repository state, pairing/sync state, cycle privacy settings, and
-manual swim entry. Route widgets receive immutable domain records rather than
-packets, storage rows, or formula internals.
+`go_router` owns 22 stable paths within the three-destination Today / Trends /
+You shell. Riverpod owns the demo-data boundary, decoded local repository state,
+pairing/sync state, cycle privacy settings, and manual Journal entries. Route
+widgets receive immutable domain records rather than packets, storage rows, or
+formula internals.
 
 First-run users enter the consent/pairing journey. A valid local dataset routes
-returning launches directly to Today; its refresh control performs a bounded
-scan/connect/sync in place and never turns routine refresh back into onboarding.
+returning launches directly to Today. Stale history performs a bounded
+scan/connect/sync in place on launch or foreground resume; the manual refresh
+control remains available and routine refresh never becomes onboarding.
 
 ## Safety properties
 
@@ -59,7 +63,8 @@ scan/connect/sync in place and never turns routine refresh back into onboarding.
 - Corrupt or unknown-schema local data fails closed without overwrite.
 - Recovery remains unavailable; opaque firmware HRV/stress indexes are not
   displayed or scored.
-- Manual swim provenance remains separate from ring measurements.
+- Manual swim and check-in provenance remains separate from ring measurements.
+- Export excludes BLE identifiers and raw packets and labels measurement origin.
 - Cycle entries remain optional, local, and excluded from recovery scoring.
 - Unsupported evidence resolves to no-result instead of estimation.
 - Reduced motion removes route translation and transition duration.

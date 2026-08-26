@@ -10,7 +10,8 @@ Last updated: 2026-08-26
 - Scoring model: **approved for V1 on 2026-08-24**
 - Design/scoring freeze: **complete in commit `04563fe`**
 - Phase 5 production foundation: **complete and verified**
-- Phase 6 decoded local sync: **implemented and code-verified; physical acceptance pending**
+- Phase 6 decoded local sync: **physically accepted on the owned R12**
+- Product preview 1.1.0 (5): **implemented, QA-verified, and installed on the owned iPhone**
 
 ## Completed
 
@@ -125,11 +126,32 @@ Last updated: 2026-08-26
 - Added a transient iOS CoreBluetooth fallback for an R12 that is already
   connected and therefore not advertising. It is deduplicated with scan results
   and does not persist the system peripheral identifier.
+- Replaced the dense production dashboard with the approved three-destination
+  Today / Trends / You shell and transparent Sleep, Recovery, Movement, Heart,
+  and Oxygen drill-downs. Recovery remains intentionally unavailable.
+- Added 7/30/90-day multi-domain history with missing-day gaps, source labels,
+  sample counts, and no zero-filling or invented baseline interpretation.
+- Added an atomic local Journal with manual swims, tag/note check-ins, separate
+  deletion, and portable JSON/CSV export with a SHA-256 manifest. Device
+  identifiers and raw BLE packets are excluded from export.
+- Added quiet, bounded stale-history refresh on Today launch and foreground
+  resume while preserving manual refresh and the no-pairing returning-user flow.
+- Expanded the route, journey, compact-phone, large-text, deletion, export, and
+  golden suites; fixed an expanding confidence badge and navigation overlay
+  found during rendered visual review.
+- Ran Appium MCP 1.92.6 through XCUITest/WebDriverAgent 16.8.0 on an iPhone 17
+  Pro simulator. The native accessibility-tree journey passed from onboarding
+  through Today, Trends, manual save, You, Data/export, and deletion Cancel.
+  A final Quick check-in pass also verified native tag/note entry, local-save
+  readback, outside-tap keyboard dismissal, and Journal's selected You state.
+- Built the signed production iOS release and production-mode Android debug APK,
+  installed `1.1.0 (5)` over the local network, and confirmed the installed
+  version/build through CoreDevice readback.
 
 ## In progress
 
-- Final physical acceptance of the revised returning-user refresh discovery on
-  the connected iPhone.
+- Unlock and foreground-QA the already-installed LibreRing 1.1.0 (5), then
+  confirm quiet stale refresh against the owned R12.
 
 ## Blocked
 
@@ -209,6 +231,13 @@ Last updated: 2026-08-26
 | 2026-08-26 | Physical sync persistence/idempotency | user-observed initial and repeated syncs both completed with 409 stored records; relaunch preserved the local dataset |
 | 2026-08-26 | Refresh discovery regression | targeted 9/9 and full mobile 29/29 tests passed; static analysis clean; connected-device fallback, shared 12-second scan, two bounded no-result scans and multi-ring refusal passed |
 | 2026-08-26 | Resilient refresh delivery | signed iOS release and Android debug APK `1.0.0+4` built; APK SHA-256 `aa59fb3c7e61dd0cf9ecca42766358ff9e2b69b51f595b4971719d76cd256da2`; local-network installed-app readback confirmed build `4` |
+| 2026-08-26 | Product preview 1.1 application suite | 44/44 mobile tests passed after route, product-journey, export/delete, compact-phone, check-in, and parent-navigation expansion; analyzer clean |
+| 2026-08-26 | Product preview golden regression | 8/8 390×844 Helvetica baselines generated and visually inspected |
+| 2026-08-26 | Native Appium MCP QA | iPhone 17 Pro simulator / iOS 26.5; XCUITest journey and accessibility readbacks passed with Appium MCP 1.92.6 and WDA 16.8.0 |
+| 2026-08-26 | Product preview simulator build | LibreRing `1.1.0 (5)` built, installed, launched, and visually inspected on iPhone 17 Pro simulator |
+| 2026-08-26 | Product preview package regression | core 3/3, BLE 12/12, QRing 27/27, demo 1/1, design system 3/3, scoring 13/13 and mobile 44/44 passed; all analyzers clean |
+| 2026-08-26 | Product preview native builds | signed production iOS release and production-mode Android debug APK `1.1.0+5` passed; APK SHA-256 `13402cfc8a62e12781ddf216545be8acf3be449d610475427f95c67eb7f62004` |
+| 2026-08-26 | Product preview iPhone delivery | local-network install passed; installed-app readback confirmed `1.1.0 (5)`; automatic launch was correctly reported unavailable because the phone was locked |
 
 ## Known limitations
 
@@ -224,16 +253,17 @@ Last updated: 2026-08-26
 - Competitor detail can change; sources are dated and should be refreshed for release.
 - Synthetic checks establish deterministic face/safety behaviour, not calibration,
   demographic fairness, medical validity, or user comprehension.
-- The production app now syncs and deletes decoded local history, but it is not a
-  complete device application. Health bridges, scoring execution, export,
-  background sync and application-level storage encryption are not implemented.
+- The production app syncs, displays, exports, journals, and separately deletes
+  decoded local history. Health bridges, validated scoring execution, continuous
+  background BLE, and application-level storage encryption are not implemented.
 - Android runtime pairing has not been device-tested; only its manifest,
   production compilation and APK output are verified.
 - Physical relaunch/resync persistence and duplicate safety passed with the
   owned ring. Low-battery, timezone-change, daylight-saving, app-contention, and
   partial-history transport cases remain pending. The current fixture establishes
   one ordinary battery response and the observed complete/no-data history shapes
-  only.
+  only. Build 5 is installed, but its physical foreground/R12 smoke pass remains
+  pending because the phone was locked during unattended delivery.
 - The prototype is interaction-complete but not a usability study with external
   participants or a screen-reader/device-lab certification.
 - Penpot remains a verified local auxiliary environment, not the first-gate visual
@@ -243,6 +273,7 @@ Last updated: 2026-08-26
 
 ## Next concrete action
 
-Open LibreRing build 4 with QRing force-closed and tap the Today refresh control
-once to confirm the revised discovery path against the owned ring. Do not forget
-or re-pair the ring unless later diagnostics establish that it is necessary.
+With QRing force-closed, unlock the iPhone, open the already-installed LibreRing
+1.1.0 (5), and confirm the quiet stale-data refresh against the owned ring. Do
+not forget or re-pair the ring unless later diagnostics establish that it is
+necessary.

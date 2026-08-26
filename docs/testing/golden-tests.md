@@ -1,7 +1,7 @@
 # Golden-test contract
 
-Four priority screens are captured at the approved 390×844 viewport: Welcome,
-Today, Metrics, and Cycle privacy. They live under
+Eight priority screens are captured at the approved 390×844 viewport: Welcome,
+Today, Metrics, Trends, Journal, You, Data hub, and Cycle privacy. They live under
 `apps/mobile/test/goldens/`.
 
 Goldens run on macOS because the approved design uses the system Helvetica Neue

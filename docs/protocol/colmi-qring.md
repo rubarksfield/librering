@@ -1,8 +1,8 @@
 # COLMI QRing protocol implementation record
 
 Status: Phase 6 read-only capture and decoder gate physically verified on one
-owned R12 firmware; decoded production sync and local storage implemented for
-that exact firmware, with final physical acceptance pending.
+owned R12 firmware; decoded production sync, persistence, relaunch, and repeated
+409-record idempotency accepted for that exact firmware.
 
 Driver version: `colmi-qring-v1`
 

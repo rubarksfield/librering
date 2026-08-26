@@ -12,10 +12,12 @@ mobile application.
 | --- | --- | --- | --- |
 | Flutter SDK | 3.47.1 stable | BSD-3-Clause | Mobile UI/runtime; platform foundation |
 | `flutter_riverpod` | 3.4.2 | MIT | Explicit local state and dependency boundaries; replace with inherited state if removed |
-| `go_router` | 18.0.0 | BSD-3-Clause | Deep-linkable twelve-route map; replace with Router API if removed |
+| `go_router` | 18.0.0 | BSD-3-Clause | Deep-linkable 22-route map; replace with Router API if removed |
 | `intl` | 0.20.3 | BSD-3-Clause | Locale support required by Flutter localizations; SDK-aligned |
 | `flutter_localizations` | SDK | BSD-3-Clause | English and pt-PT platform localization delegates |
 | `path_provider` | 2.1.6 | BSD-3-Clause | Resolves the sandboxed Application Support directory; replace with direct platform channels if removed |
+| `crypto` | 3.0.7 | BSD-3-Clause | SHA-256 export integrity manifest only; not application-level encryption |
+| `share_plus` | 13.3.0 | BSD-3-Clause | Invokes the platform share sheet for user-created JSON/CSV exports; remove to leave exports in Files only |
 
 Local path packages are original Apache-2.0 project code:
 
@@ -24,7 +26,7 @@ Local path packages are original Apache-2.0 project code:
 - `ring_design_system` — frozen tokens, theme, components, and original vector art.
 
 The mobile lockfile SHA-256 is
-`2cddb245ab44cf7bc78f15a042af2a01b0c384a5cc6e29e61e257e036bf51768`.
+`679dde6ddc9ce781d9673298862321f6fbbf43ac970bbdb31d5b986f991d0263`.
 The local repository now uses `dart:io`, and `path_provider` uses the standard
 platform channel to locate Application Support. It adds no health/network
 permission, analytics or runtime networking. BLE remains the only feature with
@@ -40,8 +42,10 @@ required before anyone redistributes those images; LibreRing does not do so.
 ## Later-phase decision record
 
 BLE and local-directory discovery are approved as recorded below. No health,
-chart, crypto, analytics, crash-reporting, authentication or database package is
-approved yet. Evaluate the minimum later-phase set against these gates:
+chart, analytics, crash-reporting, authentication or database package is
+approved yet. The audited `crypto` package is approved only for the portable
+export checksum and is not used to claim encryption. Evaluate the minimum
+later-phase set against these gates:
 
 | Area | Required checks |
 | --- | --- |

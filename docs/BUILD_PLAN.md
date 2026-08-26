@@ -2,8 +2,9 @@
 
 Status: `IMPLEMENTATION`
 
-Visual direction and scoring are approved and frozen for V1. Phase 5 production
-foundation work is implemented and verified; Phase 6 protocol work is next.
+Visual direction and scoring are approved and frozen for V1. The production
+foundation, verified R12 local sync, and 1.1 product shell are implemented and
+code-verified.
 
 The user supplied an unmistakably equivalent approval of both design and scoring
 on 2026-08-24.
@@ -24,7 +25,8 @@ on 2026-08-24.
 | Design and scoring freeze | Complete | Commit `04563fe`; exports, tokens, specifications, mapping, and scoring V1 |
 | Phase 5 production foundation | Complete | Flutter workspace, approved twelve routes, demo boundary, locale/state plumbing, tests, iOS simulator build |
 | Android build environment | Complete | Google-signed arm64 Android Studio/SDK installed; debug APK built on 2026-08-25 |
-| Phase 6 protocol implementation | In progress | Pure-Dart contracts plus Flutter scan/connect/service adapter complete; physical iPhone service validation and command fixtures gated |
+| Phase 6 protocol implementation | Complete for the verified owned firmware | Physical capture, deterministic decoders, bounded sync, persistence, resync/idempotency, and returning-user discovery passed |
+| Product preview 1.1 | Complete locally | Today / Trends / You, transparent domains, Journal, export/delete, quiet stale refresh, responsive/golden/native Appium QA |
 
 ## Verification strategy
 
@@ -37,7 +39,8 @@ on 2026-08-24.
 
 ## Current gate
 
-Phase 5 is complete. Phase 6 has a verified fail-closed protocol foundation and
-platform BLE adapter. Physical service validation requires Developer Mode on the
-connected iPhone; command enablement additionally requires consented physical
-COLMI R12 fixtures. Do not add database/scoring/health behavior yet.
+Build 5 is locally green and installed on the owned iPhone. Its final
+foreground/R12 smoke pass awaits an unlocked device. Keep Recovery and any other
+composite score unavailable until independent validation clears the scientific
+gate. Health-platform bridges, background execution, and application-level
+encryption remain separate future decisions.

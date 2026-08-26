@@ -1,20 +1,23 @@
 # LibreRing V1
 
-Status: **`IMPLEMENTATION` — Phase 6 local sync built; physical acceptance pending**
+Status: **`IMPLEMENTATION` — local-sync product preview 1.1.0 (5)**
 
 Visual direction: **approved for V1 on 2026-08-24**  
 Scoring model: **approved for V1 on 2026-08-24**
 
 LibreRing V1 has an approved and separately committed product-design and
-scientific-model foundation for the COLMI R12. The first production Flutter
-vertical slice implements the twelve priority screens, deterministic demo mode,
-local privacy/journal state, and English/pt-PT locale plumbing.
+scientific-model foundation for the COLMI R12. The production Flutter app now
+implements the approved Today / Trends / You shell, deterministic demo mode,
+local privacy and Journal state, transparent domain details, portable export,
+and English/pt-PT locale plumbing.
 
 Phase 6 now adds a bounded platform BLE adapter, production pairing, decoded
 read-only history sync for the physically verified R12 firmware, and a
 versioned duplicate-safe local repository. It stores no raw packets or BLE
 identifier. Unknown firmware, live measurement, scoring, and unrelated settings
 remain fail-closed; necessary time synchronisation is the only setting write.
+Stale history refreshes quietly in place when Today opens or the app resumes;
+manual refresh remains available without repeating first-run pairing.
 
 ## Run the mobile foundation
 
@@ -62,6 +65,7 @@ See:
 - [Model evaluation](docs/science/model-evaluation.md)
 - [Progress and limitations](docs/PROGRESS.md)
 - [Production architecture](docs/architecture/system-overview.md)
+- [Autonomous mobile UI QA](docs/testing/autonomous-ui-qa.md)
 
 ## Reproduce the scoring research
 
@@ -85,10 +89,13 @@ APPROVE DESIGN AND SCORING V1
 ```
 
 Future design or scoring changes require an explicit versioned revision and must
-not silently alter the frozen V1 implementation contract. Health bridges,
-export and scoring execution remain later-phase work.
+not silently alter the frozen V1 implementation contract. Health bridges and
+validated scoring execution remain later-phase work. Portable local JSON/CSV
+export is implemented; it is not a cloud backup.
 
 The Phase 6 protocol foundation is present under `packages/ring_ble` and
 `packages/ring_colmi_qring`; the mobile app links the audited BLE adapter and
 local repository. The owned-device read-only capture cleared the exact-firmware
-command gate. A final physical sync/relaunch/resync acceptance run remains.
+command gate. Physical sync/relaunch/resync and duplicate safety passed on the
+owned ring. Build 5 is installed on the owned iPhone; its final unlocked-device
+foreground/R12 smoke pass remains.
