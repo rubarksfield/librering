@@ -12,6 +12,7 @@ import 'src/screens.dart';
 class LibreRingApp extends StatelessWidget {
   const LibreRingApp({
     this.demoMode = false,
+    this.captureMode = false,
     this.initialLocation = '/welcome',
     this.locale,
     this.pairingClient,
@@ -19,6 +20,7 @@ class LibreRingApp extends StatelessWidget {
   });
 
   final bool demoMode;
+  final bool captureMode;
   final String initialLocation;
   final Locale? locale;
   final RingPairingClient? pairingClient;
@@ -28,6 +30,7 @@ class LibreRingApp extends StatelessWidget {
     return ProviderScope(
       overrides: [
         isDemoModeProvider.overrideWithValue(demoMode),
+        isProtocolCaptureModeProvider.overrideWithValue(captureMode),
         if (demoMode)
           dailySnapshotProvider.overrideWithValue(demoDailySnapshot),
         if (pairingClient != null)

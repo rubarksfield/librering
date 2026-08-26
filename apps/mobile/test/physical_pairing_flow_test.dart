@@ -5,7 +5,7 @@ import 'package:librering_mobile/src/ble/r12_pairing_client.dart';
 import 'package:ring_core/ring_core.dart';
 
 void main() {
-  testWidgets('production pairing verifies services without a command write', (
+  testWidgets('production pairing runs the one-button approved suite', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(390, 844);
@@ -15,7 +15,11 @@ void main() {
     final client = _FakePairingClient();
 
     await tester.pumpWidget(
-      LibreRingApp(initialLocation: '/pairing/scan', pairingClient: client),
+      LibreRingApp(
+        initialLocation: '/pairing/scan',
+        captureMode: true,
+        pairingClient: client,
+      ),
     );
     await tester.pumpAndSettle();
 
@@ -38,6 +42,17 @@ void main() {
       find.text('Command and history services confirmed · No commands sent'),
       findsOneWidget,
     );
+
+    await tester.ensureVisible(find.byKey(const Key('capture-approved-suite')));
+    final captureButton = find.descendant(
+      of: find.byKey(const Key('capture-approved-suite')),
+      matching: find.byType(FilledButton),
+    );
+    tester.widget<FilledButton>(captureButton).onPressed!();
+    await tester.pumpAndSettle();
+    expect(client.approvedSuiteCount, 1);
+    expect(find.text('Battery 73% · Firmware R12-1.2.3'), findsOneWidget);
+    expect(find.textContaining('2 of 2 sections'), findsOneWidget);
   });
 
   testWidgets('multiple exact R12 results require an explicit choice', (
@@ -100,6 +115,9 @@ class _FakePairingClient implements RingPairingClient {
 
   final List<RingPairingCandidate> candidates;
   int connectCount = 0;
+  int captureCount = 0;
+  int timeSyncCount = 0;
+  int approvedSuiteCount = 0;
 
   @override
   Stream<RingPairingCandidate> scan({required Duration timeout}) =>
@@ -116,6 +134,35 @@ class _FakePairingClient implements RingPairingClient {
         },
       ),
       supportsBigData: true,
+    );
+  }
+
+  @override
+  Future<RingMetadata> captureMetadata() async {
+    captureCount += 1;
+    return const RingMetadata(
+      batteryLevel: 73,
+      charging: false,
+      firmwareVersion: 'R12-1.2.3',
+    );
+  }
+
+  @override
+  Future<RingTimeSyncResult> captureTimeSync() async {
+    timeSyncCount += 1;
+    return RingTimeSyncResult(
+      requestedLocalTime: DateTime(2026, 8, 26, 16, 15),
+    );
+  }
+
+  @override
+  Future<RingApprovedSuiteResult> captureApprovedSuite() async {
+    approvedSuiteCount += 1;
+    return const RingApprovedSuiteResult(
+      statuses: <String, String>{'metadata': 'complete', 'history': 'noData'},
+      batteryLevel: 73,
+      charging: false,
+      firmwareVersion: 'R12-1.2.3',
     );
   }
 

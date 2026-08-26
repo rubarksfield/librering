@@ -18,6 +18,8 @@ abstract interface class ReactiveBleClient {
     QualifiedCharacteristic characteristic,
   );
 
+  Future<List<int>> readCharacteristic(QualifiedCharacteristic characteristic);
+
   Future<void> writeCharacteristicWithResponse(
     QualifiedCharacteristic characteristic, {
     required List<int> value,
@@ -32,11 +34,13 @@ abstract interface class ReactiveBleClient {
 class ReactiveBleDiscoveredCharacteristic {
   const ReactiveBleDiscoveredCharacteristic({
     required this.uuid,
+    this.canRead = false,
     required this.canWrite,
     required this.canNotify,
   });
 
   final String uuid;
+  final bool canRead;
   final bool canWrite;
   final bool canNotify;
 }
@@ -81,6 +85,7 @@ class FlutterReactiveBleClient implements ReactiveBleClient {
                 .map(
                   (characteristic) => ReactiveBleDiscoveredCharacteristic(
                     uuid: characteristic.id.toString(),
+                    canRead: characteristic.isReadable,
                     canWrite:
                         characteristic.isWritableWithResponse ||
                         characteristic.isWritableWithoutResponse,
@@ -99,6 +104,11 @@ class FlutterReactiveBleClient implements ReactiveBleClient {
   Stream<List<int>> subscribeToCharacteristic(
     QualifiedCharacteristic characteristic,
   ) => _ble.subscribeToCharacteristic(characteristic);
+
+  @override
+  Future<List<int>> readCharacteristic(
+    QualifiedCharacteristic characteristic,
+  ) => _ble.readCharacteristic(characteristic);
 
   @override
   Future<void> writeCharacteristicWithResponse(
@@ -223,6 +233,7 @@ class FlutterReactiveBleTransport implements RingBleTransport {
             characteristics: service.characteristics.map(
               (characteristic) => BleCharacteristic(
                 uuid: characteristic.uuid,
+                canRead: characteristic.canRead,
                 canWrite: characteristic.canWrite,
                 canNotify: characteristic.canNotify,
               ),
@@ -241,6 +252,12 @@ class FlutterReactiveBleTransport implements RingBleTransport {
       _qualified(serviceUuid, characteristicUuid),
     );
   }
+
+  @override
+  Future<List<int>> read({
+    required String serviceUuid,
+    required String characteristicUuid,
+  }) => _client.readCharacteristic(_qualified(serviceUuid, characteristicUuid));
 
   @override
   Future<void> write({

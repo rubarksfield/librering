@@ -5,11 +5,13 @@ enum BleConnectionState { disconnected, connecting, connected, disconnecting }
 class BleCharacteristic {
   const BleCharacteristic({
     required this.uuid,
+    this.canRead = false,
     this.canWrite = false,
     this.canNotify = false,
   });
 
   final String uuid;
+  final bool canRead;
   final bool canWrite;
   final bool canNotify;
 }
@@ -42,6 +44,11 @@ abstract interface class RingBleTransport {
   Future<List<BleService>> discoverServices();
 
   Stream<List<int>> subscribe({
+    required String serviceUuid,
+    required String characteristicUuid,
+  });
+
+  Future<List<int>> read({
     required String serviceUuid,
     required String characteristicUuid,
   });

@@ -110,6 +110,7 @@ class _FakeReactiveBleClient implements ReactiveBleClient {
   List<ReactiveBleDiscoveredService> services =
       <ReactiveBleDiscoveredService>[];
   final List<List<int>> writes = <List<int>>[];
+  List<int> readValue = const <int>[];
 
   @override
   Stream<DiscoveredDevice> scanForDevices({required List<Uuid> withServices}) =>
@@ -130,6 +131,11 @@ class _FakeReactiveBleClient implements ReactiveBleClient {
   Stream<List<int>> subscribeToCharacteristic(
     QualifiedCharacteristic characteristic,
   ) => notificationController.stream;
+
+  @override
+  Future<List<int>> readCharacteristic(
+    QualifiedCharacteristic characteristic,
+  ) async => List<int>.of(readValue);
 
   @override
   Future<void> writeCharacteristicWithResponse(

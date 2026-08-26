@@ -1,12 +1,15 @@
 # COLMI R12 protocol evidence
 
-Status: research evidence only; no physical R12 was available. Reviewed 2026-08-23.
+Status: read-only transport and history structure verified on an owned R12 running
+`RT11CR_1.00.09_260424`; physiological accuracy remains unvalidated. Reviewed
+2026-08-26.
 
 ## Confidence vocabulary
 
 - **Confirmed for model identity:** an R12-specific source names the behaviour.
 - **Corroborated family behaviour:** two or more Yawell-family implementations agree.
-- **Unverified on owned hardware:** no recorded R12/firmware exchange exists here.
+- **Physically verified:** a consented exchange from the owned R12 and named
+  firmware passed framing, checksum/CRC, and bounded-parser checks.
 - **Semantic unknown:** bytes parse consistently but their physiological meaning
   or unit has no reference-standard validation.
 
@@ -30,11 +33,11 @@ uses a second service and variable-length packets. The common identifiers are:
 
 | Role | UUID / evidence | State |
 | --- | --- | --- |
-| Command service | `6E40FFF0-B5A3-F393-E0A9-E50E24DCCA9E` | Family-corroborated; R12 physical test pending |
-| Write characteristic | `6E400002-B5A3-F393-E0A9-E50E24DCCA9E` | Family-corroborated |
-| Notify characteristic | `6E400003-B5A3-F393-E0A9-E50E24DCCA9E` | Family-corroborated |
-| Big-data service | `DE5BF728-D711-4E47-AF26-65E3012A5DC7` | Multiple implementations; R12 test pending |
-| Big-data notify/write | service-suffixed `...729` / `...72A` | Multiple implementations; test pending |
+| Command service | `6E40FFF0-B5A3-F393-E0A9-E50E24DCCA9E` | Physically verified on named R12 firmware |
+| Write characteristic | `6E400002-B5A3-F393-E0A9-E50E24DCCA9E` | Physically verified |
+| Notify characteristic | `6E400003-B5A3-F393-E0A9-E50E24DCCA9E` | Physically verified |
+| Big-data service | `DE5BF728-D711-4E47-AF26-65E3012A5DC7` | Physically verified |
+| Big-data notify/write | service-suffixed `...729` / `...72A` | Physically verified |
 
 Do not fall back to the first writable or notifiable characteristic. Require the
 expected service set and a positive identity/capability probe; otherwise fail
@@ -44,22 +47,46 @@ closed with an unsupported-firmware message.
 
 The inspected implementations agree materially on battery (`0x03`), pulse
 history (`0x15`), auto-pulse configuration (`0x16`), activity/steps (`0x43`),
-live measurements (`0x69`/`0x6A`), and big data (`0xBC`). Sleep history is big
-data type `0x27`; SpO₂ history is type `0x2A`; the history stream called HRV is
-associated with `0x39`. Exact request payloads, ranges, sequencing, retry rules,
-and end sentinels must be captured per R12 firmware before production.
+live measurements (`0x69`/`0x6A`), stress history (`0x37`), the firmware stream
+called HRV (`0x39`), and big data (`0xBC`). Sleep history is big-data type
+`0x27`; SpO₂ history is type `0x2A`. The named R12 firmware answered every one
+of these bounded read-only requests. Time synchronisation was the only setting
+write. No reset, goal, schedule, display, find-device, power, or other setting
+write was issued.
+
+## Owned-device capture result
+
+The single approved suite captured eight requested activity days, eight pulse
+days, seven stress days, seven firmware-HRV days, all returned sleep and oxygen
+history, and both live channels. Every 16-byte history packet passed its family
+checksum. Both big-data envelopes matched their declared lengths and MODBUS
+CRC; the sleep payload contained four bounded day records and only the known
+stage codes, while oxygen contained three complete 49-byte day records.
+
+The live pulse and oxygen sessions returned 30 and 40 valid warm-up packets,
+respectively, with the expected reading type, zero device error, and no nonzero
+measurement. Their result is **no reading**, not timeout and not proof of a
+valid live physiological value. Six configuration reads completed; the display
+preference read timed out and remains unavailable on this firmware.
+
+The raw capture was local-only and was not added to the repository. The
+committed physical fixture contains structural counts and validation results
+only; identifiers, physiological values, and timestamps are omitted. Decoder
+tests use fully synthetic command and big-data packets.
 
 ## Semantic cautions
 
-- Pulse history: a BPM-like byte is plausible and cross-implementation stable,
-  but sample timestamps and missing sentinels still need device capture.
+- Pulse history: paging, sampling interval, date echo, and zero/`0xFF` missing
+  values are now structurally verified. BPM accuracy is not.
 - “HRV”: a half-hour byte is labelled milliseconds by implementations without
   R–R intervals, calculation method, signal-quality field, or ECG reference.
   Treat as opaque firmware index; do not score or export as RMSSD/SDNN.
-- Sleep: session start/end and firmware stage-duration pairs exist. They are not
-  EEG and their wake/light/deep/REM semantics and accuracy are unvalidated.
-- SpO₂: min/max hourly firmware summaries appear in big data. Do not present as
-  medical oximetry or use in a recovery score without validation.
+- Sleep: session start/end and firmware stage-duration pairs are structurally
+  verified. They are not EEG and their wake/light/deep/REM accuracy is
+  unvalidated.
+- SpO₂: hourly min/max firmware summaries are structurally verified in big data.
+  Do not present them as medical oximetry or use them in a recovery score
+  without validation.
 - Stress: a 1–99 firmware value appears at half-hour intervals. It is an opaque
   vendor index, not emotional state or clinical stress.
 - Temperature: current R12 coordinator does not support it. R09 temperature
@@ -69,13 +96,14 @@ and end sentinels must be captured per R12 firmware before production.
 - Swimming: 1ATM is not evidence of swimming-session detection, underwater BLE,
   stroke count, lap count, or heart-rate accuracy. Use manual/imported logging.
 
-## Required physical acceptance capture
+## Remaining acceptance work
 
-Record ring hardware/size, advertised name, firmware, phone/OS, service list,
-MTU, timezone, packet hex, checksum, retries, missing-data response, and expected
-observable for: first pair, battery, clock set, seven days of steps, pulse
-history, live pulse/SpO₂, full/partial/no-wear sleep, duplicate sync, timezone
-change, firmware change, app contention, low battery, and factory reset.
+The read-only protocol gate is complete for the captured firmware. Production
+acceptance still needs duplicate-sync/idempotency, timezone and daylight-saving
+changes, app contention, low-battery behavior, and a future-firmware regression
+device. No factory reset is required for the read-only gate. Physiological
+validation requires external reference devices or studies and cannot be inferred
+from packet correctness.
 
 ## Sources
 

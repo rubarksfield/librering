@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:ring_colmi_qring/ring_colmi_qring.dart';
@@ -30,6 +31,31 @@ void main() {
     },
   );
 
+  test('owned-R12 battery fixture validates and decodes', () {
+    final fixture = jsonDecode(
+      File(
+        'test/fixtures/battery-command-03-physical-capture-rt11cr-1.00.09.json',
+      ).readAsStringSync(),
+    ) as Map<String, Object?>;
+    final command = fixture['command']! as Map<String, Object?>;
+    List<int> decodeHex(String value) => <int>[
+      for (var index = 0; index < value.length; index += 2)
+        int.parse(value.substring(index, index + 2), radix: 16),
+    ];
+
+    expect(
+      decodeHex(command['requestHex']! as String),
+      createBatteryRequest().bytes,
+    );
+    final reading = parseBatteryResponse(
+      decodeHex(command['responseHex']! as String),
+    );
+    expect(reading.level, 36);
+    expect(reading.charging, isFalse);
+    expect(fixture['deviceAlias'], 'owned-r12-1');
+    expect(jsonEncode(fixture), isNot(contains('00008130')));
+  });
+
   test('bad length and checksum fail closed', () {
     expect(
       () => ColmiCommandPacket.parse(<int>[1, 2]),
@@ -39,6 +65,22 @@ void main() {
     expect(
       () => ColmiCommandPacket.parse(corrupt),
       throwsA(isA<ColmiPacketFormatException>()),
+    );
+  });
+
+  test('valid live warm-up packets are a no-reading result, not a timeout', () {
+    final packets = List<ColmiCommandPacket>.generate(
+      3,
+      (_) => ColmiCommandPacket.create(colmiLiveStartCommandId, const <int>[
+        colmiLiveHeartRateKind,
+        0,
+        0,
+      ]),
+    );
+
+    expect(
+      classifyLiveReadingPackets(packets, kind: colmiLiveHeartRateKind),
+      'noReading',
     );
   });
 

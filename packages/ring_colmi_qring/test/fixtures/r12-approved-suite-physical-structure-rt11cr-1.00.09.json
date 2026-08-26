@@ -1,0 +1,86 @@
+{
+  "schema": 1,
+  "captureType": "r12-approved-suite-physical-structure",
+  "deviceAlias": "owned-r12-1",
+  "model": "COLMI R12",
+  "firmwareVersion": "RT11CR_1.00.09_260424",
+  "deviceIdentifiers": "redacted",
+  "sourcePolicy": "local-only-owned-device-capture",
+  "rawPhysiologicalValues": "omitted",
+  "rawTimestamps": "omitted",
+  "configuration": {
+    "status": "partial",
+    "completeReads": 6,
+    "displayPreference": "timeout"
+  },
+  "activityHistory": {
+    "status": "complete",
+    "daysRequested": 8,
+    "packetCount": 63,
+    "checksumPass": true,
+    "observedSubtypes": [38, 240, 255]
+  },
+  "heartRateHistory": {
+    "status": "complete",
+    "daysRequested": 8,
+    "packetCount": 146,
+    "nonzeroSampleCount": 79,
+    "checksumPass": true,
+    "observedSubtypeRange": [0, 23],
+    "observedNoDataSubtype": 255
+  },
+  "stressVendorIndexHistory": {
+    "status": "complete",
+    "daysRequested": 7,
+    "packetCount": 31,
+    "nonzeroSampleCount": 146,
+    "checksumPass": true,
+    "observedSubtypeRange": [0, 4],
+    "observedNoDataSubtype": 255
+  },
+  "firmwareHrvVendorIndexHistory": {
+    "status": "complete",
+    "daysRequested": 7,
+    "packetCount": 27,
+    "nonzeroSampleCount": 75,
+    "checksumPass": true,
+    "observedSubtypeRange": [0, 4],
+    "observedNoDataSubtype": 255
+  },
+  "sleepHistory": {
+    "status": "complete",
+    "chunkCount": 2,
+    "declaredPayloadBytes": 179,
+    "actualPayloadBytes": 179,
+    "dayRecordCount": 4,
+    "crc16ModbusPass": true,
+    "knownStageCodesOnly": true,
+    "trailingBytes": 0
+  },
+  "oxygenHistory": {
+    "status": "complete",
+    "chunkCount": 1,
+    "declaredPayloadBytes": 147,
+    "actualPayloadBytes": 147,
+    "dayRecordCount": 3,
+    "nonzeroHourlyPairCount": 30,
+    "rangePass": true,
+    "crc16ModbusPass": true
+  },
+  "liveHeartRate": {
+    "status": "noReading",
+    "packetCount": 30,
+    "checksumPass": true,
+    "matchingKind": true,
+    "deviceErrorCode": 0,
+    "nonzeroReadingCount": 0
+  },
+  "liveOxygen": {
+    "status": "noReading",
+    "packetCount": 40,
+    "checksumPass": true,
+    "matchingKind": true,
+    "deviceErrorCode": 0,
+    "nonzeroReadingCount": 0
+  }
+}

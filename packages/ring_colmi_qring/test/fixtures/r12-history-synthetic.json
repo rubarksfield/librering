@@ -1,0 +1,33 @@
+{
+  "schema": 1,
+  "fixtureType": "fully-synthetic-r12-history",
+  "deviceIdentifiers": "not-included",
+  "referenceLocalToday": "2026-08-22",
+  "activity": {
+    "packetsHex": [
+      "43f00001000000000000000000000034",
+      "432608202800010a00f401900100004a"
+    ]
+  },
+  "heartRate": {
+    "requestedLocalDay": "2026-08-20",
+    "packetsHex": [
+      "1500020500000000000000000000001c",
+      "15018043866a3c003dff3e00003f40fe"
+    ]
+  },
+  "stressVendorIndex": {
+    "requestedLocalDay": "2026-08-20",
+    "packetsHex": [
+      "3700021e000000000000000000000057",
+      "3701021400151600171800191a1b1c12"
+    ]
+  },
+  "firmwareHrvVendorIndex": {
+    "requestedLocalDay": "2026-08-20",
+    "packetsHex": [
+      "3900021e000000000000000000000059",
+      "3901022800292a002b2c002d2e2f30c8"
+    ]
+  }
+}

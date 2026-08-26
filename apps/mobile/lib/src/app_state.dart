@@ -1,11 +1,13 @@
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 import 'package:ring_core/ring_core.dart';
 
 import 'ble/r12_pairing_client.dart';
 
 final isDemoModeProvider = Provider<bool>((Ref ref) => false);
+final isProtocolCaptureModeProvider = Provider<bool>((Ref ref) => false);
 final dailySnapshotProvider = Provider<DailySnapshot?>((Ref ref) => null);
 final ringPairingClientProvider = Provider<RingPairingClient?>(
   (Ref ref) => null,
@@ -28,6 +30,15 @@ class RingPairingState {
     this.selected,
     this.evidence,
     this.message,
+    this.metadata,
+    this.metadataCaptureInProgress = false,
+    this.metadataCaptureError,
+    this.timeSync,
+    this.timeSyncInProgress = false,
+    this.timeSyncError,
+    this.approvedSuite,
+    this.approvedSuiteInProgress = false,
+    this.approvedSuiteError,
   });
 
   final RingPairingPhase phase;
@@ -35,9 +46,19 @@ class RingPairingState {
   final RingPairingCandidate? selected;
   final RingPairingEvidence? evidence;
   final String? message;
+  final RingMetadata? metadata;
+  final bool metadataCaptureInProgress;
+  final String? metadataCaptureError;
+  final RingTimeSyncResult? timeSync;
+  final bool timeSyncInProgress;
+  final String? timeSyncError;
+  final RingApprovedSuiteResult? approvedSuite;
+  final bool approvedSuiteInProgress;
+  final String? approvedSuiteError;
 }
 
 class RingPairingController extends Notifier<RingPairingState> {
+  static const _captureControl = MethodChannel('org.librering/capture-control');
   StreamSubscription<RingPairingCandidate>? _scanSubscription;
   final Map<String, RingPairingCandidate> _candidates =
       <String, RingPairingCandidate>{};
@@ -188,6 +209,157 @@ class RingPairingController extends Notifier<RingPairingState> {
             ? 'The ring did not connect in time. Close QRing and try again.'
             : 'The ring connection could not be verified. Close QRing and try again.',
       );
+    }
+  }
+
+  Future<void> captureMetadata() async {
+    if (!ref.read(isProtocolCaptureModeProvider)) return;
+    final client = ref.read(ringPairingClientProvider);
+    if (client == null || state.phase != RingPairingPhase.connected) return;
+    final current = state;
+    state = RingPairingState(
+      phase: current.phase,
+      candidates: current.candidates,
+      selected: current.selected,
+      evidence: current.evidence,
+      message: current.message,
+      metadata: current.metadata,
+      metadataCaptureInProgress: true,
+    );
+    try {
+      final metadata = await client.captureMetadata();
+      state = RingPairingState(
+        phase: current.phase,
+        candidates: current.candidates,
+        selected: current.selected,
+        evidence: current.evidence,
+        message: current.message,
+        metadata: metadata,
+      );
+    } catch (_) {
+      state = RingPairingState(
+        phase: current.phase,
+        candidates: current.candidates,
+        selected: current.selected,
+        evidence: current.evidence,
+        message: current.message,
+        metadata: current.metadata,
+        metadataCaptureError:
+            'Metadata capture failed safely. No further command was sent.',
+      );
+    }
+  }
+
+  Future<void> captureTimeSync() async {
+    if (!ref.read(isProtocolCaptureModeProvider)) return;
+    final client = ref.read(ringPairingClientProvider);
+    if (client == null || state.phase != RingPairingPhase.connected) return;
+    final current = state;
+    state = RingPairingState(
+      phase: current.phase,
+      candidates: current.candidates,
+      selected: current.selected,
+      evidence: current.evidence,
+      message: current.message,
+      metadata: current.metadata,
+      metadataCaptureError: current.metadataCaptureError,
+      timeSync: current.timeSync,
+      timeSyncInProgress: true,
+    );
+    try {
+      final result = await client.captureTimeSync();
+      state = RingPairingState(
+        phase: current.phase,
+        candidates: current.candidates,
+        selected: current.selected,
+        evidence: current.evidence,
+        message: current.message,
+        metadata: current.metadata,
+        metadataCaptureError: current.metadataCaptureError,
+        timeSync: result,
+      );
+    } catch (_) {
+      state = RingPairingState(
+        phase: current.phase,
+        candidates: current.candidates,
+        selected: current.selected,
+        evidence: current.evidence,
+        message: current.message,
+        metadata: current.metadata,
+        metadataCaptureError: current.metadataCaptureError,
+        timeSync: current.timeSync,
+        timeSyncError: 'Clock sync failed safely. No retry was attempted.',
+      );
+    }
+  }
+
+  Future<void> captureApprovedSuite() async {
+    if (!ref.read(isProtocolCaptureModeProvider)) return;
+    final client = ref.read(ringPairingClientProvider);
+    if (client == null || state.phase != RingPairingPhase.connected) return;
+    final current = state;
+    state = RingPairingState(
+      phase: current.phase,
+      candidates: current.candidates,
+      selected: current.selected,
+      evidence: current.evidence,
+      message: current.message,
+      metadata: current.metadata,
+      metadataCaptureError: current.metadataCaptureError,
+      timeSync: current.timeSync,
+      timeSyncError: current.timeSyncError,
+      approvedSuite: current.approvedSuite,
+      approvedSuiteInProgress: true,
+    );
+    try {
+      unawaited(_setCaptureIdleTimer(disabled: true));
+      final result = await client.captureApprovedSuite();
+      final metadata = result.batteryLevel == null
+          ? current.metadata
+          : RingMetadata(
+              batteryLevel: result.batteryLevel!,
+              charging: result.charging ?? false,
+              firmwareVersion: result.firmwareVersion,
+            );
+      state = RingPairingState(
+        phase: current.phase,
+        candidates: current.candidates,
+        selected: current.selected,
+        evidence: current.evidence,
+        message: current.message,
+        metadata: metadata,
+        metadataCaptureError: current.metadataCaptureError,
+        timeSync: current.timeSync,
+        timeSyncError: current.timeSyncError,
+        approvedSuite: result,
+      );
+    } catch (_) {
+      state = RingPairingState(
+        phase: current.phase,
+        candidates: current.candidates,
+        selected: current.selected,
+        evidence: current.evidence,
+        message: current.message,
+        metadata: current.metadata,
+        metadataCaptureError: current.metadataCaptureError,
+        timeSync: current.timeSync,
+        timeSyncError: current.timeSyncError,
+        approvedSuite: current.approvedSuite,
+        approvedSuiteError: 'The full capture stopped safely. No new raw capture file was written.',
+      );
+    } finally {
+      unawaited(_setCaptureIdleTimer(disabled: false));
+    }
+  }
+
+  Future<void> _setCaptureIdleTimer({required bool disabled}) async {
+    try {
+      await _captureControl.invokeMethod<void>(
+        'setIdleTimerDisabled',
+        disabled,
+      );
+    } catch (_) {
+      // Screen-awake control is best-effort and must never block BLE capture.
     }
   }
 }

@@ -1,0 +1,30 @@
+{
+  "fixtureType": "physical-capture",
+  "captureDate": "2026-08-26",
+  "deviceAlias": "owned-r12-1",
+  "deviceModel": "COLMI R12",
+  "advertisedName": "COLMI R12_<redacted>",
+  "hardwareSize": "not-recorded",
+  "firmware": "RT11CR_1.00.09_260424",
+  "phone": "iPhone 15 Pro Max",
+  "phoneOs": "iOS 26.5.2",
+  "timeZone": "Europe/Lisbon",
+  "utcOffsetMinutes": 60,
+  "command": {
+    "id": "0x03",
+    "purpose": "read battery and charging state",
+    "requestHex": "03000000000000000000000000000003",
+    "responseHex": "03240000000000000000000000000027",
+    "checksum": "sum(bytes 0-14) & 0xff",
+    "checksumValid": true
+  },
+  "expectedObservable": {
+    "batteryPercent": 36,
+    "charging": false,
+    "firmwareGattReadHex": "5254313143525f312e30302e30395f323630343234"
+  },
+  "missingDataBehavior": "not-observed",
+  "consentScope": "Local-only raw BLE capture for battery, firmware, time, steps, heart-rate, SpO2, and sleep/history development; device identifiers redacted; only anonymised fixtures committed; no settings change except necessary time synchronisation.",
+  "retention": "This anonymised fixture may be committed. The source app-container temporary file is removed when a non-capture build next launches.",
+  "provenance": "ring-origin physical response from the user's owned R12"
+}

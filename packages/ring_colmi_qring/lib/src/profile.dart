@@ -8,6 +8,12 @@ abstract final class ColmiQringProfile {
   static const bigDataService = 'de5bf728-d711-4e47-af26-65e3012a5dc7';
   static const bigDataNotify = 'de5bf729-d711-4e47-af26-65e3012a5dc7';
   static const bigDataWrite = 'de5bf72a-d711-4e47-af26-65e3012a5dc7';
+  static const deviceInformationService =
+      '0000180a-0000-1000-8000-00805f9b34fb';
+  static const firmwareRevision = '00002a26-0000-1000-8000-00805f9b34fb';
+  static const hardwareRevision = '00002a27-0000-1000-8000-00805f9b34fb';
+  static const modelNumber = '00002a24-0000-1000-8000-00805f9b34fb';
+  static const manufacturerName = '00002a29-0000-1000-8000-00805f9b34fb';
 
   static final _r12Name = RegExp(r'^COLMI R12_.*$', caseSensitive: false);
 
@@ -49,6 +55,23 @@ abstract final class ColmiQringProfile {
         bigWrite?.canWrite == true &&
         bigNotify?.canNotify == true;
     return ServiceValidation.supported(supportsBigData: supportsBigData);
+  }
+
+  static bool uuidMatches(String actual, String expected) {
+    final left = _expandBluetoothUuid(actual);
+    final right = _expandBluetoothUuid(expected);
+    return left == right;
+  }
+
+  static String _expandBluetoothUuid(String value) {
+    final normalised = value.trim().toLowerCase();
+    if (normalised.length == 4) {
+      return '0000$normalised-0000-1000-8000-00805f9b34fb';
+    }
+    if (normalised.length == 8) {
+      return '$normalised-0000-1000-8000-00805f9b34fb';
+    }
+    return normalised;
   }
 }
 

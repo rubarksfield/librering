@@ -229,8 +229,33 @@ class RingFoundScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final demo = ref.watch(isDemoModeProvider);
+    final captureMode = ref.watch(isProtocolCaptureModeProvider);
     final pairing = ref.watch(ringPairingProvider);
     final evidence = pairing.evidence;
+    final metadata = pairing.metadata;
+    final suite = pairing.approvedSuite;
+    final serviceStatus = evidence == null
+        ? copyFor(
+            context,
+            'Return to pairing to verify an exact R12 service profile.',
+            'Volte ao emparelhamento para verificar um perfil de serviços R12 exato.',
+          )
+        : copyFor(
+            context,
+            evidence.supportsBigData
+                ? 'Command and history services confirmed · No commands sent'
+                : 'Command service confirmed · History service unavailable · No commands sent',
+            evidence.supportsBigData
+                ? 'Serviços de comandos e histórico confirmados · Nenhum comando enviado'
+                : 'Serviço de comandos confirmado · Serviço de histórico indisponível · Nenhum comando enviado',
+          );
+    final metadataStatus = metadata == null
+        ? serviceStatus
+        : copyFor(
+            context,
+            'Battery ${metadata.batteryLevel}%${metadata.charging ? ' · Charging' : ''} · Firmware ${metadata.firmwareVersion ?? 'not exposed'}',
+            'Bateria ${metadata.batteryLevel}%${metadata.charging ? ' · A carregar' : ''} · Firmware ${metadata.firmwareVersion ?? 'não exposto'}',
+          );
     return _OnboardingScreen(
       key: const Key('screen-ring-found'),
       top: Row(
@@ -261,27 +286,72 @@ class RingFoundScreen extends ConsumerWidget {
               'Simulated signal strong · Demo battery 78%',
               'Sinal simulado forte · Bateria de demonstração 78%',
             )
-          : evidence == null
-          ? copyFor(
-              context,
-              'Return to pairing to verify an exact R12 service profile.',
-              'Volte ao emparelhamento para verificar um perfil de serviços R12 exato.',
+          : metadataStatus,
+      detail: captureMode && !demo
+          ? Text(
+              pairing.approvedSuiteInProgress
+                  ? copyFor(
+                      context,
+                      'Capturing every supported read-only R12 channel and retained history. Keep the ring on and stay still; this can take up to five minutes.',
+                      'A capturar todos os canais R12 só de leitura suportados e todo o histórico retido. Mantenha o anel colocado e fique imóvel; pode demorar até cinco minutos.',
+                    )
+                  : pairing.approvedSuiteError ??
+                        (suite == null
+                            ? copyFor(
+                                context,
+                                'One tap captures device details, read-only configuration, 7–8 days of activity, pulse, stress and firmware “HRV”, all retained sleep and SpO₂, then live pulse and SpO₂. Identifiers are excluded.',
+                                'Um toque captura detalhes do dispositivo, configuração só de leitura, 7–8 dias de atividade, pulso, stress e “HRV” do firmware, todo o sono e SpO₂ retidos e, depois, pulso e SpO₂ em direto. Os identificadores são excluídos.',
+                              )
+                            : copyFor(
+                                context,
+                                'Full local capture saved. ${suite.statuses.values.where((status) => status == 'complete' || status == 'noData').length} of ${suite.statuses.length} sections completed or returned no data.',
+                                'Captura local completa guardada. ${suite.statuses.values.where((status) => status == 'complete' || status == 'noData').length} de ${suite.statuses.length} secções concluíram ou não tinham dados.',
+                              )),
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodySmall,
             )
-          : copyFor(
-              context,
-              evidence.supportsBigData
-                  ? 'Command and history services confirmed · No commands sent'
-                  : 'Command service confirmed · History service unavailable · No commands sent',
-              evidence.supportsBigData
-                  ? 'Serviços de comandos e histórico confirmados · Nenhum comando enviado'
-                  : 'Serviço de comandos confirmado · Serviço de histórico indisponível · Nenhum comando enviado',
-            ),
+          : null,
       centered: true,
-      action: LibreRingPrimaryButton(
-        key: const Key('found-view-today'),
-        label: copyFor(context, 'View today', 'Ver o dia de hoje'),
-        onPressed: () => context.go('/today'),
-      ),
+      action: captureMode && !demo
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                LibreRingPrimaryButton(
+                  key: const Key('capture-approved-suite'),
+                  label: pairing.approvedSuiteInProgress
+                      ? copyFor(
+                          context,
+                          'Capturing everything…',
+                          'A capturar tudo…',
+                        )
+                      : suite == null
+                      ? copyFor(context, 'Capture everything', 'Capturar tudo')
+                      : copyFor(
+                          context,
+                          'Capture everything again',
+                          'Capturar tudo novamente',
+                        ),
+                  onPressed: pairing.approvedSuiteInProgress
+                      ? null
+                      : ref
+                            .read(ringPairingProvider.notifier)
+                            .captureApprovedSuite,
+                ),
+                const SizedBox(height: 8),
+                TextButton(
+                  key: const Key('found-view-today'),
+                  onPressed: () => context.go('/today'),
+                  child: Text(
+                    copyFor(context, 'View today', 'Ver o dia de hoje'),
+                  ),
+                ),
+              ],
+            )
+          : LibreRingPrimaryButton(
+              key: const Key('found-view-today'),
+              label: copyFor(context, 'View today', 'Ver o dia de hoje'),
+              onPressed: () => context.go('/today'),
+            ),
     );
   }
 }

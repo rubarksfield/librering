@@ -15,12 +15,14 @@ class ScriptedBleTransport implements RingBleTransport {
     this.advertisements = const <RingAdvertisement>[],
     this.connectionDelay = Duration.zero,
     this.connectionFailure,
+    this.readValues = const <String, List<int>>{},
   });
 
   final List<BleService> services;
   final List<RingAdvertisement> advertisements;
   final Duration connectionDelay;
   final Object? connectionFailure;
+  final Map<String, List<int>> readValues;
 
   final List<List<int>> writes = <List<int>>[];
   final StreamController<BleConnectionState> _connections =
@@ -72,6 +74,14 @@ class ScriptedBleTransport implements RingBleTransport {
         () => StreamController<List<int>>.broadcast(),
       )
       .stream;
+
+  @override
+  Future<List<int>> read({
+    required String serviceUuid,
+    required String characteristicUuid,
+  }) async => List<int>.of(
+    readValues[_key(serviceUuid, characteristicUuid)] ?? const <int>[],
+  );
 
   void emitNotification({
     required String serviceUuid,

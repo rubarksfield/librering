@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "fixtureType": "fully-synthetic-r12-big-data",
+  "deviceIdentifiers": "not-included",
+  "referenceLocalToday": "2026-08-22",
+  "sleepResponseHex": "bc270d0055b501020a64052c01037802b4043c",
+  "oxygenResponseHex": "bc2a3100c678015f6200000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+}

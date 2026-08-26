@@ -91,17 +91,28 @@ Last updated: 2026-08-26
   Android package failed against its own modern AndroidX dependency graph.
 - Confirmed the user's iPhone 15 Pro Max on iOS 26.5.2 is physically connected
   and visible to Flutter and Xcode.
+- Completed one consented, local-only owned-R12 capture covering firmware,
+  battery, time sync, GATT profile, six readable configuration families, eight
+  activity and pulse days, seven stress and firmware-HRV days, all returned
+  sleep and oxygen history, and both bounded live sessions.
+- Verified every command-history checksum and both big-data MODBUS CRCs; decoded
+  55 activity buckets, 79 pulse samples, 146 stress-index samples, 75 opaque
+  firmware-HRV samples, four sleep records, and 30 oxygen hourly ranges without
+  retaining physiological values in repository fixtures.
+- Added deterministic, fail-closed decoders backed by fully synthetic fixtures
+  and an anonymised physical-structure manifest. Live warm-up-only streams are
+  now classified as `noReading`, not timeout.
 
 ## In progress
 
-- Phase 6 physical R12 service validation and command-fixture acquisition.
+- Phase 6 production sync/storage/provenance integration for the physically
+  verified read-only decoder outputs.
 
 ## Blocked
 
-- The connected iPhone has Developer Mode disabled, so LibreRing cannot yet be
-  installed for the physical scan/service check.
-- Raw physical COLMI R12 command/response acquisition remains gated by explicit
-  packet-capture/retention consent. No such capture or command has occurred.
+- No active physical-capture blocker. Physiological accuracy and score validity
+  still require independent reference evidence; packet correctness cannot clear
+  those scientific gates.
 
 ## Decisions
 
@@ -164,12 +175,15 @@ Last updated: 2026-08-26
 | 2026-08-26 | Platform BLE adapter | static analysis passed; 13/13 mobile tests including bounded adapter mapping, explicit multi-ring selection and production no-command pairing flow passed |
 | 2026-08-26 | Production BLE builds | unsigned physical-iOS debug build passed; production-mode Android debug APK passed with API 28 minimum and SDK 37 compile target |
 | 2026-08-26 | Physical iPhone preflight | Flutter and Xcode detect iPhone 15 Pro Max, iOS 26.5.2; install stopped because Developer Mode is disabled |
+| 2026-08-26 | Owned-R12 read-only suite | firmware/battery/time/GATT/config plus full supported history families captured in one run; command checksums and big-data length/CRC passed; live HR/SpO₂ returned valid warm-up packets with no reading |
+| 2026-08-26 | R12 decoder verification | 25/25 package tests passed; deterministic synthetic history/big-data fixtures and anonymised physical structural evidence only |
 
 ## Known limitations
 
-- An owned physical COLMI R12 is now available, but no firmware capture, PSG,
-  ECG, oximetry, or outcome-labelled cohort has been collected. Hardware
-  compatibility, accuracy, and score validity remain unproven.
+- One owned physical COLMI R12 firmware is transport-compatible and its supported
+  read-only history structures are decoded. PSG, ECG/reference pulse, oximetry,
+  step-reference, and outcome-labelled validation have not been collected, so
+  accuracy and score validity remain unproven.
 - Flutter 3.47.1 still labels the Android licence status `unknown` because the
   new Android CLI deprecates `sdkmanager --licenses`; that command exits 0 and
   says the option is no longer needed. Gradle separately confirmed the Platform
@@ -178,15 +192,15 @@ Last updated: 2026-08-26
 - Competitor detail can change; sources are dated and should be refreshed for release.
 - Synthetic checks establish deterministic face/safety behaviour, not calibration,
   demographic fairness, medical validity, or user comprehension.
-- Phase 5 plus the Phase 6 scan/connect/service adapter are a production-code
-  foundation, not a complete device application. Verified R12 commands,
+- Phase 5 plus the Phase 6 scan/connect/capture/decoder work are a production-code
+  foundation, not a complete device application. Normal sync remains fail-closed;
   database, health bridges, scoring execution, export, and deletion are not
   implemented yet.
 - Android runtime pairing has not been device-tested; only its manifest,
   production compilation and APK output are verified.
-- Low-battery and partial-history transport fixtures are intentionally pending:
-  no proven R12 battery response or history end/partial sentinel is available,
-  so the test layer does not invent either packet shape.
+- Low-battery, duplicate-sync, timezone-change, and partial-history transport
+  cases remain pending. The current fixture establishes one ordinary battery
+  response and the observed complete/no-data history shapes only.
 - The prototype is interaction-complete but not a usability study with external
   participants or a screen-reader/device-lab certification.
 - Penpot remains a verified local auxiliary environment, not the first-gate visual
@@ -196,7 +210,7 @@ Last updated: 2026-08-26
 
 ## Next concrete action
 
-Enable Developer Mode on the connected iPhone, install LibreRing, approve its
-Bluetooth prompt, and run the exact-name scan/service check. Obtain explicit
-capture/retention consent before collecting any command fixture or enabling any
-command payload.
+Map the physically verified decoder outputs into local storage with explicit
+ring provenance, idempotent resync, and unavailable-state handling; then expose
+those records through the approved UI without enabling scientifically gated
+scores.
