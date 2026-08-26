@@ -11,6 +11,9 @@ import 'storage/ring_data_repository.dart';
 
 final isDemoModeProvider = Provider<bool>((Ref ref) => false);
 final isProtocolCaptureModeProvider = Provider<bool>((Ref ref) => false);
+final currentLocalTimeProvider = Provider<DateTime>(
+  (Ref ref) => DateTime.now(),
+);
 final dailySnapshotProvider = Provider<DailySnapshot?>((Ref ref) => null);
 final ringPairingClientProvider = Provider<RingPairingClient?>(
   (Ref ref) => null,

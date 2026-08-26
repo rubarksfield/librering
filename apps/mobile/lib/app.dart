@@ -3,9 +3,11 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:ring_demo/ring_demo.dart';
+import 'package:ring_core/ring_core.dart';
 import 'package:ring_design_system/ring_design_system.dart';
 
 import 'src/app_state.dart';
+import 'src/analytics_screens.dart';
 import 'src/ble/r12_pairing_client.dart';
 import 'src/screens.dart';
 import 'src/storage/data_export_service.dart';
@@ -38,6 +40,7 @@ class LibreRingApp extends StatelessWidget {
     this.ringDataRepository,
     this.journalRepository,
     this.dataExportService,
+    this.currentLocalTime,
     super.key,
   });
 
@@ -49,6 +52,7 @@ class LibreRingApp extends StatelessWidget {
   final RingDataRepository? ringDataRepository;
   final JournalRepository? journalRepository;
   final DataExportService? dataExportService;
+  final DateTime? currentLocalTime;
 
   @override
   Widget build(BuildContext context) {
@@ -56,6 +60,8 @@ class LibreRingApp extends StatelessWidget {
       overrides: [
         isDemoModeProvider.overrideWithValue(demoMode),
         isProtocolCaptureModeProvider.overrideWithValue(captureMode),
+        if (currentLocalTime != null)
+          currentLocalTimeProvider.overrideWithValue(currentLocalTime!),
         if (demoMode)
           dailySnapshotProvider.overrideWithValue(demoDailySnapshot),
         if (pairingClient != null)
@@ -92,11 +98,20 @@ class _LibreRingShellState extends State<_LibreRingShell> {
       _route('/pairing/found', const RingFoundScreen()),
       _route('/today', const TodayScreen()),
       _route('/metrics', const MetricsScreen()),
-      _route('/sleep', const SleepScreen()),
+      _route('/sleep', const SleepLabScreen()),
       _route('/recovery', const RecoveryScreen()),
-      _route('/movement', const MovementScreen()),
-      _route('/heart', const HeartDetailScreen()),
-      _route('/oxygen', const OxygenDetailScreen()),
+      _route('/movement', const ActivityLabScreen()),
+      _route('/heart', const HeartLabScreen()),
+      _route('/oxygen', const OxygenLabScreen()),
+      _route(
+        '/signals/hrv-index',
+        const VendorSignalScreen(kind: RingVendorIndexKind.firmwareHrv),
+      ),
+      _route(
+        '/signals/stress-index',
+        const VendorSignalScreen(kind: RingVendorIndexKind.stress),
+      ),
+      _route('/sport', const SportRecordScreen()),
       _route('/sleep/evidence', const EvidenceScreen()),
       _route('/no-result', const NoResultScreen()),
       _route('/trends', const TrendsScreen()),
@@ -105,6 +120,7 @@ class _LibreRingShellState extends State<_LibreRingShell> {
       _route('/journal/swim', const SwimEntryScreen()),
       _route('/you', const YouScreen()),
       _route('/you/ring', const RingDeviceScreen()),
+      _route('/you/ring/capabilities', const CapabilitiesScreen()),
       _route('/you/data', const DataHubScreen()),
       _route('/you/about', const AboutScreen()),
       _route('/privacy/cycle', const CyclePrivacyScreen()),

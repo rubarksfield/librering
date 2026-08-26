@@ -10,6 +10,7 @@ import 'package:share_plus/share_plus.dart';
 import 'app_state.dart';
 import 'ble/r12_pairing_client.dart';
 import 'localized_copy.dart';
+import 'ring_analytics.dart';
 import 'ring_data_view.dart';
 import 'ring_product_view.dart';
 import 'storage/journal_repository.dart';
@@ -489,7 +490,10 @@ class _TodayScreenState extends ConsumerState<TodayScreen>
         ref.read(ringPairingProvider).syncInProgress) {
       return;
     }
-    final age = DateTime.now().toUtc().difference(dataset.lastSyncedAtUtc);
+    final age = ref
+        .read(currentLocalTimeProvider)
+        .toUtc()
+        .difference(dataset.lastSyncedAtUtc);
     if (age.isNegative || age < const Duration(minutes: 10)) return;
     await ref.read(ringPairingProvider.notifier).quickSync();
   }
@@ -507,7 +511,16 @@ class _TodayScreenState extends ConsumerState<TodayScreen>
     }
     final product = dataset == null
         ? null
-        : RingProductView.fromDataset(dataset);
+        : RingProductView.fromDataset(
+            dataset,
+            localNow: ref.watch(currentLocalTimeProvider),
+          );
+    final analytics = dataset == null
+        ? null
+        : RingAnalytics.fromDataset(
+            dataset,
+            localNow: ref.watch(currentLocalTimeProvider),
+          );
     final pairing = ref.watch(ringPairingProvider);
     return _AppScreen(
       key: const Key('screen-today'),
@@ -594,6 +607,8 @@ class _TodayScreenState extends ConsumerState<TodayScreen>
                       : ref.read(ringPairingProvider.notifier).quickSync
                 : () => context.go(product.dailySignal.actionRoute),
           ),
+          const SizedBox(height: 14),
+          _DailyDecodeStrip(analytics: analytics!),
           const SizedBox(height: 30),
           _SectionHeading(
             title: copyFor(context, 'Today at a glance', 'Hoje em resumo'),
@@ -601,7 +616,11 @@ class _TodayScreenState extends ConsumerState<TodayScreen>
             onAction: () => context.go('/metrics'),
           ),
           const SizedBox(height: 12),
-          for (final domain in product.domains.take(3)) ...<Widget>[
+          for (final domain in <ProductDomain>[
+            ProductDomain.movement,
+            ProductDomain.sleep,
+            ProductDomain.recovery,
+          ].map(product.domain)) ...<Widget>[
             _DomainSummaryCard(
               summary: domain,
               onTap: () => context.go(domain.route),
@@ -613,7 +632,10 @@ class _TodayScreenState extends ConsumerState<TodayScreen>
             title: copyFor(context, 'Measured signals', 'Sinais medidos'),
           ),
           const SizedBox(height: 6),
-          for (final domain in product.domains.skip(3))
+          for (final domain in <ProductDomain>[
+            ProductDomain.heart,
+            ProductDomain.oxygen,
+          ].map(product.domain))
             _DataRow(
               icon: domain.domain == ProductDomain.heart
                   ? Icons.favorite_outline
@@ -623,6 +645,45 @@ class _TodayScreenState extends ConsumerState<TodayScreen>
               value: domain.value,
               onTap: () => context.go(domain.route),
             ),
+          const SizedBox(height: 24),
+          _SectionHeading(
+            title: copyFor(
+              context,
+              'Exploratory firmware fields',
+              'Campos exploratórios do firmware',
+            ),
+          ),
+          const SizedBox(height: 6),
+          _VendorSignalRow(
+            dataset: dataset!,
+            kind: RingVendorIndexKind.firmwareHrv,
+            label: copyFor(
+              context,
+              'Firmware HRV index',
+              'Índice HRV do firmware',
+            ),
+            route: '/signals/hrv-index',
+          ),
+          _VendorSignalRow(
+            dataset: dataset,
+            kind: RingVendorIndexKind.stress,
+            label: copyFor(
+              context,
+              'Firmware stress index',
+              'Índice de stress do firmware',
+            ),
+            route: '/signals/stress-index',
+          ),
+          _DataRow(
+            icon: Icons.directions_run_outlined,
+            title: copyFor(context, 'Sport record', 'Registo desportivo'),
+            meta: copyFor(
+              context,
+              'Manual activities · kept separate',
+              'Atividades manuais · mantidas separadas',
+            ),
+            onTap: () => context.go('/sport'),
+          ),
           const SizedBox(height: 20),
           OutlinedButton.icon(
             key: const Key('today-add-context'),
@@ -711,7 +772,10 @@ class MetricsScreen extends ConsumerWidget {
     final dataset = demo ? null : ref.watch(ringDataProvider).value;
     final view = dataset == null
         ? null
-        : RingDashboardView.fromDataset(dataset);
+        : RingDashboardView.fromDataset(
+            dataset,
+            localNow: ref.watch(currentLocalTimeProvider),
+          );
     final metrics = view?.metrics ?? snapshot?.metrics;
     final largeText = MediaQuery.textScalerOf(context).scale(1) >= 1.5;
     return _AppScreen(
@@ -742,8 +806,8 @@ class MetricsScreen extends ConsumerWidget {
         _Heading(
           copyFor(
             context,
-            'Four signals.\nNothing extra.',
-            'Quatro sinais.\nNada a mais.',
+            'Every decoded signal.\nNo invented score.',
+            'Todos os sinais descodificados.\nSem pontuação inventada.',
           ),
         ),
         const SizedBox(height: 32),
@@ -770,6 +834,47 @@ class MetricsScreen extends ConsumerWidget {
               );
             },
           ),
+        if (dataset != null) ...<Widget>[
+          const SizedBox(height: 30),
+          _SectionHeading(
+            title: copyFor(
+              context,
+              'More from this firmware',
+              'Mais deste firmware',
+            ),
+          ),
+          const SizedBox(height: 6),
+          _VendorSignalRow(
+            dataset: dataset,
+            kind: RingVendorIndexKind.firmwareHrv,
+            label: copyFor(
+              context,
+              'Firmware HRV index',
+              'Índice HRV do firmware',
+            ),
+            route: '/signals/hrv-index',
+          ),
+          _VendorSignalRow(
+            dataset: dataset,
+            kind: RingVendorIndexKind.stress,
+            label: copyFor(
+              context,
+              'Firmware stress index',
+              'Índice de stress do firmware',
+            ),
+            route: '/signals/stress-index',
+          ),
+          _DataRow(
+            icon: Icons.directions_run_outlined,
+            title: copyFor(context, 'Sport record', 'Registo desportivo'),
+            meta: copyFor(
+              context,
+              'Manual context · local only',
+              'Contexto manual · apenas local',
+            ),
+            onTap: () => context.go('/sport'),
+          ),
+        ],
       ],
     );
   }
@@ -2484,6 +2589,42 @@ class RingDeviceScreen extends ConsumerWidget {
             ],
           ),
         ),
+        const SizedBox(height: 14),
+        LibreRingCard(
+          padding: const EdgeInsets.symmetric(horizontal: 18),
+          child: Column(
+            children: <Widget>[
+              _DataRow(
+                icon: Icons.health_and_safety_outlined,
+                title: copyFor(
+                  context,
+                  'Health and history capabilities',
+                  'Capacidades de saúde e histórico',
+                ),
+                meta: copyFor(
+                  context,
+                  'What is available, partial, or locked',
+                  'O que está disponível, parcial ou bloqueado',
+                ),
+                onTap: () => context.go('/you/ring/capabilities'),
+              ),
+              _DataRow(
+                icon: Icons.lock_outline,
+                title: copyFor(
+                  context,
+                  'Device controls',
+                  'Controlos do dispositivo',
+                ),
+                meta: copyFor(
+                  context,
+                  'Read-only until exact commands are safely verified',
+                  'Apenas leitura até os comandos serem verificados',
+                ),
+                value: copyFor(context, 'Locked', 'Bloqueado'),
+              ),
+            ],
+          ),
+        ),
         const SizedBox(height: 22),
         LibreRingPrimaryButton(
           key: const Key('ring-device-sync'),
@@ -4023,6 +4164,110 @@ class _SleepStageBars extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _DailyDecodeStrip extends StatelessWidget {
+  const _DailyDecodeStrip({required this.analytics});
+
+  final RingAnalytics analytics;
+
+  @override
+  Widget build(BuildContext context) {
+    final activity = analytics.activityFor(analytics.selectedDay);
+    final pulse = analytics.pulseFor(analytics.selectedDay);
+    final oxygen = analytics.oxygenFor(analytics.selectedDay);
+    return LibreRingCard(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
+      child: Row(
+        children: <Widget>[
+          _DecodeValue(
+            value: RingProductView.distanceLabel(activity.distanceMeters),
+            label: copyFor(context, 'Distance', 'Distância'),
+          ),
+          _DecodeValue(
+            value: '${activity.firmwareCalories}',
+            label: copyFor(context, 'Firmware kcal', 'kcal firmware'),
+          ),
+          _DecodeValue(
+            value: '${pulse.samples.length + oxygen.ranges.length}',
+            label: copyFor(context, 'Vital records', 'Registos vitais'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DecodeValue extends StatelessWidget {
+  const _DecodeValue({required this.value, required this.label});
+
+  final String value;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => Expanded(
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Text(
+            value,
+            maxLines: 1,
+            style: const TextStyle(
+              fontSize: 19,
+              fontWeight: FontWeight.w300,
+              letterSpacing: -.6,
+            ),
+          ),
+        ),
+        const SizedBox(height: 3),
+        Text(
+          label,
+          style: const TextStyle(fontSize: 8.5, color: LibreRingTokens.muted),
+        ),
+      ],
+    ),
+  );
+}
+
+class _VendorSignalRow extends StatelessWidget {
+  const _VendorSignalRow({
+    required this.dataset,
+    required this.kind,
+    required this.label,
+    required this.route,
+  });
+
+  final RingSyncDataset dataset;
+  final RingVendorIndexKind kind;
+  final String label;
+  final String route;
+
+  @override
+  Widget build(BuildContext context) {
+    final values =
+        dataset.vendorIndexes
+            .where((sample) => sample.kind == kind)
+            .toList(growable: false)
+          ..sort(
+            (left, right) => left.measuredAtUtc.compareTo(right.measuredAtUtc),
+          );
+    return _DataRow(
+      icon: kind == RingVendorIndexKind.stress
+          ? Icons.spa_outlined
+          : Icons.monitor_heart_outlined,
+      title: label,
+      meta: copyFor(
+        context,
+        '${values.length} values · unit and thresholds unvalidated',
+        '${values.length} valores · unidade e limites não validados',
+      ),
+      value: values.isEmpty ? '—' : '${values.last.value}',
+      onTap: () => context.go(route),
     );
   }
 }

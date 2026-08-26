@@ -134,6 +134,68 @@ void main() {
     expect(find.byKey(const Key('you-data')), findsOneWidget);
   });
 
+  testWidgets('expanded analytics expose Q Ring feature depth without scores', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final repository = _MemoryRepository(_dataset());
+
+    for (final route in <(String, String, List<String>)>[
+      (
+        '/movement',
+        'screen-movement',
+        <String>['Today, hour by hour', 'Firmware kcal'],
+      ),
+      (
+        '/sleep',
+        'screen-sleep',
+        <String>['Night architecture', 'Continuity, without a score'],
+      ),
+      (
+        '/heart',
+        'screen-heart',
+        <String>['Daily pulse timeline', 'Recent measurements'],
+      ),
+      (
+        '/oxygen',
+        'screen-oxygen',
+        <String>['Daily range map', 'not exact hourly averages'],
+      ),
+      (
+        '/signals/hrv-index',
+        'screen-hrv-index',
+        <String>['unitless form', 'unit and calculation are unverified'],
+      ),
+      (
+        '/signals/stress-index',
+        'screen-stress-index',
+        <String>['unitless form', 'formula and thresholds are unverified'],
+      ),
+      (
+        '/you/ring/capabilities',
+        'screen-capabilities',
+        <String>['Available locally', 'Not yet available'],
+      ),
+    ]) {
+      await tester.pumpWidget(
+        LibreRingApp(
+          key: ValueKey<String>('analytics-${route.$1}'),
+          initialLocation: route.$1,
+          ringDataRepository: repository,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byKey(Key(route.$2)), findsOneWidget, reason: route.$1);
+      for (final text in route.$3) {
+        expect(find.textContaining(text), findsWidgets, reason: route.$1);
+      }
+      expect(tester.takeException(), isNull, reason: route.$1);
+    }
+  });
+
   testWidgets('data hub creates portable files and deletes ring data only', (
     tester,
   ) async {
@@ -290,6 +352,18 @@ RingSyncDataset _dataset() {
         hourStartedAtUtc: now.subtract(const Duration(hours: 1)),
         minimumPercent: 95,
         maximumPercent: 98,
+      ),
+    ],
+    vendorIndexes: <RingVendorIndexSample>[
+      RingVendorIndexSample(
+        measuredAtUtc: now.subtract(const Duration(hours: 2)),
+        value: 41,
+        kind: RingVendorIndexKind.firmwareHrv,
+      ),
+      RingVendorIndexSample(
+        measuredAtUtc: now.subtract(const Duration(hours: 1)),
+        value: 36,
+        kind: RingVendorIndexKind.stress,
       ),
     ],
     sleep: <RingSleepSession>[
