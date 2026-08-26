@@ -5,6 +5,25 @@ import 'package:librering_mobile/src/storage/ring_data_repository.dart';
 import 'package:ring_core/ring_core.dart';
 
 void main() {
+  test('returning production users launch directly into Today', () async {
+    expect(
+      await resolveInitialLocation(
+        demoMode: false,
+        captureMode: false,
+        ringDataRepository: _MemoryRepository(_dataset()),
+      ),
+      '/today',
+    );
+    expect(
+      await resolveInitialLocation(
+        demoMode: false,
+        captureMode: false,
+        ringDataRepository: _MemoryRepository(null),
+      ),
+      '/welcome',
+    );
+  });
+
   testWidgets('production screens render stored ring data without scores', (
     tester,
   ) async {

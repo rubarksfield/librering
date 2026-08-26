@@ -116,6 +116,9 @@ Last updated: 2026-08-26
   as validated metrics.
 - Added repository, duplicate/no-data/corruption/privacy/deletion, real-data UI,
   and production sync widget tests.
+- Separated returning-user refresh from first-run pairing: a stored-data launch
+  opens Today, and its sync control performs a bounded in-place scan/connect/sync
+  without routing through onboarding or persisting a BLE identifier.
 
 ## In progress
 
@@ -195,6 +198,8 @@ Last updated: 2026-08-26
 | 2026-08-26 | Local repository safety | repeated merge, no-data preservation, 400-day retention, corrupt-store fail-closed, identifier-field absence and confirmed deletion passed |
 | 2026-08-26 | Production platform builds | signed iOS release and Android debug APK `1.0.0+2` passed; APK SHA-256 `8f25819247194d418857a9dbdfdbc9c2176ad59f75806760170b4dfe5fbaa1ee` |
 | 2026-08-26 | Local-network iPhone delivery | release installed over CoreDevice local-network transport; installed-app readback confirmed version `1.0.0`, build `2`; launch unavailable while phone was not foreground-launchable |
+| 2026-08-26 | Returning-user sync UX | stored-data launch and in-place Today refresh tests passed; approved demo golden remained pixel-identical; mobile suite 27/27 passed |
+| 2026-08-26 | Returning-user UX delivery | signed iOS release and Android debug APK `1.0.0+3` built; APK SHA-256 `969408daf43df1d2a4fb8afa5da280b56bcd02d7c53a049d597a18d74bb77775`; local-network installed-app readback confirmed build `3` |
 
 ## Known limitations
 

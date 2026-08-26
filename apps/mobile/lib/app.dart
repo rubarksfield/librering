@@ -10,6 +10,22 @@ import 'src/ble/r12_pairing_client.dart';
 import 'src/screens.dart';
 import 'src/storage/ring_data_repository.dart';
 
+Future<String> resolveInitialLocation({
+  required bool demoMode,
+  required bool captureMode,
+  RingDataRepository? ringDataRepository,
+}) async {
+  if (captureMode) return '/pairing/scan';
+  if (demoMode || ringDataRepository == null) return '/welcome';
+  try {
+    return await ringDataRepository.read() == null ? '/welcome' : '/today';
+  } catch (_) {
+    // Returning users should see the honest unavailable state rather than be
+    // sent through onboarding because their local store needs attention.
+    return '/today';
+  }
+}
+
 class LibreRingApp extends StatelessWidget {
   const LibreRingApp({
     this.demoMode = false,

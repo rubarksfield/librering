@@ -141,6 +141,85 @@ void main() {
     expect(client.syncCount, 2);
     expect(client.disconnectCount, 2);
   });
+
+  testWidgets('returning users quick-sync on Today without onboarding', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final client = _FakePairingClient();
+    final repository = _MemoryRepository()..value = await client.sync();
+    client.syncCount = 0;
+
+    await tester.pumpWidget(
+      LibreRingApp(
+        initialLocation: '/today',
+        pairingClient: client,
+        ringDataRepository: repository,
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('screen-today')), findsOneWidget);
+    expect(find.byKey(const Key('screen-ring-scan')), findsNothing);
+
+    await tester.tap(find.byKey(const Key('today-quick-sync')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('screen-today')), findsOneWidget);
+    expect(find.byKey(const Key('screen-ring-scan')), findsNothing);
+    expect(find.text('Ring data refreshed locally.'), findsOneWidget);
+    expect(client.connectCount, 1);
+    expect(client.syncCount, 1);
+    expect(client.disconnectCount, 1);
+  });
+
+  testWidgets('quick sync does not choose between multiple nearby R12s', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final client = _FakePairingClient(
+      candidates: const <RingPairingCandidate>[
+        RingPairingCandidate(
+          advertisement: RingAdvertisement(
+            deviceId: 'redacted-one',
+            name: 'COLMI R12_ONE',
+          ),
+          exact: true,
+        ),
+        RingPairingCandidate(
+          advertisement: RingAdvertisement(
+            deviceId: 'redacted-two',
+            name: 'COLMI R12_TWO',
+          ),
+          exact: true,
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      LibreRingApp(
+        initialLocation: '/today',
+        pairingClient: client,
+        ringDataRepository: _MemoryRepository(),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('today-quick-sync')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('screen-today')), findsOneWidget);
+    expect(
+      find.text('More than one R12 was found. Use device setup to choose one.'),
+      findsOneWidget,
+    );
+    expect(client.connectCount, 0);
+    expect(client.syncCount, 0);
+  });
 }
 
 class _MemoryRepository implements RingDataRepository {

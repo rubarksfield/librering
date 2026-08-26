@@ -459,20 +459,58 @@ class TodayScreen extends ConsumerWidget {
     final view = dataset == null
         ? null
         : RingDashboardView.fromDataset(dataset);
+    final pairing = ref.watch(ringPairingProvider);
     return _AppScreen(
       key: const Key('screen-today'),
       activePath: '/today',
       children: <Widget>[
         _TopBar(
           leading: const LibreRingWordmark(),
-          trailing: IconButton(
-            tooltip: copyFor(
-              context,
-              'Privacy controls',
-              'Controlos de privacidade',
-            ),
-            onPressed: () => context.go('/privacy/cycle'),
-            icon: const Icon(Icons.lock_outline, size: 20),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              if (!demo)
+                IconButton(
+                  key: const Key('today-quick-sync'),
+                  tooltip: copyFor(context, 'Sync ring', 'Sincronizar anel'),
+                  onPressed: pairing.syncInProgress
+                      ? null
+                      : () async {
+                          await ref
+                              .read(ringPairingProvider.notifier)
+                              .quickSync();
+                          if (!context.mounted) return;
+                          final result = ref.read(ringPairingProvider);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                result.syncError ??
+                                    copyFor(
+                                      context,
+                                      'Ring data refreshed locally.',
+                                      'Dados do anel atualizados localmente.',
+                                    ),
+                              ),
+                            ),
+                          );
+                        },
+                  icon: pairing.syncInProgress
+                      ? const SizedBox.square(
+                          dimension: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.sync, size: 20),
+                ),
+              IconButton(
+                tooltip: copyFor(
+                  context,
+                  'Privacy controls',
+                  'Controlos de privacidade',
+                ),
+                onPressed: () => context.go('/privacy/cycle'),
+                icon: const Icon(Icons.lock_outline, size: 20),
+              ),
+            ],
           ),
         ),
         const SizedBox(height: 20),

@@ -31,6 +31,12 @@ battery and bounded retained history, with the already-authorised clock
 synchronisation as its only setting write. Unknown firmware, corrupt storage,
 live measurement and all other settings fail closed.
 
+The presence of valid stored data, rather than a stored BLE identity, marks a
+returning user. Returning launches open Today, where routine refresh performs a
+new bounded scan and requires exactly one advertised R12 before connecting. No
+result or multiple exact matches stop safely; first-run pairing remains a
+separate setup journey.
+
 ## Consequences
 
 - Repeated syncs are idempotent and survive app relaunch.

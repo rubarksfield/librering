@@ -48,6 +48,10 @@ decoded local repository state, pairing/sync state, cycle privacy settings, and
 manual swim entry. Route widgets receive immutable domain records rather than
 packets, storage rows, or formula internals.
 
+First-run users enter the consent/pairing journey. A valid local dataset routes
+returning launches directly to Today; its refresh control performs a bounded
+scan/connect/sync in place and never turns routine refresh back into onboarding.
+
 ## Safety properties
 
 - Demo and real data cannot mix through a fallback branch.

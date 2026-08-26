@@ -529,6 +529,73 @@ class RingPairingController extends Notifier<RingPairingState> {
     }
   }
 
+  Future<void> quickSync() async {
+    if (ref.read(isProtocolCaptureModeProvider)) return;
+    final client = ref.read(ringPairingClientProvider);
+    if (client == null || state.syncInProgress) return;
+
+    await _scanSubscription?.cancel();
+    _scanSubscription = null;
+    _candidates.clear();
+    state = state.copyWith(
+      phase: RingPairingPhase.scanning,
+      candidates: const <RingPairingCandidate>[],
+      selected: null,
+      evidence: null,
+      syncInProgress: true,
+      syncError: null,
+      message: 'Looking for your nearby R12…',
+    );
+    try {
+      await for (final candidate in client.scan(
+        timeout: const Duration(seconds: 6),
+      )) {
+        _candidates[candidate.advertisement.deviceId] = candidate;
+      }
+      final exact = _candidates.values
+          .where((candidate) => candidate.exact)
+          .toList(growable: false);
+      if (exact.length != 1) {
+        state = state.copyWith(
+          phase: RingPairingPhase.failed,
+          candidates: _sortedCandidates(),
+          syncInProgress: false,
+          syncError: exact.isEmpty
+              ? 'No COLMI R12 was found. Close QRing and try again.'
+              : 'More than one R12 was found. Use device setup to choose one.',
+        );
+        return;
+      }
+
+      final selected = exact.single;
+      state = state.copyWith(
+        phase: RingPairingPhase.connecting,
+        candidates: _sortedCandidates(),
+        selected: selected,
+        message: 'Connecting for a private local sync…',
+      );
+      final evidence = await client.connect(selected.advertisement);
+      state = state.copyWith(
+        phase: RingPairingPhase.connected,
+        evidence: evidence,
+        syncInProgress: false,
+      );
+      await sync();
+    } catch (_) {
+      try {
+        await client.disconnect();
+      } catch (_) {
+        // Connection release is best-effort after a failed quick sync.
+      }
+      state = state.copyWith(
+        phase: RingPairingPhase.failed,
+        syncInProgress: false,
+        syncError:
+            'The quick sync stopped safely. Existing local data was preserved.',
+      );
+    }
+  }
+
   Future<void> _setCaptureIdleTimer({required bool disabled}) async {
     try {
       await _captureControl.invokeMethod<void>(

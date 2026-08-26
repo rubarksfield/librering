@@ -29,11 +29,16 @@ Future<void> main() async {
   final ringDataRepository = demoMode
       ? null
       : FileRingDataRepository(await getApplicationSupportDirectory());
+  final initialLocation = await resolveInitialLocation(
+    demoMode: demoMode,
+    captureMode: captureMode,
+    ringDataRepository: ringDataRepository,
+  );
   runApp(
     LibreRingApp(
       demoMode: demoMode,
       captureMode: captureMode,
-      initialLocation: captureMode ? '/pairing/scan' : '/welcome',
+      initialLocation: initialLocation,
       pairingClient: pairingClient,
       ringDataRepository: ringDataRepository,
     ),
