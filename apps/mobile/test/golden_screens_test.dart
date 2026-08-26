@@ -20,9 +20,13 @@ void main() {
     ('/welcome', 'welcome'),
     ('/today', 'today'),
     ('/metrics', 'metrics'),
+    ('/trends', 'trends'),
+    ('/journal', 'journal'),
+    ('/you', 'you'),
+    ('/you/data', 'data_hub'),
     ('/privacy/cycle', 'cycle_privacy'),
   ]) {
-    testWidgets('${route.$2} matches approved V1 golden', (tester) async {
+    testWidgets('${route.$2} matches LibreRing golden', (tester) async {
       tester.view.physicalSize = const Size(390, 844);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.resetPhysicalSize);

@@ -108,6 +108,43 @@ class JournalController extends AsyncNotifier<List<JournalEntry>> {
     }
   }
 
+  Future<JournalEntry> saveCheckIn({
+    required List<String> tags,
+    required String note,
+    DateTime? occurredAtUtc,
+  }) async {
+    if (tags.isEmpty && note.trim().isEmpty) {
+      throw ArgumentError('A check-in needs a tag or note.');
+    }
+    final repository = ref.read(journalRepositoryProvider);
+    final occurred = (occurredAtUtc ?? DateTime.now()).toUtc();
+    final cleanTags = tags.toSet().toList(growable: false)..sort();
+    final cleanNote = note.trim();
+    final entry = JournalEntry(
+      id: 'checkIn|${occurred.toIso8601String()}',
+      kind: JournalEntryKind.checkIn,
+      occurredAtUtc: occurred,
+      title: cleanTags.isEmpty ? 'Note' : cleanTags.join(' · '),
+      details: cleanNote.isEmpty ? 'No note' : cleanNote,
+    );
+    if (repository == null) {
+      state = AsyncData<List<JournalEntry>>(<JournalEntry>[
+        entry,
+        ...state.value ?? const <JournalEntry>[],
+      ]);
+      return entry;
+    }
+    state = const AsyncLoading<List<JournalEntry>>();
+    try {
+      final entries = await repository.upsert(entry);
+      state = AsyncData<List<JournalEntry>>(entries);
+      return entry;
+    } catch (error, stackTrace) {
+      state = AsyncError<List<JournalEntry>>(error, stackTrace);
+      rethrow;
+    }
+  }
+
   Future<void> delete(String id) async {
     final repository = ref.read(journalRepositoryProvider);
     if (repository == null) {

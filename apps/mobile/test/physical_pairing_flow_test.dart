@@ -176,6 +176,36 @@ void main() {
     expect(client.scanTimeouts, const <Duration>[Duration(seconds: 12)]);
   });
 
+  testWidgets('stale returning history refreshes quietly on Today', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final client = _FakePairingClient(
+      lastSyncedAtUtc: DateTime.utc(2020, 1, 1),
+    );
+    final repository = _MemoryRepository()..value = await client.sync();
+    client.syncCount = 0;
+
+    await tester.pumpWidget(
+      LibreRingApp(
+        initialLocation: '/today',
+        pairingClient: client,
+        ringDataRepository: repository,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('screen-today')), findsOneWidget);
+    expect(find.byKey(const Key('screen-ring-scan')), findsNothing);
+    expect(client.connectCount, 1);
+    expect(client.syncCount, 1);
+    expect(client.disconnectCount, 1);
+    expect(client.scanTimeouts, const <Duration>[Duration(seconds: 12)]);
+  });
+
   testWidgets('quick sync does not choose between multiple nearby R12s', (
     tester,
   ) async {
@@ -277,20 +307,23 @@ class _MemoryRepository implements RingDataRepository {
 }
 
 class _FakePairingClient implements RingPairingClient {
-  _FakePairingClient({List<RingPairingCandidate>? candidates})
-    : candidates =
-          candidates ??
-          const <RingPairingCandidate>[
-            RingPairingCandidate(
-              advertisement: RingAdvertisement(
-                deviceId: 'redacted-test-id',
-                name: 'COLMI R12_TEST',
-              ),
-              exact: true,
-            ),
-          ];
+  _FakePairingClient({
+    List<RingPairingCandidate>? candidates,
+    this.lastSyncedAtUtc,
+  }) : candidates =
+           candidates ??
+           const <RingPairingCandidate>[
+             RingPairingCandidate(
+               advertisement: RingAdvertisement(
+                 deviceId: 'redacted-test-id',
+                 name: 'COLMI R12_TEST',
+               ),
+               exact: true,
+             ),
+           ];
 
   final List<RingPairingCandidate> candidates;
+  final DateTime? lastSyncedAtUtc;
   int connectCount = 0;
   int captureCount = 0;
   int timeSyncCount = 0;
@@ -352,7 +385,7 @@ class _FakePairingClient implements RingPairingClient {
   Future<RingSyncDataset> sync() async {
     syncCount += 1;
     return RingSyncDataset(
-      lastSyncedAtUtc: DateTime.utc(2026, 8, 26, 16, 30),
+      lastSyncedAtUtc: lastSyncedAtUtc ?? DateTime.now().toUtc(),
       source: const RingDataSource(
         driverId: 'colmi-qring-v1',
         firmwareVersion: 'RT11CR_1.00.09_260424',

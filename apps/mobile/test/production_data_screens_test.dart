@@ -1,6 +1,10 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:librering_mobile/app.dart';
+import 'package:librering_mobile/src/storage/data_export_service.dart';
+import 'package:librering_mobile/src/storage/journal_repository.dart';
 import 'package:librering_mobile/src/storage/ring_data_repository.dart';
 import 'package:ring_core/ring_core.dart';
 
@@ -38,16 +42,14 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Ring data synced.'), findsOneWidget);
-    expect(find.text('5'), findsOneWidget);
-    expect(
-      find.textContaining('Recovery scoring is unavailable'),
-      findsOneWidget,
-    );
+    expect(find.text('8 hours of sleep was recorded.'), findsOneWidget);
+    expect(find.byKey(const Key('domain-recovery')), findsOneWidget);
+    expect(find.text('Protected'), findsOneWidget);
+    expect(find.text('500'), findsOneWidget);
     expect(find.text('82'), findsNothing);
     expect(find.textContaining('Demo data'), findsNothing);
 
-    await tester.tap(find.text('View metrics'));
+    await tester.tap(find.text('All signals'));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('screen-metrics')), findsOneWidget);
     expect(find.text('500', findRichText: true), findsOneWidget);
@@ -83,6 +85,128 @@ void main() {
       expect(find.byKey(const Key('delete-ring-data')), findsNothing);
     },
   );
+
+  testWidgets('production journey exposes honest domains and 7/30/90 trends', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      LibreRingApp(
+        initialLocation: '/today',
+        ringDataRepository: _MemoryRepository(_dataset()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(find.byKey(const Key('domain-recovery')));
+    await tester.tap(find.byKey(const Key('domain-recovery')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('screen-recovery')), findsOneWidget);
+    expect(
+      find.text('No Recovery score is the honest result.'),
+      findsOneWidget,
+    );
+    expect(find.text('Excluded'), findsOneWidget);
+
+    await tester.tap(find.bySemanticsLabel('Trends'));
+    await tester.pumpAndSettle();
+    for (final key in <String>[
+      'trend-sleep',
+      'trend-pulse',
+      'trend-movement',
+      'trend-oxygen',
+    ]) {
+      expect(find.byKey(Key(key)), findsOneWidget);
+    }
+    expect(find.byKey(const Key('trend-range-selector')), findsOneWidget);
+    await tester.tap(find.text('7 days'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('last 7 days'), findsOneWidget);
+
+    await tester.tap(find.bySemanticsLabel('You'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('screen-you')), findsOneWidget);
+    expect(find.byKey(const Key('you-ring')), findsOneWidget);
+    expect(find.byKey(const Key('you-data')), findsOneWidget);
+  });
+
+  testWidgets('data hub creates portable files and deletes ring data only', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final repository = _MemoryRepository(_dataset());
+    final exportService = _MemoryExportService();
+
+    await tester.pumpWidget(
+      LibreRingApp(
+        initialLocation: '/you/data',
+        ringDataRepository: repository,
+        dataExportService: exportService,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(find.byKey(const Key('create-data-export')));
+    await tester.tap(find.byKey(const Key('create-data-export')));
+    await tester.pumpAndSettle();
+    expect(find.text('Export ready'), findsOneWidget);
+    expect(exportService.callCount, 1);
+
+    await tester.ensureVisible(
+      find.byKey(const Key('delete-ring-history-hub')),
+    );
+    await tester.tap(find.byKey(const Key('delete-ring-history-hub')));
+    await tester.pumpAndSettle();
+    expect(find.text('Delete all local ring history?'), findsOneWidget);
+    await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
+    await tester.pumpAndSettle();
+    expect(repository.value, isNull);
+    expect(repository.deleteCount, 1);
+    expect(exportService.callCount, 1);
+  });
+
+  testWidgets('priority production screens fit a compact phone at 130% text', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 568);
+    tester.view.devicePixelRatio = 1;
+    tester.platformDispatcher.textScaleFactorTestValue = 1.3;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+    for (final route in <String>[
+      '/today',
+      '/trends',
+      '/recovery',
+      '/movement',
+      '/heart',
+      '/oxygen',
+      '/journal',
+      '/you',
+      '/you/ring',
+      '/you/data',
+    ]) {
+      await tester.pumpWidget(
+        LibreRingApp(
+          key: ValueKey<String>('compact-$route'),
+          initialLocation: route,
+          ringDataRepository: _MemoryRepository(_dataset()),
+          dataExportService: _MemoryExportService(),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final error = tester.takeException();
+      if (error != null) fail('$route\n$error');
+    }
+  });
 }
 
 class _MemoryRepository implements RingDataRepository {
@@ -103,6 +227,25 @@ class _MemoryRepository implements RingDataRepository {
 
   @override
   Future<RingSyncDataset?> read() async => value;
+}
+
+class _MemoryExportService implements DataExportService {
+  int callCount = 0;
+
+  @override
+  Future<LocalExportResult> create({
+    required RingSyncDataset dataset,
+    required List<JournalEntry> journal,
+  }) async {
+    callCount += 1;
+    return LocalExportResult(
+      jsonFile: File('/tmp/librering-test.json'),
+      csvFile: File('/tmp/librering-test.csv'),
+      rowCount: dataset.recordCount + journal.length,
+      sha256: 'a' * 64,
+      createdAtUtc: DateTime.utc(2026, 8, 26),
+    );
+  }
 }
 
 RingSyncDataset _dataset() {

@@ -9,7 +9,7 @@ void main() {
     // The approved reference viewport is 390 × 844.
   });
 
-  testWidgets('all twelve approved routes render in demo mode', (tester) async {
+  testWidgets('all product routes render in demo mode', (tester) async {
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -23,10 +23,20 @@ void main() {
       '/today': 'screen-today',
       '/metrics': 'screen-metrics',
       '/sleep': 'screen-sleep',
+      '/recovery': 'screen-recovery',
+      '/movement': 'screen-movement',
+      '/heart': 'screen-heart',
+      '/oxygen': 'screen-oxygen',
       '/sleep/evidence': 'screen-evidence',
       '/no-result': 'screen-no-result',
       '/trends': 'screen-trends',
+      '/journal': 'screen-journal',
+      '/journal/check-in': 'screen-check-in',
       '/journal/swim': 'screen-swim',
+      '/you': 'screen-you',
+      '/you/ring': 'screen-ring-device',
+      '/you/data': 'screen-data-hub',
+      '/you/about': 'screen-about',
       '/privacy/cycle': 'screen-cycle-privacy',
     };
 
@@ -77,7 +87,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Saved locally · Manual source'), findsOneWidget);
 
-    await tester.tap(find.byIcon(Icons.lock_outline).last);
+    await tester.tap(find.bySemanticsLabel('You'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('you-cycle')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('screen-cycle-privacy')), findsOneWidget);
   });
@@ -127,6 +139,11 @@ void main() {
       '/metrics',
       '/sleep',
       '/sleep/evidence',
+      '/trends',
+      '/journal',
+      '/journal/check-in',
+      '/you',
+      '/you/data',
       '/privacy/cycle',
     ]) {
       await tester.pumpWidget(
@@ -141,6 +158,68 @@ void main() {
       if (error != null) {
         fail('$route\n$error');
       }
+    }
+  });
+
+  testWidgets('manual check-in requires context and stays clearly labelled', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      const LibreRingApp(demoMode: true, initialLocation: '/journal/check-in'),
+    );
+    await tester.pumpAndSettle();
+    final save = find.byKey(const Key('save-check-in'));
+    expect(
+      tester
+          .widget<FilledButton>(
+            find.descendant(of: save, matching: find.byType(FilledButton)),
+          )
+          .onPressed,
+      isNull,
+    );
+
+    await tester.tap(find.byKey(const Key('check-in-exercise')));
+    await tester.enterText(
+      find.byKey(const Key('check-in-note')),
+      'Long pool session',
+    );
+    await tester.ensureVisible(save);
+    await tester.tap(save);
+    await tester.pumpAndSettle();
+    expect(find.text('Saved locally · Manual source'), findsOneWidget);
+    expect(find.textContaining('Ring measurement'), findsNothing);
+  });
+
+  testWidgets('standalone back buttons return to the correct parent', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    for (final route in <(String, String, String)>[
+      ('/pairing/scan', 'Back to privacy', 'screen-privacy-promise'),
+      ('/sleep/evidence', 'Back to sleep', 'screen-sleep'),
+      ('/journal/check-in', 'Back to Journal', 'screen-journal'),
+      ('/you/data', 'Back to You', 'screen-you'),
+    ]) {
+      await tester.pumpWidget(
+        LibreRingApp(
+          key: ValueKey<String>('back-${route.$1}'),
+          demoMode: true,
+          initialLocation: route.$1,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip(route.$2));
+      await tester.pumpAndSettle();
+      expect(find.byKey(Key(route.$3)), findsOneWidget, reason: route.$1);
     }
   });
 }

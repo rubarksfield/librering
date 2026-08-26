@@ -131,9 +131,9 @@ class RingProductView {
     }
 
     final trendDays = _trendDays(dataset, now, count: 90);
-    final sleepDuration = latestSleep == null
-        ? null
-        : latestSleep.endedAtUtc.difference(latestSleep.startedAtUtc);
+    final sleepDuration = latestSleep?.endedAtUtc.difference(
+      latestSleep.startedAtUtc,
+    );
     final sleepFresh =
         latestSleep != null &&
         now.difference(latestSleep.endedAtUtc.toLocal()).inHours <= 30;
