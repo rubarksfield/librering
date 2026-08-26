@@ -76,17 +76,90 @@ void main() {
     },
   );
 
-  test('unverified sync and live payloads are never issued', () async {
-    final transport = _FakeTransport(_completeServices());
+  test(
+    'sync requires a connection while live and settings remain gated',
+    () async {
+      final transport = _FakeTransport(_completeServices());
+      final driver = ColmiQringDriver(transport);
+
+      await expectLater(
+        driver.sync(SyncRequest(<SyncDomain>{SyncDomain.sleep}), null),
+        throwsStateError,
+      );
+      await expectLater(
+        driver.startLiveMeasurement(LiveMeasurementType.heartRate),
+        throwsA(isA<ProtocolEvidenceIncompleteException>()),
+      );
+      expect(transport.writes, isEmpty);
+    },
+  );
+
+  test(
+    'verified read-only sync returns a provenance-bearing dataset',
+    () async {
+      final transport = _FakeTransport(
+        _completeServices(),
+        approvedSuiteResponses: true,
+        readValues: <String, List<int>>{
+          '${ColmiQringProfile.deviceInformationService}/'
+                  '${ColmiQringProfile.firmwareRevision}':
+              'RT11CR_1.00.09_260424'.codeUnits,
+        },
+      );
+      final driver = ColmiQringDriver(transport);
+      await driver.connect(
+        const RingPeripheral(
+          deviceId: 'ephemeral-only',
+          name: 'COLMI R12_TEST',
+        ),
+      );
+
+      final result = await driver.sync(
+        SyncRequest(const <SyncDomain>{
+          SyncDomain.battery,
+          SyncDomain.activity,
+          SyncDomain.heartRate,
+          SyncDomain.sleep,
+          SyncDomain.oxygen,
+          SyncDomain.additional,
+        }),
+        null,
+      );
+
+      expect(result.partial, isEmpty);
+      expect(result.completed, hasLength(6));
+      expect(result.dataset, isNotNull);
+      expect(result.dataset!.source.driverId, 'colmi-qring-v1');
+      expect(result.dataset!.source.firmwareVersion, 'RT11CR_1.00.09_260424');
+      expect(result.dataset!.batteryLevel, 73);
+      expect(result.dataset!.recordCount, 0);
+      expect(result.nextCursor, isNotNull);
+      expect(
+        transport.writes.where(
+          (value) => const <int>{0x08, 0x0a, 0x50, 0xff}.contains(value.first),
+        ),
+        isEmpty,
+      );
+    },
+  );
+
+  test('sync fails closed on an unverified firmware', () async {
+    final transport = _FakeTransport(
+      _completeServices(),
+      readValues: <String, List<int>>{
+        '${ColmiQringProfile.deviceInformationService}/'
+                '${ColmiQringProfile.firmwareRevision}':
+            'R12-UNVERIFIED'.codeUnits,
+      },
+    );
     final driver = ColmiQringDriver(transport);
+    await driver.connect(
+      const RingPeripheral(deviceId: 'ephemeral-only', name: 'COLMI R12_TEST'),
+    );
 
     await expectLater(
-      driver.sync(SyncRequest(<SyncDomain>{SyncDomain.sleep}), null),
-      throwsA(isA<ProtocolEvidenceIncompleteException>()),
-    );
-    await expectLater(
-      driver.startLiveMeasurement(LiveMeasurementType.heartRate),
-      throwsA(isA<ProtocolEvidenceIncompleteException>()),
+      driver.sync(SyncRequest(<SyncDomain>{SyncDomain.battery}), null),
+      throwsA(isA<UnsupportedFirmwareException>()),
     );
     expect(transport.writes, isEmpty);
   });

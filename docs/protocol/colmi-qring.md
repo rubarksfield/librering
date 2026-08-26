@@ -1,7 +1,8 @@
 # COLMI QRing protocol implementation record
 
 Status: Phase 6 read-only capture and decoder gate physically verified on one
-owned R12 firmware; production sync/storage remains fail-closed.
+owned R12 firmware; decoded production sync and local storage implemented for
+that exact firmware, with final physical acceptance pending.
 
 Driver version: `colmi-qring-v1`
 
@@ -38,22 +39,24 @@ their declared record lengths; oxygen payloads must be complete 49-byte days.
 
 ## Command ledger
 
-The requests below are enabled only in the explicit, consented capture path.
-Normal production sync and live-measurement APIs remain fail-closed until the
-decoded records have storage, provenance, deduplication, and UI integration.
+The bounded history requests below are enabled in production sync only for
+`RT11CR_1.00.09_260424`. Decoded records now have provenance, deterministic
+deduplication, local persistence and UI integration. Live measurement and
+unrelated setting APIs remain fail-closed. The necessary clock synchronisation
+is the only setting write in production sync.
 
 | Family | ID/type | Current request/response | Unit/meaning | Confidence | Tested R12/firmware | Fixture | Edge cases / provenance |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Battery | `0x03` | capture enabled; decoded | battery percent/charging flag | physically verified | `RT11CR_1.00.09_260424` | anonymised physical | accuracy not independently calibrated |
-| Pulse history | `0x15` | capture enabled; deterministic decoder | BPM-like byte on ring interval grid | physically verified structure | same | synthetic decoder + structural physical | zero/`0xFF` missing; physiological accuracy unknown |
+| Battery | `0x03` | production sync + capture; decoded | battery percent/charging flag | physically verified | `RT11CR_1.00.09_260424` | anonymised physical | accuracy not independently calibrated |
+| Pulse history | `0x15` | production sync + capture; deterministic decoder | BPM-like byte on ring interval grid | physically verified structure | same | synthetic decoder + structural physical | zero/`0xFF` missing; physiological accuracy unknown |
 | Auto pulse | `0x16` | read only in capture | enable flag and interval | physically verified read | same | structural physical | no setting write performed |
-| Activity | `0x43` | capture enabled; deterministic decoder | 15-minute steps plus vendor estimates | physically verified structure | same | synthetic decoder + structural physical | distance/calorie accuracy unvalidated |
-| Stress index | `0x37` | capture enabled; deterministic decoder | opaque vendor byte | physically verified structure; semantic unknown | same | synthetic decoder + structural physical | never treat as emotion or clinical stress |
+| Activity | `0x43` | production sync + capture; deterministic decoder | 15-minute steps plus vendor estimates | physically verified structure | same | synthetic decoder + structural physical | distance/calorie accuracy unvalidated |
+| Stress index | `0x37` | locally retained evidence only | opaque vendor byte | physically verified structure; semantic unknown | same | synthetic decoder + structural physical | never treat as emotion or clinical stress |
 | Live readings | `0x69` / `0x6A` | capture enabled and bounded | pulse/oxygen session | transport verified; no nonzero live reading | same | structural physical | valid warm-up packets classified `noReading` |
 | Big data | `0xBC` | capture enabled; CRC/length validated | history envelope | physically verified | same | synthetic decoder + structural physical | 64 KiB bound; no partial record guessing |
-| Sleep big data | `0x27` | capture enabled; deterministic decoder | firmware session/stage runs | physically verified structure | same | synthetic decoder + structural physical | stages not EEG; accuracy unknown |
-| Oxygen big data | `0x2A` | capture enabled; deterministic decoder | hourly firmware min/max | physically verified structure | same | synthetic decoder + structural physical | not medical oximetry |
-| Firmware HRV index | `0x39` | capture enabled; deterministic decoder | opaque half-hour byte | physically verified structure; semantic unknown | same | synthetic decoder + structural physical | never export/score as RMSSD or SDNN |
+| Sleep big data | `0x27` | production sync + capture; deterministic decoder | firmware session/stage runs | physically verified structure | same | synthetic decoder + structural physical | stages not EEG; accuracy unknown |
+| Oxygen big data | `0x2A` | production sync + capture; deterministic decoder | hourly firmware min/max | physically verified structure | same | synthetic decoder + structural physical | not medical oximetry |
+| Firmware HRV index | `0x39` | locally retained evidence only | opaque half-hour byte | physically verified structure; semantic unknown | same | synthetic decoder + structural physical | never export/score/display as RMSSD or SDNN |
 
 `0x05` display preference did not answer during the physical suite. It remains
 unavailable rather than being interpreted as disabled. Device support, heart

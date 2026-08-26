@@ -43,6 +43,7 @@ class SyncResult {
     required this.recordCount,
     this.nextCursor,
     this.message,
+    this.dataset,
   }) : completed = Set<SyncDomain>.unmodifiable(completed),
        partial = Set<SyncDomain>.unmodifiable(partial);
 
@@ -51,6 +52,7 @@ class SyncResult {
   final int recordCount;
   final SyncCursor? nextCursor;
   final String? message;
+  final RingSyncDataset? dataset;
 }
 
 enum LiveMeasurementType { heartRate, oxygen }

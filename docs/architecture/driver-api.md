@@ -10,5 +10,7 @@ and protocol code never imports Flutter. Undeclared capabilities are unavailable
 by default; the UI must not infer support from a model name.
 
 The current `ColmiQringDriver` validates services and reports corroborated
-capability candidates, but throws `ProtocolEvidenceIncompleteException` before
-unverified sync, live, or setting commands can reach the transport.
+capability candidates. Read-only sync is enabled only for the physically
+verified firmware and returns provenance-bearing decoded records. Unknown
+firmware, live measurement, and settings other than necessary clock
+synchronisation fail closed before an unverified command reaches the transport.

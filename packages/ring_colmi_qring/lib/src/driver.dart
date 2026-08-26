@@ -6,6 +6,8 @@ import 'package:ring_core/ring_core.dart';
 
 import 'approved_capture.dart';
 import 'battery.dart';
+import 'big_data_history.dart' as r12_big;
+import 'history.dart' as r12_history;
 import 'metadata.dart';
 import 'packet.dart';
 import 'profile.dart';
@@ -22,6 +24,10 @@ class UnsupportedFirmwareException implements Exception {
 
 class ColmiQringDriver implements RingDriver {
   ColmiQringDriver(this.transport);
+
+  static const Set<String> physicallyVerifiedFirmwareVersions = <String>{
+    'RT11CR_1.00.09_260424',
+  };
 
   final RingBleTransport transport;
   StreamSubscription<List<int>>? _commandNotificationSubscription;
@@ -795,13 +801,322 @@ class ColmiQringDriver implements RingDriver {
   );
 
   @override
-  Future<SyncResult> sync(SyncRequest request, SyncCursor? previousCursor) {
-    return Future<SyncResult>.error(
-      const ProtocolEvidenceIncompleteException(
-        'Production R12 sync remains disabled until decoded records have local storage, provenance, and idempotent resync.',
-      ),
+  Future<SyncResult> sync(
+    SyncRequest request,
+    SyncCursor? previousCursor,
+  ) async {
+    final connection = _connection;
+    if (connection == null) {
+      throw StateError('R12 sync requires a connected ring.');
+    }
+    final validation = ColmiQringProfile.validateServices(connection.services);
+    if (!validation.isSupported) {
+      throw UnsupportedFirmwareException(validation.reason!);
+    }
+
+    final startedAt = DateTime.now();
+    final firmware = await _readFirmware(connection);
+    if (!physicallyVerifiedFirmwareVersions.contains(firmware.$1)) {
+      throw UnsupportedFirmwareException(
+        'Read-only sync is not enabled for firmware '
+        '${firmware.$1 ?? 'unavailable'}. A model-specific capture is required.',
+      );
+    }
+    final timeRequest = createSetTimeRequest(startedAt);
+    parseSetTimeResponse(
+      (await _requestCommand(
+        timeRequest,
+        timeout: const Duration(seconds: 5),
+      )).bytes,
+    );
+
+    int? batteryLevel;
+    bool? charging;
+    final availability = <RingDataKind, RingDataAvailability>{};
+    final activity = <RingActivityBucket>[];
+    final heartRate = <RingHeartRateSample>[];
+    final vendorIndexes = <RingVendorIndexSample>[];
+    final oxygen = <RingOxygenRange>[];
+    final sleep = <RingSleepSession>[];
+    final completed = <SyncDomain>{};
+    final partial = <SyncDomain>{};
+
+    if (request.domains.contains(SyncDomain.battery)) {
+      final response = await _requestCommand(
+        createBatteryRequest(),
+        timeout: const Duration(seconds: 5),
+      );
+      final reading = parseBatteryResponse(response.bytes);
+      batteryLevel = reading.level;
+      charging = reading.charging;
+      availability[RingDataKind.battery] = RingDataAvailability.complete;
+      completed.add(SyncDomain.battery);
+    }
+
+    if (request.domains.contains(SyncDomain.activity)) {
+      final section = await _captureActivityHistory(days: 8);
+      availability[RingDataKind.activity] = _availabilityFor(section);
+      for (final day in _historyDays(section)) {
+        for (final bucket in r12_history.parseActivityHistory(
+          _responsePackets(day),
+        )) {
+          activity.add(
+            RingActivityBucket(
+              startedAtUtc: bucket.startedAtLocal.toUtc(),
+              steps: bucket.steps,
+              distanceMeters: bucket.distanceMeters,
+              firmwareCalories: bucket.calories,
+            ),
+          );
+        }
+      }
+      _recordDomainStatus(
+        SyncDomain.activity,
+        availability[RingDataKind.activity]!,
+        completed: completed,
+        partial: partial,
+      );
+    }
+
+    if (request.domains.contains(SyncDomain.heartRate)) {
+      final section = await _captureHeartRateHistory(today: startedAt, days: 8);
+      availability[RingDataKind.heartRate] = _availabilityFor(section);
+      for (final day in _historyDays(section)) {
+        for (final sample in r12_history.parseHeartRateHistory(
+          _responsePackets(day),
+          requestedLocalDay: DateTime.parse(day['requestedDate']! as String),
+        )) {
+          heartRate.add(
+            RingHeartRateSample(
+              measuredAtUtc: sample.measuredAtLocal.toUtc(),
+              bpm: sample.bpm,
+            ),
+          );
+        }
+      }
+      _recordDomainStatus(
+        SyncDomain.heartRate,
+        availability[RingDataKind.heartRate]!,
+        completed: completed,
+        partial: partial,
+      );
+    }
+
+    if (request.domains.contains(SyncDomain.sleep)) {
+      if (validation.supportsBigData) {
+        final section = await _captureSleepHistory();
+        availability[RingDataKind.sleep] = _availabilityFor(section);
+        if (section['status'] == 'complete') {
+          for (final night in r12_big.parseSleepHistory(
+            _decodeHex(section['responseHex']! as String),
+            referenceLocalToday: startedAt,
+          )) {
+            sleep.add(
+              RingSleepSession(
+                startedAtUtc: night.startedAtLocal.toUtc(),
+                endedAtUtc: night.endedAtLocal.toUtc(),
+                stages: night.stages.map(
+                  (span) => RingSleepStageSpan(
+                    stage: _mapSleepStage(span.stage),
+                    startedAtUtc: span.startedAtLocal.toUtc(),
+                    durationMinutes: span.duration.inMinutes,
+                  ),
+                ),
+              ),
+            );
+          }
+        }
+      } else {
+        availability[RingDataKind.sleep] = RingDataAvailability.unavailable;
+      }
+      _recordDomainStatus(
+        SyncDomain.sleep,
+        availability[RingDataKind.sleep]!,
+        completed: completed,
+        partial: partial,
+      );
+    }
+
+    if (request.domains.contains(SyncDomain.oxygen)) {
+      if (validation.supportsBigData) {
+        final section = await _captureBigData(
+          dataId: colmiOxygenDataId,
+          request: createBigDataRequest(colmiOxygenDataId),
+          timeout: const Duration(seconds: 12),
+        );
+        availability[RingDataKind.oxygen] = _availabilityFor(section);
+        if (section['status'] == 'complete') {
+          for (final hour in r12_big.parseOxygenHistory(
+            _decodeHex(section['responseHex']! as String),
+            referenceLocalToday: startedAt,
+          )) {
+            oxygen.add(
+              RingOxygenRange(
+                hourStartedAtUtc: hour.hourStartedAtLocal.toUtc(),
+                minimumPercent: hour.minimumPercent,
+                maximumPercent: hour.maximumPercent,
+              ),
+            );
+          }
+        }
+      } else {
+        availability[RingDataKind.oxygen] = RingDataAvailability.unavailable;
+      }
+      _recordDomainStatus(
+        SyncDomain.oxygen,
+        availability[RingDataKind.oxygen]!,
+        completed: completed,
+        partial: partial,
+      );
+    }
+
+    if (request.domains.contains(SyncDomain.additional)) {
+      final stressSection = await _captureIndexedHistory(
+        days: 7,
+        requestForDay: (day) => createStressHistoryRequest(dayOffset: day),
+      );
+      final hrvSection = await _captureIndexedHistory(
+        days: 7,
+        requestForDay: (day) => createHrvHistoryRequest(dayOffset: day),
+      );
+      final stressAvailability = _availabilityFor(stressSection);
+      final hrvAvailability = _availabilityFor(hrvSection);
+      availability[RingDataKind.stressIndex] = stressAvailability;
+      availability[RingDataKind.firmwareHrvIndex] = hrvAvailability;
+      vendorIndexes.addAll(
+        _decodeVendorHistory(
+          stressSection,
+          kind: r12_history.R12VendorIndexKind.stress,
+          referenceLocalToday: startedAt,
+        ),
+      );
+      vendorIndexes.addAll(
+        _decodeVendorHistory(
+          hrvSection,
+          kind: r12_history.R12VendorIndexKind.firmwareHrv,
+          referenceLocalToday: startedAt,
+        ),
+      );
+      if (_isCompletedAvailability(stressAvailability) &&
+          _isCompletedAvailability(hrvAvailability)) {
+        completed.add(SyncDomain.additional);
+      } else {
+        partial.add(SyncDomain.additional);
+      }
+    }
+
+    final dataset = RingSyncDataset(
+      lastSyncedAtUtc: startedAt.toUtc(),
+      source: RingDataSource(driverId: driverId, firmwareVersion: firmware.$1),
+      availability: availability,
+      activity: activity,
+      heartRate: heartRate,
+      vendorIndexes: vendorIndexes,
+      oxygen: oxygen,
+      sleep: sleep,
+      batteryLevel: batteryLevel,
+      charging: charging,
+    );
+    return SyncResult(
+      completed: completed,
+      partial: partial,
+      recordCount: dataset.recordCount,
+      nextCursor: SyncCursor(value: startedAt.toUtc().toIso8601String()),
+      message: partial.isEmpty
+          ? 'R12 read-only sync completed.'
+          : 'R12 read-only sync completed with unavailable sections.',
+      dataset: dataset,
     );
   }
+
+  List<RingVendorIndexSample> _decodeVendorHistory(
+    Map<String, Object?> section, {
+    required r12_history.R12VendorIndexKind kind,
+    required DateTime referenceLocalToday,
+  }) {
+    final values = <RingVendorIndexSample>[];
+    for (final day in _historyDays(section)) {
+      final offset = day['dayOffset']! as int;
+      final requestedDay = DateTime(
+        referenceLocalToday.year,
+        referenceLocalToday.month,
+        referenceLocalToday.day - offset,
+      );
+      for (final sample in r12_history.parseVendorIndexHistory(
+        _responsePackets(day),
+        kind: kind,
+        requestedLocalDay: requestedDay,
+        referenceLocalToday: referenceLocalToday,
+      )) {
+        values.add(
+          RingVendorIndexSample(
+            measuredAtUtc: sample.measuredAtLocal.toUtc(),
+            value: sample.value,
+            kind: kind == r12_history.R12VendorIndexKind.stress
+                ? RingVendorIndexKind.stress
+                : RingVendorIndexKind.firmwareHrv,
+          ),
+        );
+      }
+    }
+    return values;
+  }
+
+  List<Map<String, Object?>> _historyDays(Map<String, Object?> section) =>
+      (section['days']! as List<Object?>).cast<Map<String, Object?>>().toList(
+        growable: false,
+      );
+
+  List<List<int>> _responsePackets(Map<String, Object?> day) =>
+      (day['responseHex']! as List<Object?>)
+          .cast<String>()
+          .map(_decodeHex)
+          .toList(growable: false);
+
+  List<int> _decodeHex(String value) {
+    if (value.length.isOdd) {
+      throw const FormatException('R12 response contains odd-length hex.');
+    }
+    return <int>[
+      for (var index = 0; index < value.length; index += 2)
+        int.parse(value.substring(index, index + 2), radix: 16),
+    ];
+  }
+
+  RingDataAvailability _availabilityFor(Map<String, Object?> section) =>
+      switch (section['status']) {
+        'complete' => RingDataAvailability.complete,
+        'noData' => RingDataAvailability.noData,
+        'noReading' => RingDataAvailability.noReading,
+        'unsupported' => RingDataAvailability.unavailable,
+        'partial' => RingDataAvailability.partial,
+        _ => RingDataAvailability.error,
+      };
+
+  bool _isCompletedAvailability(RingDataAvailability availability) =>
+      availability == RingDataAvailability.complete ||
+      availability == RingDataAvailability.noData ||
+      availability == RingDataAvailability.noReading;
+
+  void _recordDomainStatus(
+    SyncDomain domain,
+    RingDataAvailability availability, {
+    required Set<SyncDomain> completed,
+    required Set<SyncDomain> partial,
+  }) {
+    if (_isCompletedAvailability(availability)) {
+      completed.add(domain);
+    } else {
+      partial.add(domain);
+    }
+  }
+
+  RingSleepStage _mapSleepStage(r12_big.R12SleepStage stage) => switch (stage) {
+    r12_big.R12SleepStage.light => RingSleepStage.light,
+    r12_big.R12SleepStage.deep => RingSleepStage.deep,
+    r12_big.R12SleepStage.rem => RingSleepStage.rem,
+    r12_big.R12SleepStage.awake => RingSleepStage.awake,
+  };
 
   @override
   Future<LiveMeasurementSession> startLiveMeasurement(

@@ -71,6 +71,8 @@ abstract interface class RingPairingClient {
 
   Future<RingApprovedSuiteResult> captureApprovedSuite();
 
+  Future<RingSyncDataset> sync();
+
   Future<void> disconnect();
 }
 
@@ -148,6 +150,26 @@ class PhysicalR12PairingClient implements RingPairingClient {
       charging: capture.charging,
       firmwareVersion: capture.firmwareVersion,
     );
+  }
+
+  @override
+  Future<RingSyncDataset> sync() async {
+    final result = await _driver.sync(
+      SyncRequest(const <SyncDomain>{
+        SyncDomain.battery,
+        SyncDomain.activity,
+        SyncDomain.heartRate,
+        SyncDomain.sleep,
+        SyncDomain.oxygen,
+        SyncDomain.additional,
+      }),
+      null,
+    );
+    final dataset = result.dataset;
+    if (dataset == null) {
+      throw StateError('The verified R12 sync returned no dataset.');
+    }
+    return dataset;
   }
 
   @override

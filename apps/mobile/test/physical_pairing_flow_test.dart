@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:librering_mobile/app.dart';
 import 'package:librering_mobile/src/ble/r12_pairing_client.dart';
+import 'package:librering_mobile/src/storage/ring_data_repository.dart';
 import 'package:ring_core/ring_core.dart';
 
 void main() {
@@ -97,6 +98,63 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Verify COLMI R12_TWO'), findsOneWidget);
   });
+
+  testWidgets('production sync stores the decoded dataset before navigation', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final client = _FakePairingClient();
+    final repository = _MemoryRepository();
+
+    await tester.pumpWidget(
+      LibreRingApp(
+        initialLocation: '/pairing/scan',
+        pairingClient: client,
+        ringDataRepository: repository,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('scan-now')));
+    await tester.pumpAndSettle();
+    final connectButton = find.descendant(
+      of: find.byKey(const Key('scan-now')),
+      matching: find.byType(FilledButton),
+    );
+    tester.widget<FilledButton>(connectButton).onPressed!();
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('sync-ring-data')));
+    await tester.pumpAndSettle();
+
+    expect(client.syncCount, 1);
+    expect(client.disconnectCount, 1);
+    expect(repository.value, isNotNull);
+    expect(find.textContaining('0 records stored locally'), findsOneWidget);
+    expect(find.byKey(const Key('found-view-today')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('sync-ring-data')));
+    await tester.pumpAndSettle();
+    expect(client.connectCount, 2);
+    expect(client.syncCount, 2);
+    expect(client.disconnectCount, 2);
+  });
+}
+
+class _MemoryRepository implements RingDataRepository {
+  RingSyncDataset? value;
+
+  @override
+  Future<void> deleteAll() async => value = null;
+
+  @override
+  Future<RingSyncDataset> merge(RingSyncDataset incoming) async =>
+      value = incoming;
+
+  @override
+  Future<RingSyncDataset?> read() async => value;
 }
 
 class _FakePairingClient implements RingPairingClient {
@@ -118,6 +176,8 @@ class _FakePairingClient implements RingPairingClient {
   int captureCount = 0;
   int timeSyncCount = 0;
   int approvedSuiteCount = 0;
+  int syncCount = 0;
+  int disconnectCount = 0;
 
   @override
   Stream<RingPairingCandidate> scan({required Duration timeout}) =>
@@ -167,5 +227,24 @@ class _FakePairingClient implements RingPairingClient {
   }
 
   @override
-  Future<void> disconnect() async {}
+  Future<RingSyncDataset> sync() async {
+    syncCount += 1;
+    return RingSyncDataset(
+      lastSyncedAtUtc: DateTime.utc(2026, 8, 26, 16, 30),
+      source: const RingDataSource(
+        driverId: 'colmi-qring-v1',
+        firmwareVersion: 'RT11CR_1.00.09_260424',
+      ),
+      availability: const <RingDataKind, RingDataAvailability>{
+        RingDataKind.battery: RingDataAvailability.complete,
+      },
+      batteryLevel: 73,
+      charging: false,
+    );
+  }
+
+  @override
+  Future<void> disconnect() async {
+    disconnectCount += 1;
+  }
 }

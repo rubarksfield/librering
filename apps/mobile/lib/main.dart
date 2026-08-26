@@ -1,10 +1,12 @@
 import 'dart:io';
 
 import 'package:flutter/widgets.dart';
+import 'package:path_provider/path_provider.dart';
 
 import 'app.dart';
 import 'src/ble/flutter_reactive_ble_transport.dart';
 import 'src/ble/r12_pairing_client.dart';
+import 'src/storage/ring_data_repository.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -24,12 +26,16 @@ Future<void> main() async {
                 }
               : null,
         );
+  final ringDataRepository = demoMode
+      ? null
+      : FileRingDataRepository(await getApplicationSupportDirectory());
   runApp(
     LibreRingApp(
       demoMode: demoMode,
       captureMode: captureMode,
       initialLocation: captureMode ? '/pairing/scan' : '/welcome',
       pairingClient: pairingClient,
+      ringDataRepository: ringDataRepository,
     ),
   );
 }

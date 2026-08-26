@@ -1,6 +1,6 @@
 # LibreRing V1
 
-Status: **`IMPLEMENTATION` — Phase 6 physical validation in progress**
+Status: **`IMPLEMENTATION` — Phase 6 local sync built; physical acceptance pending**
 
 Visual direction: **approved for V1 on 2026-08-24**  
 Scoring model: **approved for V1 on 2026-08-24**
@@ -10,10 +10,11 @@ scientific-model foundation for the COLMI R12. The first production Flutter
 vertical slice implements the twelve priority screens, deterministic demo mode,
 local privacy/journal state, and English/pt-PT locale plumbing.
 
-Phase 6 now adds a bounded platform BLE adapter and production pairing flow.
-It scans only after a user action, displays candidates, requires an exact
-`COLMI R12_*` identity, and validates the service profile without sending a
-health or settings command. Raw packets are not retained.
+Phase 6 now adds a bounded platform BLE adapter, production pairing, decoded
+read-only history sync for the physically verified R12 firmware, and a
+versioned duplicate-safe local repository. It stores no raw packets or BLE
+identifier. Unknown firmware, live measurement, scoring, and unrelated settings
+remain fail-closed; necessary time synchronisation is the only setting write.
 
 ## Run the mobile foundation
 
@@ -25,8 +26,8 @@ cd apps/mobile
   --dart-define=LIBRERING_DEMO=true
 ```
 
-Omit the flag to verify the fail-closed production state. It never substitutes
-demo health values when a real repository is unavailable.
+Omit the flag to run production pairing and local sync. Production never
+substitutes demo health values when no stored ring data is available.
 
 ```sh
 /Users/zoerichardson/develop/flutter/bin/flutter analyze
@@ -84,12 +85,10 @@ APPROVE DESIGN AND SCORING V1
 ```
 
 Future design or scoring changes require an explicit versioned revision and must
-not silently alter the frozen V1 implementation contract. Verified R12 command
-payloads, persistent data, health bridges, and scoring execution remain
-later-phase work.
+not silently alter the frozen V1 implementation contract. Health bridges,
+export and scoring execution remain later-phase work.
 
 The Phase 6 protocol foundation is present under `packages/ring_ble` and
-`packages/ring_colmi_qring`; the mobile app now links the audited platform BLE
-adapter. Physical R12 commands remain disabled pending consented hardware
-fixtures. The connected iPhone also requires Developer Mode before the current
-physical scan/service check can be installed.
+`packages/ring_colmi_qring`; the mobile app links the audited BLE adapter and
+local repository. The owned-device read-only capture cleared the exact-firmware
+command gate. A final physical sync/relaunch/resync acceptance run remains.

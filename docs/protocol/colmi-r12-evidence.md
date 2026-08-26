@@ -98,10 +98,11 @@ tests use fully synthetic command and big-data packets.
 
 ## Remaining acceptance work
 
-The read-only protocol gate is complete for the captured firmware. Production
-acceptance still needs duplicate-sync/idempotency, timezone and daylight-saving
-changes, app contention, low-battery behavior, and a future-firmware regression
-device. No factory reset is required for the read-only gate. Physiological
+The read-only protocol gate is complete for the captured firmware. Deterministic
+duplicate-sync/idempotency and local-repository behavior are covered in code.
+Production acceptance still needs a physical end-to-end sync plus timezone and
+daylight-saving changes, app contention, low-battery behavior, and a
+future-firmware regression device. No factory reset is required. Physiological
 validation requires external reference devices or studies and cannot be inferred
 from packet correctness.
 

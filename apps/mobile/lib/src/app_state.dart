@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:ring_core/ring_core.dart';
 
 import 'ble/r12_pairing_client.dart';
+import 'storage/ring_data_repository.dart';
 
 final isDemoModeProvider = Provider<bool>((Ref ref) => false);
 final isProtocolCaptureModeProvider = Provider<bool>((Ref ref) => false);
@@ -12,6 +13,50 @@ final dailySnapshotProvider = Provider<DailySnapshot?>((Ref ref) => null);
 final ringPairingClientProvider = Provider<RingPairingClient?>(
   (Ref ref) => null,
 );
+final ringDataRepositoryProvider = Provider<RingDataRepository?>(
+  (Ref ref) => null,
+);
+
+class RingDataController extends AsyncNotifier<RingSyncDataset?> {
+  @override
+  Future<RingSyncDataset?> build() async {
+    return ref.watch(ringDataRepositoryProvider)?.read();
+  }
+
+  Future<RingSyncDataset> merge(RingSyncDataset incoming) async {
+    final repository = ref.read(ringDataRepositoryProvider);
+    if (repository == null) {
+      throw StateError('Local ring storage is unavailable in this build.');
+    }
+    state = const AsyncLoading<RingSyncDataset?>();
+    try {
+      final merged = await repository.merge(incoming);
+      state = AsyncData<RingSyncDataset?>(merged);
+      return merged;
+    } catch (error, stackTrace) {
+      state = AsyncError<RingSyncDataset?>(error, stackTrace);
+      rethrow;
+    }
+  }
+
+  Future<void> deleteAll() async {
+    final repository = ref.read(ringDataRepositoryProvider);
+    if (repository == null) return;
+    state = const AsyncLoading<RingSyncDataset?>();
+    try {
+      await repository.deleteAll();
+      state = const AsyncData<RingSyncDataset?>(null);
+    } catch (error, stackTrace) {
+      state = AsyncError<RingSyncDataset?>(error, stackTrace);
+      rethrow;
+    }
+  }
+}
+
+final ringDataProvider =
+    AsyncNotifierProvider<RingDataController, RingSyncDataset?>(
+      RingDataController.new,
+    );
 
 enum RingPairingPhase {
   idle,
@@ -39,6 +84,10 @@ class RingPairingState {
     this.approvedSuite,
     this.approvedSuiteInProgress = false,
     this.approvedSuiteError,
+    this.syncInProgress = false,
+    this.syncError,
+    this.lastSyncRecordCount,
+    this.lastSyncedAtUtc,
   });
 
   final RingPairingPhase phase;
@@ -55,6 +104,76 @@ class RingPairingState {
   final RingApprovedSuiteResult? approvedSuite;
   final bool approvedSuiteInProgress;
   final String? approvedSuiteError;
+  final bool syncInProgress;
+  final String? syncError;
+  final int? lastSyncRecordCount;
+  final DateTime? lastSyncedAtUtc;
+
+  static const Object _unset = Object();
+
+  RingPairingState copyWith({
+    RingPairingPhase? phase,
+    List<RingPairingCandidate>? candidates,
+    Object? selected = _unset,
+    Object? evidence = _unset,
+    Object? message = _unset,
+    Object? metadata = _unset,
+    bool? metadataCaptureInProgress,
+    Object? metadataCaptureError = _unset,
+    Object? timeSync = _unset,
+    bool? timeSyncInProgress,
+    Object? timeSyncError = _unset,
+    Object? approvedSuite = _unset,
+    bool? approvedSuiteInProgress,
+    Object? approvedSuiteError = _unset,
+    bool? syncInProgress,
+    Object? syncError = _unset,
+    Object? lastSyncRecordCount = _unset,
+    Object? lastSyncedAtUtc = _unset,
+  }) => RingPairingState(
+    phase: phase ?? this.phase,
+    candidates: candidates ?? this.candidates,
+    selected: identical(selected, _unset)
+        ? this.selected
+        : selected as RingPairingCandidate?,
+    evidence: identical(evidence, _unset)
+        ? this.evidence
+        : evidence as RingPairingEvidence?,
+    message: identical(message, _unset) ? this.message : message as String?,
+    metadata: identical(metadata, _unset)
+        ? this.metadata
+        : metadata as RingMetadata?,
+    metadataCaptureInProgress:
+        metadataCaptureInProgress ?? this.metadataCaptureInProgress,
+    metadataCaptureError: identical(metadataCaptureError, _unset)
+        ? this.metadataCaptureError
+        : metadataCaptureError as String?,
+    timeSync: identical(timeSync, _unset)
+        ? this.timeSync
+        : timeSync as RingTimeSyncResult?,
+    timeSyncInProgress: timeSyncInProgress ?? this.timeSyncInProgress,
+    timeSyncError: identical(timeSyncError, _unset)
+        ? this.timeSyncError
+        : timeSyncError as String?,
+    approvedSuite: identical(approvedSuite, _unset)
+        ? this.approvedSuite
+        : approvedSuite as RingApprovedSuiteResult?,
+    approvedSuiteInProgress:
+        approvedSuiteInProgress ?? this.approvedSuiteInProgress,
+    approvedSuiteError: identical(approvedSuiteError, _unset)
+        ? this.approvedSuiteError
+        : approvedSuiteError as String?,
+    syncInProgress: syncInProgress ?? this.syncInProgress,
+    syncError: identical(syncError, _unset)
+        ? this.syncError
+        : syncError as String?,
+    lastSyncRecordCount: identical(lastSyncRecordCount, _unset)
+        ? this.lastSyncRecordCount
+        : lastSyncRecordCount as int?,
+    lastSyncedAtUtc: identical(lastSyncedAtUtc, _unset)
+        ? this.lastSyncedAtUtc
+        : lastSyncedAtUtc as DateTime?,
+  );
 }
 
 class RingPairingController extends Notifier<RingPairingState> {
@@ -349,6 +468,64 @@ class RingPairingController extends Notifier<RingPairingState> {
       );
     } finally {
       unawaited(_setCaptureIdleTimer(disabled: false));
+    }
+  }
+
+  Future<void> sync() async {
+    if (ref.read(isProtocolCaptureModeProvider)) return;
+    final client = ref.read(ringPairingClientProvider);
+    if (client == null || state.syncInProgress) return;
+    if (state.phase != RingPairingPhase.connected) {
+      final candidate = state.selected;
+      if (candidate == null) return;
+      state = state.copyWith(
+        syncInProgress: true,
+        syncError: null,
+        message: 'Reconnecting for a bounded read-only sync…',
+      );
+      try {
+        final evidence = await client.connect(candidate.advertisement);
+        state = state.copyWith(
+          phase: RingPairingPhase.connected,
+          evidence: evidence,
+        );
+      } catch (_) {
+        state = state.copyWith(
+          phase: RingPairingPhase.found,
+          syncInProgress: false,
+          syncError: 'The ring could not reconnect. Close QRing and try again.',
+        );
+        return;
+      }
+    }
+    state = state.copyWith(syncInProgress: true, syncError: null);
+    try {
+      final dataset = await client.sync();
+      final merged = await ref.read(ringDataProvider.notifier).merge(dataset);
+      state = state.copyWith(
+        syncInProgress: false,
+        syncError: null,
+        lastSyncRecordCount: merged.recordCount,
+        lastSyncedAtUtc: merged.lastSyncedAtUtc,
+        message: 'Ring history synced and stored locally.',
+      );
+    } catch (_) {
+      state = state.copyWith(
+        syncInProgress: false,
+        syncError: 'Sync stopped safely. Existing local data was not replaced.',
+      );
+    } finally {
+      try {
+        await client.disconnect();
+      } catch (_) {
+        // A release error must not discard a completed local sync or escape
+        // the button callback. The platform drops the link when the app exits.
+      } finally {
+        state = state.copyWith(
+          phase: RingPairingPhase.found,
+          syncInProgress: false,
+        );
+      }
     }
   }
 

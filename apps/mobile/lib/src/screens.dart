@@ -9,6 +9,7 @@ import 'package:ring_design_system/ring_design_system.dart';
 import 'app_state.dart';
 import 'ble/r12_pairing_client.dart';
 import 'localized_copy.dart';
+import 'ring_data_view.dart';
 
 class WelcomeScreen extends StatelessWidget {
   const WelcomeScreen({super.key});
@@ -256,6 +257,20 @@ class RingFoundScreen extends ConsumerWidget {
             'Battery ${metadata.batteryLevel}%${metadata.charging ? ' · Charging' : ''} · Firmware ${metadata.firmwareVersion ?? 'not exposed'}',
             'Bateria ${metadata.batteryLevel}%${metadata.charging ? ' · A carregar' : ''} · Firmware ${metadata.firmwareVersion ?? 'não exposto'}',
           );
+    final productionStatus = pairing.syncInProgress
+        ? copyFor(
+            context,
+            'Reading verified history and storing it on this phone…',
+            'A ler o histórico verificado e a guardá-lo neste telemóvel…',
+          )
+        : pairing.syncError ??
+              (pairing.lastSyncedAtUtc == null
+                  ? metadataStatus
+                  : copyFor(
+                      context,
+                      '${pairing.lastSyncRecordCount ?? 0} records stored locally · Recovery scoring remains unavailable',
+                      '${pairing.lastSyncRecordCount ?? 0} registos guardados localmente · A pontuação de recuperação continua indisponível',
+                    ));
     return _OnboardingScreen(
       key: const Key('screen-ring-found'),
       top: Row(
@@ -286,7 +301,9 @@ class RingFoundScreen extends ConsumerWidget {
               'Simulated signal strong · Demo battery 78%',
               'Sinal simulado forte · Bateria de demonstração 78%',
             )
-          : metadataStatus,
+          : captureMode
+          ? metadataStatus
+          : productionStatus,
       detail: captureMode && !demo
           ? Text(
               pairing.approvedSuiteInProgress
@@ -347,10 +364,41 @@ class RingFoundScreen extends ConsumerWidget {
                 ),
               ],
             )
-          : LibreRingPrimaryButton(
+          : demo
+          ? LibreRingPrimaryButton(
               key: const Key('found-view-today'),
               label: copyFor(context, 'View today', 'Ver o dia de hoje'),
               onPressed: () => context.go('/today'),
+            )
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                LibreRingPrimaryButton(
+                  key: const Key('sync-ring-data'),
+                  label: pairing.syncInProgress
+                      ? copyFor(context, 'Syncing…', 'A sincronizar…')
+                      : pairing.lastSyncedAtUtc == null
+                      ? copyFor(context, 'Sync ring data', 'Sincronizar dados')
+                      : copyFor(context, 'Sync again', 'Sincronizar novamente'),
+                  onPressed: pairing.syncInProgress
+                      ? null
+                      : ref.read(ringPairingProvider.notifier).sync,
+                ),
+                if (pairing.lastSyncedAtUtc != null) ...<Widget>[
+                  const SizedBox(height: 8),
+                  TextButton(
+                    key: const Key('found-view-today'),
+                    onPressed: () => context.go('/today'),
+                    child: Text(
+                      copyFor(
+                        context,
+                        'View synced data',
+                        'Ver dados sincronizados',
+                      ),
+                    ),
+                  ),
+                ],
+              ],
             ),
     );
   }
@@ -405,7 +453,12 @@ class TodayScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final demo = ref.watch(isDemoModeProvider);
     final snapshot = ref.watch(dailySnapshotProvider);
+    final dataset = demo ? null : ref.watch(ringDataProvider).value;
+    final view = dataset == null
+        ? null
+        : RingDashboardView.fromDataset(dataset);
     return _AppScreen(
       key: const Key('screen-today'),
       activePath: '/today',
@@ -424,7 +477,13 @@ class TodayScreen extends ConsumerWidget {
         ),
         const SizedBox(height: 20),
         _DateLabel(
-          snapshot == null
+          dataset != null
+              ? copyFor(
+                  context,
+                  'Last sync ${RingDashboardView.clockLabel(dataset.lastSyncedAtUtc)} · Stored locally',
+                  'Última sincronização ${RingDashboardView.clockLabel(dataset.lastSyncedAtUtc)} · Guardado localmente',
+                )
+              : snapshot == null
               ? copyFor(
                   context,
                   'Production mode · No device data',
@@ -437,11 +496,82 @@ class TodayScreen extends ConsumerWidget {
                 ),
         ),
         const SizedBox(height: 36),
-        if (snapshot == null)
+        if (snapshot == null && dataset == null)
           _UnavailableDataCard()
-        else ...<Widget>[
+        else if (view != null) ...<Widget>[
+          _Heading(
+            copyFor(
+              context,
+              'Ring data synced.',
+              'Dados do anel sincronizados.',
+            ),
+            fontSize: 48,
+          ),
+          const SizedBox(height: 18),
+          Text(
+            copyFor(
+              context,
+              'Measured history is stored on this phone. Recovery scoring is unavailable until its inputs and method are validated.',
+              'O histórico medido está guardado neste telemóvel. A pontuação de recuperação está indisponível até os dados e o método serem validados.',
+            ),
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: 30),
+          LibreRingCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                _SectionHeading(
+                  title: copyFor(
+                    context,
+                    'Local ring history',
+                    'Histórico local do anel',
+                  ),
+                  action: copyFor(context, 'View metrics', 'Ver métricas'),
+                  onAction: () => context.go('/metrics'),
+                ),
+                const SizedBox(height: 22),
+                Text(
+                  '${dataset!.recordCount}',
+                  style: const TextStyle(
+                    fontSize: 64,
+                    height: .9,
+                    fontWeight: FontWeight.w200,
+                    letterSpacing: -4,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  copyFor(
+                    context,
+                    'deduplicated records · battery ${dataset.batteryLevel == null ? 'unavailable' : '${dataset.batteryLevel}%'}',
+                    'registos sem duplicados · bateria ${dataset.batteryLevel == null ? 'indisponível' : '${dataset.batteryLevel}%'}',
+                  ),
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+            ),
+          ),
+          if (view.pulseTrend.length >= 2) ...<Widget>[
+            const SizedBox(height: 24),
+            _DataRow(
+              icon: Icons.favorite_outline,
+              title: copyFor(
+                context,
+                'Measured pulse history',
+                'Histórico de pulso medido',
+              ),
+              meta: copyFor(
+                context,
+                '${view.pulseTrend.length} samples · Ring source',
+                '${view.pulseTrend.length} amostras · Origem no anel',
+              ),
+              onTap: () => context.go('/trends'),
+            ),
+          ],
+        ] else ...<Widget>[
           Semantics(
-            label: '${snapshot.recoveryScore}, ${snapshot.recoveryLabel}',
+            label: '${snapshot!.recoveryScore}, ${snapshot.recoveryLabel}',
             child: ExcludeSemantics(
               child: FittedBox(
                 fit: BoxFit.scaleDown,
@@ -515,7 +645,13 @@ class MetricsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final demo = ref.watch(isDemoModeProvider);
     final snapshot = ref.watch(dailySnapshotProvider);
+    final dataset = demo ? null : ref.watch(ringDataProvider).value;
+    final view = dataset == null
+        ? null
+        : RingDashboardView.fromDataset(dataset);
+    final metrics = view?.metrics ?? snapshot?.metrics;
     final largeText = MediaQuery.textScalerOf(context).scale(1) >= 1.5;
     return _AppScreen(
       key: const Key('screen-metrics'),
@@ -527,7 +663,13 @@ class MetricsScreen extends ConsumerWidget {
         ),
         const SizedBox(height: 20),
         _DateLabel(
-          snapshot == null
+          dataset != null
+              ? copyFor(
+                  context,
+                  'Last sync ${RingDashboardView.clockLabel(dataset.lastSyncedAtUtc)} · Ring data',
+                  'Última sincronização ${RingDashboardView.clockLabel(dataset.lastSyncedAtUtc)} · Dados do anel',
+                )
+              : snapshot == null
               ? copyFor(context, 'No device data', 'Sem dados do dispositivo')
               : copyFor(
                   context,
@@ -544,13 +686,13 @@ class MetricsScreen extends ConsumerWidget {
           ),
         ),
         const SizedBox(height: 32),
-        if (snapshot == null)
+        if (metrics == null)
           _UnavailableDataCard()
         else
           GridView.builder(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
-            itemCount: snapshot.metrics.length,
+            itemCount: metrics.length,
             gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: largeText ? 1 : 2,
               mainAxisExtent: largeText ? 280 : 222,
@@ -558,10 +700,10 @@ class MetricsScreen extends ConsumerWidget {
               mainAxisSpacing: 12,
             ),
             itemBuilder: (BuildContext context, int index) {
-              final metric = snapshot.metrics[index];
+              final metric = metrics[index];
               return _MetricCard(
                 metric: metric,
-                onTap: index == 2
+                onTap: metric.label == 'Sleep'
                     ? () => context.go('/sleep')
                     : () => context.go('/trends'),
               );
@@ -572,241 +714,343 @@ class MetricsScreen extends ConsumerWidget {
   }
 }
 
-class SleepScreen extends StatelessWidget {
+class SleepScreen extends ConsumerWidget {
   const SleepScreen({super.key});
 
   @override
-  Widget build(BuildContext context) => _AppScreen(
-    key: const Key('screen-sleep'),
-    activePath: '/metrics',
-    children: <Widget>[
-      _TopBar(
-        leading: _BackButton(
-          label: copyFor(context, 'Back to metrics', 'Voltar às métricas'),
-        ),
-        center: LibreRingEyebrow(copyFor(context, 'Sleep', 'Sono')),
-        trailing: IconButton(
-          tooltip: copyFor(
-            context,
-            'View sleep evidence',
-            'Ver evidência do sono',
+  Widget build(BuildContext context, WidgetRef ref) {
+    final demo = ref.watch(isDemoModeProvider);
+    final dataset = demo ? null : ref.watch(ringDataProvider).value;
+    final view = dataset == null
+        ? null
+        : RingDashboardView.fromDataset(dataset);
+    final session = view?.latestSleep;
+    final duration = session?.endedAtUtc.difference(session.startedAtUtc);
+    return _AppScreen(
+      key: const Key('screen-sleep'),
+      activePath: '/metrics',
+      children: <Widget>[
+        _TopBar(
+          leading: _BackButton(
+            label: copyFor(context, 'Back to metrics', 'Voltar às métricas'),
           ),
-          onPressed: () => context.go('/sleep/evidence'),
-          icon: const Icon(Icons.description_outlined, size: 20),
+          center: LibreRingEyebrow(copyFor(context, 'Sleep', 'Sono')),
+          trailing: IconButton(
+            tooltip: copyFor(
+              context,
+              'View sleep evidence',
+              'Ver evidência do sono',
+            ),
+            onPressed: () => context.go('/sleep/evidence'),
+            icon: const Icon(Icons.description_outlined, size: 20),
+          ),
         ),
-      ),
-      const SizedBox(height: 20),
-      _DateLabel(
-        copyFor(
-          context,
-          'Last night · Demo data',
-          'Noite passada · Demonstração',
-        ),
-      ),
-      const SizedBox(height: 4),
-      _Heading(
-        copyFor(context, 'Well-timed rest', 'Descanso no momento certo'),
-      ),
-      const SizedBox(height: 38),
-      Semantics(
-        label: copyFor(
-          context,
-          'Seven hours and forty-two minutes asleep',
-          'Sete horas e quarenta e dois minutos de sono',
-        ),
-        child: const ExcludeSemantics(
-          child: FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: Alignment.centerLeft,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: <Widget>[
-                Text(
-                  '7:42',
-                  style: TextStyle(
-                    fontSize: 92,
-                    height: .82,
-                    fontWeight: FontWeight.w200,
-                    letterSpacing: -5,
-                  ),
+        const SizedBox(height: 20),
+        _DateLabel(
+          demo
+              ? copyFor(
+                  context,
+                  'Last night · Demo data',
+                  'Noite passada · Demonstração',
+                )
+              : copyFor(
+                  context,
+                  'Latest firmware sleep session · Ring data',
+                  'Última sessão de sono do firmware · Dados do anel',
                 ),
-                Padding(
-                  padding: EdgeInsets.only(left: 8, bottom: 5),
-                  child: Text(
-                    'asleep',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: LibreRingTokens.muted,
+        ),
+        const SizedBox(height: 4),
+        _Heading(
+          demo
+              ? copyFor(context, 'Well-timed rest', 'Descanso no momento certo')
+              : copyFor(context, 'Recorded sleep', 'Sono registado'),
+        ),
+        const SizedBox(height: 38),
+        if (!demo && session == null)
+          _UnavailableDataCard()
+        else ...<Widget>[
+          Semantics(
+            label: demo
+                ? copyFor(
+                    context,
+                    'Seven hours and forty-two minutes asleep',
+                    'Sete horas e quarenta e dois minutos de sono',
+                  )
+                : '${RingDashboardView.durationLabel(duration!)} recorded by ring firmware',
+            child: ExcludeSemantics(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: <Widget>[
+                    Text(
+                      demo
+                          ? '7:42'
+                          : RingDashboardView.durationLabel(duration!),
+                      style: const TextStyle(
+                        fontSize: 92,
+                        height: .82,
+                        fontWeight: FontWeight.w200,
+                        letterSpacing: -5,
+                      ),
                     ),
+                    Padding(
+                      padding: const EdgeInsets.only(left: 8, bottom: 5),
+                      child: Text(
+                        demo ? 'asleep' : 'recorded',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: LibreRingTokens.muted,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            demo
+                ? copyFor(
+                    context,
+                    'A consistent bedtime and fewer interruptions supported this result.',
+                    'Uma hora de deitar consistente e menos interrupções apoiaram este resultado.',
+                  )
+                : copyFor(
+                    context,
+                    'This is firmware-derived history, not a diagnosis or a LibreRing sleep score.',
+                    'Este é um histórico derivado do firmware, não um diagnóstico nem uma pontuação de sono LibreRing.',
                   ),
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: 32),
+          LibreRingCard(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              children: <Widget>[
+                _SectionHeading(
+                  title: copyFor(
+                    context,
+                    'Sleep continuity',
+                    'Continuidade do sono',
+                  ),
+                  action: demo
+                      ? '22:48–06:57'
+                      : '${RingDashboardView.clockLabel(session!.startedAtUtc)}–${RingDashboardView.clockLabel(session.endedAtUtc)}',
+                ),
+                const SizedBox(height: 20),
+                demo ? const _SleepBars() : _SleepStageBars(session!.stages),
+                const SizedBox(height: 12),
+                Row(
+                  children: <Widget>[
+                    Expanded(
+                      child: Text(
+                        demo
+                            ? '22:48'
+                            : RingDashboardView.clockLabel(
+                                session!.startedAtUtc,
+                              ),
+                        style: _axisStyle,
+                      ),
+                    ),
+                    Expanded(
+                      child: Text(
+                        demo
+                            ? '06:57'
+                            : RingDashboardView.clockLabel(session!.endedAtUtc),
+                        textAlign: TextAlign.end,
+                        style: _axisStyle,
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
           ),
+        ],
+        const SizedBox(height: 18),
+        _DataRow(
+          icon: Icons.description_outlined,
+          title: copyFor(
+            context,
+            'How this was calculated',
+            'Como foi calculado',
+          ),
+          meta: copyFor(
+            context,
+            'Signals, confidence, and source',
+            'Sinais, confiança e origem',
+          ),
+          onTap: () => context.go('/sleep/evidence'),
         ),
-      ),
-      const SizedBox(height: 16),
-      Text(
-        copyFor(
-          context,
-          'A consistent bedtime and fewer interruptions supported this result.',
-          'Uma hora de deitar consistente e menos interrupções apoiaram este resultado.',
-        ),
-        style: Theme.of(context).textTheme.bodySmall,
-      ),
-      const SizedBox(height: 32),
-      LibreRingCard(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          children: <Widget>[
-            _SectionHeading(
-              title: copyFor(
-                context,
-                'Sleep continuity',
-                'Continuidade do sono',
-              ),
-              action: '22:48–06:57',
-            ),
-            const SizedBox(height: 20),
-            const _SleepBars(),
-            const SizedBox(height: 12),
-            const Row(
-              children: <Widget>[
-                Expanded(
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: Alignment.centerLeft,
-                    child: Text('22:48', style: _axisStyle),
-                  ),
-                ),
-                Expanded(
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Text('02:52', style: _axisStyle),
-                  ),
-                ),
-                Expanded(
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: Alignment.centerRight,
-                    child: Text('06:57', style: _axisStyle),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-      const SizedBox(height: 18),
-      _DataRow(
-        icon: Icons.description_outlined,
-        title: copyFor(
-          context,
-          'How this was calculated',
-          'Como foi calculado',
-        ),
-        meta: copyFor(
-          context,
-          'Signals, confidence, and source',
-          'Sinais, confiança e origem',
-        ),
-        onTap: () => context.go('/sleep/evidence'),
-      ),
-    ],
-  );
+      ],
+    );
+  }
 }
 
-class EvidenceScreen extends StatelessWidget {
+class EvidenceScreen extends ConsumerWidget {
   const EvidenceScreen({super.key});
 
   @override
-  Widget build(BuildContext context) => _AppScreen(
-    key: const Key('screen-evidence'),
-    activePath: '/metrics',
-    children: <Widget>[
-      _TopBar(
-        leading: _BackButton(
-          label: copyFor(context, 'Back to sleep', 'Voltar ao sono'),
+  Widget build(BuildContext context, WidgetRef ref) {
+    final demo = ref.watch(isDemoModeProvider);
+    final dataset = demo ? null : ref.watch(ringDataProvider).value;
+    final sleep = dataset == null
+        ? null
+        : RingDashboardView.fromDataset(dataset).latestSleep;
+    final duration = sleep == null
+        ? null
+        : RingDashboardView.durationLabel(
+            sleep.endedAtUtc.difference(sleep.startedAtUtc),
+          );
+    return _AppScreen(
+      key: const Key('screen-evidence'),
+      activePath: '/metrics',
+      children: <Widget>[
+        _TopBar(
+          leading: _BackButton(
+            label: copyFor(context, 'Back to sleep', 'Voltar ao sono'),
+          ),
+          center: LibreRingEyebrow(copyFor(context, 'Evidence', 'Evidência')),
+          trailing: _Confidence(
+            demo
+                ? copyFor(context, 'Good confidence', 'Boa confiança')
+                : copyFor(context, 'Firmware source', 'Origem no firmware'),
+          ),
         ),
-        center: LibreRingEyebrow(copyFor(context, 'Evidence', 'Evidência')),
-        trailing: _Confidence(
-          copyFor(context, 'Good confidence', 'Boa confiança'),
+        const SizedBox(height: 20),
+        _DateLabel(
+          copyFor(
+            context,
+            demo
+                ? 'Sleep result · 23–24 August'
+                : 'Latest stored sleep session',
+            demo
+                ? 'Resultado do sono · 23–24 de agosto'
+                : 'Última sessão de sono guardada',
+          ),
         ),
-      ),
-      const SizedBox(height: 20),
-      _DateLabel(
-        copyFor(
-          context,
-          'Sleep result · 23–24 August',
-          'Resultado do sono · 23–24 de agosto',
+        const SizedBox(height: 4),
+        _Heading(
+          demo
+              ? copyFor(context, 'What supports 7:42', 'O que sustenta 7:42')
+              : sleep == null
+              ? copyFor(context, 'No sleep evidence', 'Sem evidência de sono')
+              : copyFor(
+                  context,
+                  'What the firmware reported for $duration',
+                  'O que o firmware indicou para $duration',
+                ),
         ),
-      ),
-      const SizedBox(height: 4),
-      _Heading(copyFor(context, 'What supports 7:42', 'O que sustenta 7:42')),
-      const SizedBox(height: 10),
-      Text(
-        copyFor(
-          context,
-          'LibreRing combines available ring signals. It does not diagnose a sleep condition.',
-          'O LibreRing combina os sinais disponíveis do anel. Não diagnostica problemas de sono.',
+        const SizedBox(height: 10),
+        Text(
+          copyFor(
+            context,
+            demo
+                ? 'LibreRing combines available ring signals. It does not diagnose a sleep condition.'
+                : 'LibreRing preserves the R12 firmware session and stage runs without turning them into a diagnosis or recovery score.',
+            demo
+                ? 'O LibreRing combina os sinais disponíveis do anel. Não diagnostica problemas de sono.'
+                : 'O LibreRing preserva a sessão e as fases indicadas pelo firmware R12 sem as transformar num diagnóstico ou pontuação de recuperação.',
+          ),
+          style: Theme.of(context).textTheme.bodySmall,
         ),
-        style: Theme.of(context).textTheme.bodySmall,
-      ),
-      const SizedBox(height: 34),
-      _DataRow(
-        icon: Icons.sensors_outlined,
-        title: copyFor(
-          context,
-          'Motion continuity',
-          'Continuidade do movimento',
+        const SizedBox(height: 34),
+        if (demo)
+          _DataRow(
+            icon: Icons.sensors_outlined,
+            title: copyFor(
+              context,
+              'Motion continuity',
+              'Continuidade do movimento',
+            ),
+            meta: copyFor(
+              context,
+              'LibreRing IMU · complete',
+              'IMU LibreRing · completa',
+            ),
+            value: copyFor(context, 'Primary', 'Principal'),
+          )
+        else
+          _DataRow(
+            icon: Icons.bedtime_outlined,
+            title: copyFor(
+              context,
+              'Firmware sleep session',
+              'Sessão de sono do firmware',
+            ),
+            meta: sleep == null
+                ? copyFor(context, 'No retained session', 'Sem sessão retida')
+                : copyFor(
+                    context,
+                    '${sleep.stages.length} stage-duration runs · Stored locally',
+                    '${sleep.stages.length} períodos de fases · Guardado localmente',
+                  ),
+            value: sleep == null ? '—' : duration,
+          ),
+        _DataRow(
+          icon: Icons.trending_up,
+          title: copyFor(context, 'Pulse history', 'Histórico de pulso'),
+          meta: copyFor(
+            context,
+            demo
+                ? 'Optical pulse · 94% coverage'
+                : '${dataset?.heartRate.length ?? 0} measured samples stored',
+            demo
+                ? 'Pulso ótico · cobertura de 94%'
+                : '${dataset?.heartRate.length ?? 0} amostras medidas guardadas',
+          ),
+          value: copyFor(context, 'Supporting', 'Apoio'),
         ),
-        meta: copyFor(
-          context,
-          'LibreRing IMU · complete',
-          'IMU LibreRing · completa',
+        if (demo)
+          _DataRow(
+            icon: Icons.edit_outlined,
+            title: copyFor(
+              context,
+              'User correction',
+              'Correção do utilizador',
+            ),
+            meta: copyFor(context, 'None recorded', 'Nenhuma registada'),
+            value: '—',
+          )
+        else
+          _DataRow(
+            icon: Icons.sensors_off_outlined,
+            title: copyFor(context, 'Raw motion', 'Movimento em bruto'),
+            meta: copyFor(
+              context,
+              'Not exposed by the verified R12 protocol',
+              'Não exposto pelo protocolo R12 verificado',
+            ),
+            value: copyFor(context, 'Unavailable', 'Indisponível'),
+          ),
+        _DataRow(
+          icon: Icons.sensors_off_outlined,
+          title: copyFor(
+            context,
+            'Unsupported reading example',
+            'Exemplo de leitura não suportada',
+          ),
+          meta: copyFor(
+            context,
+            'See how missing evidence is handled',
+            'Veja como tratamos evidência em falta',
+          ),
+          onTap: () => context.go('/no-result'),
         ),
-        value: copyFor(context, 'Primary', 'Principal'),
-      ),
-      _DataRow(
-        icon: Icons.trending_up,
-        title: copyFor(context, 'Pulse pattern', 'Padrão de pulso'),
-        meta: copyFor(
-          context,
-          'Optical pulse · 94% coverage',
-          'Pulso ótico · cobertura de 94%',
+        const SizedBox(height: 24),
+        _AccentNote(
+          copyFor(
+            context,
+            'Source records remain attached so later corrections do not erase the original evidence.',
+            'Os registos de origem ficam associados para que correções posteriores não apaguem a evidência original.',
+          ),
         ),
-        value: copyFor(context, 'Supporting', 'Apoio'),
-      ),
-      _DataRow(
-        icon: Icons.edit_outlined,
-        title: copyFor(context, 'User correction', 'Correção do utilizador'),
-        meta: copyFor(context, 'None recorded', 'Nenhuma registada'),
-        value: '—',
-      ),
-      _DataRow(
-        icon: Icons.sensors_off_outlined,
-        title: copyFor(
-          context,
-          'Unsupported reading example',
-          'Exemplo de leitura não suportada',
-        ),
-        meta: copyFor(
-          context,
-          'See how missing evidence is handled',
-          'Veja como tratamos evidência em falta',
-        ),
-        onTap: () => context.go('/no-result'),
-      ),
-      const SizedBox(height: 24),
-      _AccentNote(
-        copyFor(
-          context,
-          'Source records remain attached so later corrections do not erase the original evidence.',
-          'Os registos de origem ficam associados para que correções posteriores não apaguem a evidência original.',
-        ),
-      ),
-    ],
-  );
+      ],
+    );
+  }
 }
 
 class NoResultScreen extends StatelessWidget {
@@ -845,8 +1089,8 @@ class NoResultScreen extends StatelessWidget {
       Text(
         copyFor(
           context,
-          'This ring does not provide blood-oxygen evidence. LibreRing will not estimate or fill the gap.',
-          'Este anel não fornece evidência de oxigénio no sangue. O LibreRing não estima nem preenche a lacuna.',
+          'A live SpO₂ request can return no stable reading even when stored hourly oxygen history exists. LibreRing will not estimate or fill the gap.',
+          'Um pedido de SpO₂ em direto pode não devolver uma leitura estável mesmo quando existe histórico horário guardado. O LibreRing não estima nem preenche a lacuna.',
         ),
         style: Theme.of(context).textTheme.bodySmall,
       ),
@@ -859,8 +1103,8 @@ class NoResultScreen extends StatelessWidget {
           child: Text(
             copyFor(
               context,
-              'View a supported HRV trend',
-              'Ver uma tendência de VFC suportada',
+              'View measured pulse history',
+              'Ver histórico de pulso medido',
             ),
           ),
         ),
@@ -874,7 +1118,14 @@ class TrendsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final demo = ref.watch(isDemoModeProvider);
     final snapshot = ref.watch(dailySnapshotProvider);
+    final dataset = demo ? null : ref.watch(ringDataProvider).value;
+    final view = dataset == null
+        ? null
+        : RingDashboardView.fromDataset(dataset);
+    final values = view?.pulseTrend ?? snapshot?.hrvTrend;
+    final average = view?.averagePulse ?? 62;
     return _AppScreen(
       key: const Key('screen-trends'),
       activePath: '/trends',
@@ -890,29 +1141,37 @@ class TrendsScreen extends ConsumerWidget {
         _DateLabel(
           copyFor(
             context,
-            'Heart-rate variability · Demo data',
-            'Variabilidade da frequência cardíaca · Demonstração',
+            demo
+                ? 'Heart-rate variability · Demo data'
+                : 'Pulse · Measured ring history',
+            demo
+                ? 'Variabilidade da frequência cardíaca · Demonstração'
+                : 'Pulso · Histórico medido pelo anel',
           ),
         ),
         const SizedBox(height: 4),
         _Heading(
           copyFor(
             context,
-            'Stable over eight weeks',
-            'Estável durante oito semanas',
+            demo ? 'Stable over eight weeks' : 'Measured pulse history',
+            demo ? 'Estável durante oito semanas' : 'Histórico de pulso medido',
           ),
         ),
         const SizedBox(height: 34),
-        if (snapshot == null)
+        if (values == null || values.isEmpty)
           _UnavailableDataCard()
         else ...<Widget>[
           Semantics(
             label: copyFor(
               context,
-              '62 milliseconds average',
-              'Média de 62 milissegundos',
+              demo
+                  ? '62 milliseconds average'
+                  : '$average beats per minute average',
+              demo
+                  ? 'Média de 62 milissegundos'
+                  : 'Média de $average batimentos por minuto',
             ),
-            child: const ExcludeSemantics(
+            child: ExcludeSemantics(
               child: FittedBox(
                 fit: BoxFit.scaleDown,
                 alignment: Alignment.centerLeft,
@@ -920,8 +1179,8 @@ class TrendsScreen extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: <Widget>[
                     Text(
-                      '62',
-                      style: TextStyle(
+                      '$average',
+                      style: const TextStyle(
                         fontSize: 92,
                         height: .82,
                         fontWeight: FontWeight.w200,
@@ -929,10 +1188,10 @@ class TrendsScreen extends ConsumerWidget {
                       ),
                     ),
                     Padding(
-                      padding: EdgeInsets.only(left: 8, bottom: 5),
+                      padding: const EdgeInsets.only(left: 8, bottom: 5),
                       child: Text(
-                        'ms average',
-                        style: TextStyle(
+                        demo ? 'ms average' : 'bpm average',
+                        style: const TextStyle(
                           fontSize: 13,
                           color: LibreRingTokens.muted,
                         ),
@@ -947,18 +1206,22 @@ class TrendsScreen extends ConsumerWidget {
           Semantics(
             label: copyFor(
               context,
-              'Eight week HRV trend ranging from 55 to 68 milliseconds',
-              'Tendência de VFC de oito semanas entre 55 e 68 milissegundos',
+              demo
+                  ? 'Eight week HRV trend ranging from 55 to 68 milliseconds'
+                  : 'Measured pulse history with ${values.length} samples',
+              demo
+                  ? 'Tendência de VFC de oito semanas entre 55 e 68 milissegundos'
+                  : 'Histórico de pulso medido com ${values.length} amostras',
             ),
             child: ExcludeSemantics(
               child: SizedBox(
                 height: 250,
                 width: double.infinity,
-                child: CustomPaint(painter: _TrendPainter(snapshot.hrvTrend)),
+                child: CustomPaint(painter: _TrendPainter(values)),
               ),
             ),
           ),
-          const _TrendRange(),
+          if (demo) const _TrendRange(),
           const SizedBox(height: 22),
           LibreRingPrimaryButton(
             key: const Key('trend-add-context'),
@@ -1141,6 +1404,7 @@ class CyclePrivacyScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(privacySettingsProvider);
     final controller = ref.read(privacySettingsProvider.notifier);
+    final ringDataset = ref.watch(ringDataProvider).value;
     return _AppScreen(
       key: const Key('screen-cycle-privacy'),
       activePath: '/privacy/cycle',
@@ -1221,6 +1485,72 @@ class CyclePrivacyScreen extends ConsumerWidget {
             'Nenhum dado do ciclo é partilhado ao alterar estes controlos.',
           ),
         ),
+        if (ringDataset != null) ...<Widget>[
+          const SizedBox(height: 34),
+          _SectionHeading(
+            title: copyFor(context, 'Local ring data', 'Dados locais do anel'),
+            action: copyFor(
+              context,
+              '${ringDataset.recordCount} records',
+              '${ringDataset.recordCount} registos',
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            copyFor(
+              context,
+              'Deletes the versioned ring history store on this phone. The ring itself is not changed.',
+              'Elimina o histórico versionado do anel neste telemóvel. O anel não é alterado.',
+            ),
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: 14),
+          OutlinedButton(
+            key: const Key('delete-ring-data'),
+            onPressed: () async {
+              final confirmed = await showDialog<bool>(
+                context: context,
+                builder: (dialogContext) => AlertDialog(
+                  title: Text(
+                    copyFor(
+                      dialogContext,
+                      'Delete local ring data?',
+                      'Eliminar dados locais do anel?',
+                    ),
+                  ),
+                  content: Text(
+                    copyFor(
+                      dialogContext,
+                      'This removes stored history from this phone. It does not erase the ring.',
+                      'Isto remove o histórico guardado neste telemóvel. Não apaga o anel.',
+                    ),
+                  ),
+                  actions: <Widget>[
+                    TextButton(
+                      onPressed: () => Navigator.pop(dialogContext, false),
+                      child: Text(copyFor(dialogContext, 'Cancel', 'Cancelar')),
+                    ),
+                    FilledButton(
+                      key: const Key('confirm-delete-ring-data'),
+                      onPressed: () => Navigator.pop(dialogContext, true),
+                      child: Text(copyFor(dialogContext, 'Delete', 'Eliminar')),
+                    ),
+                  ],
+                ),
+              );
+              if (confirmed == true) {
+                await ref.read(ringDataProvider.notifier).deleteAll();
+              }
+            },
+            child: Text(
+              copyFor(
+                context,
+                'Delete local ring data',
+                'Eliminar dados locais do anel',
+              ),
+            ),
+          ),
+        ],
         const SizedBox(height: 24),
         LibreRingPrimaryButton(
           label: copyFor(context, 'Done', 'Concluído'),
@@ -1539,8 +1869,8 @@ class _UnavailableDataCard extends StatelessWidget {
         Text(
           copyFor(
             context,
-            'The real ring repository is intentionally not part of this UI phase. Demo values have not been substituted.',
-            'O repositório do anel real não faz parte desta fase de interface. Não foram usados valores de demonstração.',
+            'Pair the verified R12 and sync it. LibreRing never substitutes demo values in production.',
+            'Emparelhe o R12 verificado e sincronize-o. O LibreRing nunca substitui valores de demonstração em produção.',
           ),
           style: Theme.of(context).textTheme.bodySmall,
         ),
@@ -1558,7 +1888,7 @@ class _MetricCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Semantics(
     label:
-        '${metric.label}, ${metric.value} ${metric.unit}. ${metric.context}. Demo data.',
+        '${metric.label}, ${metric.value} ${metric.unit}. ${metric.context}. ${metric.origin == DataOrigin.demo ? 'Demo data' : 'Ring data'}.',
     button: true,
     child: ExcludeSemantics(
       child: InkWell(
@@ -1713,6 +2043,63 @@ class _SleepBars extends StatelessWidget {
                 ),
               ),
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SleepStageBars extends StatelessWidget {
+  const _SleepStageBars(this.stages);
+
+  final List<RingSleepStageSpan> stages;
+
+  @override
+  Widget build(BuildContext context) {
+    if (stages.isEmpty) {
+      return SizedBox(
+        height: 72,
+        child: Center(
+          child: Text(
+            copyFor(
+              context,
+              'No stage-duration runs were retained.',
+              'Não foram retidos períodos de fases.',
+            ),
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ),
+      );
+    }
+    return Semantics(
+      label: '${stages.length} firmware sleep stage runs',
+      child: ExcludeSemantics(
+        child: SizedBox(
+          height: 72,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: stages
+                .map(
+                  (span) => Expanded(
+                    flex: math.max(1, span.durationMinutes),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 1),
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: switch (span.stage) {
+                            RingSleepStage.deep => LibreRingTokens.accent,
+                            RingSleepStage.rem => const Color(0xFFD17B63),
+                            RingSleepStage.light => const Color(0xFFDCA999),
+                            RingSleepStage.awake => LibreRingTokens.surface,
+                          },
+                          borderRadius: BorderRadius.circular(3),
+                        ),
+                      ),
+                    ),
+                  ),
+                )
+                .toList(growable: false),
           ),
         ),
       ),

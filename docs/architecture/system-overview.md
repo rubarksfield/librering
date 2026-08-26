@@ -1,12 +1,13 @@
 # Production architecture
 
-Status: Phase 5 foundation, 2026-08-24.
+Status: Phase 6 local sync implementation, 2026-08-26.
 
 ```text
 apps/mobile
   ├── ring_core              immutable cross-layer records
   ├── ring_demo              deterministic demo records only
-  └── ring_design_system     frozen V1 tokens and visual primitives
+  ├── ring_design_system     frozen V1 tokens and visual primitives
+  └── local repository       versioned decoded history in Application Support
 
 future acquisition/storage/scoring packages
   └── ring_core              never import app or design packages
@@ -24,17 +25,13 @@ health screens render an honest unavailable state.
 
 ## Phase boundary
 
-Phase 5 contains no BLE scan, device driver, database, HealthKit, Health Connect,
-score calculation, export, deletion, network, analytics, or background service.
-The pairing route is interactive only in labelled demo mode. This prevents UI
-progress from being confused with physical COLMI R12 compatibility.
-
-Phase 6 adds pure-Dart BLE/QRing boundaries, synthetic framing tests, and a
-Flutter platform adapter for bounded scanning, connection, service discovery,
-notification subscription and transport writes. The production pairing flow
-accepts only exact `COLMI R12_*` identities and validates services without
-emitting an R12 protocol command. Command payloads remain fail-closed pending
-consented physical fixtures.
+Phase 6 adds pure-Dart BLE/QRing boundaries, synthetic framing tests, a Flutter
+platform adapter, and a versioned local decoded-history repository. The
+production pairing flow accepts only exact `COLMI R12_*` identities. Sync is
+enabled only for the physically verified firmware, stores no raw packets or BLE
+identifier, and preserves idempotency across relaunch. Local deletion is
+available with confirmation. HealthKit, Health Connect, scoring, export,
+networking, analytics, accounts and background sync remain absent.
 
 ## Platform targets
 
@@ -47,12 +44,17 @@ consented physical fixtures.
 ## State and navigation
 
 `go_router` owns twelve stable paths. Riverpod owns the demo-data boundary,
-cycle privacy settings, and manual swim entry. Route widgets receive immutable
-domain records rather than packets, database rows, or formula internals.
+decoded local repository state, pairing/sync state, cycle privacy settings, and
+manual swim entry. Route widgets receive immutable domain records rather than
+packets, storage rows, or formula internals.
 
 ## Safety properties
 
 - Demo and real data cannot mix through a fallback branch.
+- Stable BLE identifiers and raw packets cannot enter the repository API.
+- Corrupt or unknown-schema local data fails closed without overwrite.
+- Recovery remains unavailable; opaque firmware HRV/stress indexes are not
+  displayed or scored.
 - Manual swim provenance remains separate from ring measurements.
 - Cycle entries remain optional, local, and excluded from recovery scoring.
 - Unsupported evidence resolves to no-result instead of estimation.

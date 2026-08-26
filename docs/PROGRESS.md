@@ -10,6 +10,7 @@ Last updated: 2026-08-26
 - Scoring model: **approved for V1 on 2026-08-24**
 - Design/scoring freeze: **complete in commit `04563fe`**
 - Phase 5 production foundation: **complete and verified**
+- Phase 6 decoded local sync: **implemented and code-verified; physical acceptance pending**
 
 ## Completed
 
@@ -102,11 +103,24 @@ Last updated: 2026-08-26
 - Added deterministic, fail-closed decoders backed by fully synthetic fixtures
   and an anonymised physical-structure manifest. Live warm-up-only streams are
   now classified as `noReading`, not timeout.
+- Added an exact-firmware production sync that reads battery, bounded activity,
+  pulse, sleep, hourly oxygen, and opaque vendor-index history. Necessary time
+  synchronisation is its only setting write; unknown firmware and all live or
+  unrelated settings remain fail-closed.
+- Added a versioned Application Support repository with atomic writes,
+  deterministic upsert, 400-day retention, corrupt-schema failure, local
+  deletion, and no BLE identifier/raw-packet input path.
+- Replaced production placeholders with stored ring steps, measured pulse,
+  firmware-derived sleep and oxygen-range views. Recovery remains unavailable;
+  firmware HRV/stress are retained only as opaque evidence and are not displayed
+  as validated metrics.
+- Added repository, duplicate/no-data/corruption/privacy/deletion, real-data UI,
+  and production sync widget tests.
 
 ## In progress
 
-- Phase 6 production sync/storage/provenance integration for the physically
-  verified read-only decoder outputs.
+- Final physical acceptance: first sync, app relaunch persistence, repeated-sync
+  idempotency, and visual inspection on the connected iPhone.
 
 ## Blocked
 
@@ -177,6 +191,10 @@ Last updated: 2026-08-26
 | 2026-08-26 | Physical iPhone preflight | Flutter and Xcode detect iPhone 15 Pro Max, iOS 26.5.2; install stopped because Developer Mode is disabled |
 | 2026-08-26 | Owned-R12 read-only suite | firmware/battery/time/GATT/config plus full supported history families captured in one run; command checksums and big-data length/CRC passed; live HR/SpO₂ returned valid warm-up packets with no reading |
 | 2026-08-26 | R12 decoder verification | 25/25 package tests passed; deterministic synthetic history/big-data fixtures and anonymised physical structural evidence only |
+| 2026-08-26 | Gate 2 package/app verification | core 3/3, BLE 12/12, QRing 27/27, demo 1/1, design system 3/3 and mobile 24/24 passed; all analyzers clean |
+| 2026-08-26 | Local repository safety | repeated merge, no-data preservation, 400-day retention, corrupt-store fail-closed, identifier-field absence and confirmed deletion passed |
+| 2026-08-26 | Production platform builds | signed iOS release and Android debug APK `1.0.0+2` passed; APK SHA-256 `8f25819247194d418857a9dbdfdbc9c2176ad59f75806760170b4dfe5fbaa1ee` |
+| 2026-08-26 | Local-network iPhone delivery | release installed over CoreDevice local-network transport; installed-app readback confirmed version `1.0.0`, build `2`; launch unavailable while phone was not foreground-launchable |
 
 ## Known limitations
 
@@ -192,13 +210,13 @@ Last updated: 2026-08-26
 - Competitor detail can change; sources are dated and should be refreshed for release.
 - Synthetic checks establish deterministic face/safety behaviour, not calibration,
   demographic fairness, medical validity, or user comprehension.
-- Phase 5 plus the Phase 6 scan/connect/capture/decoder work are a production-code
-  foundation, not a complete device application. Normal sync remains fail-closed;
-  database, health bridges, scoring execution, export, and deletion are not
-  implemented yet.
+- The production app now syncs and deletes decoded local history, but it is not a
+  complete device application. Health bridges, scoring execution, export,
+  background sync and application-level storage encryption are not implemented.
 - Android runtime pairing has not been device-tested; only its manifest,
   production compilation and APK output are verified.
-- Low-battery, duplicate-sync, timezone-change, and partial-history transport
+- Duplicate sync is code-tested. A physical relaunch/resync run, low-battery,
+  timezone-change, daylight-saving, app-contention, and partial-history transport
   cases remain pending. The current fixture establishes one ordinary battery
   response and the observed complete/no-data history shapes only.
 - The prototype is interaction-complete but not a usability study with external
@@ -210,7 +228,6 @@ Last updated: 2026-08-26
 
 ## Next concrete action
 
-Map the physically verified decoder outputs into local storage with explicit
-ring provenance, idempotent resync, and unavailable-state handling; then expose
-those records through the approved UI without enabling scientifically gated
-scores.
+Unlock the updated iPhone, open LibreRing with QRing closed, run one production
+sync, relaunch, and run one resync to confirm physical persistence/idempotency and
+visually inspect the stored-data screens. No new capture sequence is required.

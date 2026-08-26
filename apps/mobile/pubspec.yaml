@@ -1,7 +1,7 @@
 name: librering_mobile
 description: LibreRing evidence-first mobile application.
 publish_to: none
-version: 1.0.0+1
+version: 1.0.0+2
 
 environment:
   sdk: ^3.13.1
@@ -19,6 +19,7 @@ dependencies:
       path: packages/flutter_reactive_ble
   go_router: 18.0.0
   intl: ^0.20.2
+  path_provider: 2.1.6
   ring_core:
     path: ../../packages/ring_core
   ring_demo:

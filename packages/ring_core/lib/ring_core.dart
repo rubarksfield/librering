@@ -5,6 +5,169 @@ library;
 
 enum DataOrigin { demo, ring, manual }
 
+enum RingDataKind {
+  battery,
+  activity,
+  heartRate,
+  sleep,
+  oxygen,
+  stressIndex,
+  firmwareHrvIndex,
+}
+
+enum RingDataAvailability {
+  complete,
+  noData,
+  noReading,
+  unavailable,
+  partial,
+  error,
+}
+
+class RingDataSource {
+  const RingDataSource({required this.driverId, this.firmwareVersion});
+
+  final String driverId;
+  final String? firmwareVersion;
+}
+
+class RingActivityBucket {
+  const RingActivityBucket({
+    required this.startedAtUtc,
+    required this.steps,
+    required this.distanceMeters,
+    required this.firmwareCalories,
+    this.origin = DataOrigin.ring,
+  });
+
+  final DateTime startedAtUtc;
+  final int steps;
+  final int distanceMeters;
+  final int firmwareCalories;
+  final DataOrigin origin;
+
+  String get recordKey => 'activity|${startedAtUtc.toIso8601String()}';
+}
+
+class RingHeartRateSample {
+  const RingHeartRateSample({
+    required this.measuredAtUtc,
+    required this.bpm,
+    this.origin = DataOrigin.ring,
+  });
+
+  final DateTime measuredAtUtc;
+  final int bpm;
+  final DataOrigin origin;
+
+  String get recordKey => 'heartRate|${measuredAtUtc.toIso8601String()}';
+}
+
+enum RingVendorIndexKind { stress, firmwareHrv }
+
+class RingVendorIndexSample {
+  const RingVendorIndexSample({
+    required this.measuredAtUtc,
+    required this.value,
+    required this.kind,
+    this.origin = DataOrigin.ring,
+  });
+
+  final DateTime measuredAtUtc;
+  final int value;
+  final RingVendorIndexKind kind;
+  final DataOrigin origin;
+
+  String get recordKey => '${kind.name}|${measuredAtUtc.toIso8601String()}';
+}
+
+class RingOxygenRange {
+  const RingOxygenRange({
+    required this.hourStartedAtUtc,
+    required this.minimumPercent,
+    required this.maximumPercent,
+    this.origin = DataOrigin.ring,
+  });
+
+  final DateTime hourStartedAtUtc;
+  final int minimumPercent;
+  final int maximumPercent;
+  final DataOrigin origin;
+
+  String get recordKey => 'oxygen|${hourStartedAtUtc.toIso8601String()}';
+}
+
+enum RingSleepStage { light, deep, rem, awake }
+
+class RingSleepStageSpan {
+  const RingSleepStageSpan({
+    required this.stage,
+    required this.startedAtUtc,
+    required this.durationMinutes,
+  });
+
+  final RingSleepStage stage;
+  final DateTime startedAtUtc;
+  final int durationMinutes;
+}
+
+class RingSleepSession {
+  RingSleepSession({
+    required this.startedAtUtc,
+    required this.endedAtUtc,
+    required Iterable<RingSleepStageSpan> stages,
+    this.origin = DataOrigin.ring,
+  }) : stages = List<RingSleepStageSpan>.unmodifiable(stages);
+
+  final DateTime startedAtUtc;
+  final DateTime endedAtUtc;
+  final List<RingSleepStageSpan> stages;
+  final DataOrigin origin;
+
+  String get recordKey => 'sleep|${startedAtUtc.toIso8601String()}';
+}
+
+class RingSyncDataset {
+  RingSyncDataset({
+    required this.lastSyncedAtUtc,
+    required this.source,
+    required Map<RingDataKind, RingDataAvailability> availability,
+    Iterable<RingActivityBucket> activity = const <RingActivityBucket>[],
+    Iterable<RingHeartRateSample> heartRate = const <RingHeartRateSample>[],
+    Iterable<RingVendorIndexSample> vendorIndexes =
+        const <RingVendorIndexSample>[],
+    Iterable<RingOxygenRange> oxygen = const <RingOxygenRange>[],
+    Iterable<RingSleepSession> sleep = const <RingSleepSession>[],
+    this.batteryLevel,
+    this.charging,
+  }) : availability = Map<RingDataKind, RingDataAvailability>.unmodifiable(
+         availability,
+       ),
+       activity = List<RingActivityBucket>.unmodifiable(activity),
+       heartRate = List<RingHeartRateSample>.unmodifiable(heartRate),
+       vendorIndexes = List<RingVendorIndexSample>.unmodifiable(vendorIndexes),
+       oxygen = List<RingOxygenRange>.unmodifiable(oxygen),
+       sleep = List<RingSleepSession>.unmodifiable(sleep);
+
+  final DateTime lastSyncedAtUtc;
+  final RingDataSource source;
+  final Map<RingDataKind, RingDataAvailability> availability;
+  final List<RingActivityBucket> activity;
+  final List<RingHeartRateSample> heartRate;
+  final List<RingVendorIndexSample> vendorIndexes;
+  final List<RingOxygenRange> oxygen;
+  final List<RingSleepSession> sleep;
+  final int? batteryLevel;
+  final bool? charging;
+
+  int get recordCount =>
+      activity.length +
+      heartRate.length +
+      vendorIndexes.length +
+      oxygen.length +
+      sleep.length;
+}
+
 enum DeviceCapability {
   battery,
   charging,

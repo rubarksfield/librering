@@ -1,6 +1,6 @@
 # Dependency audit
 
-Reviewed: 2026-08-24.
+Reviewed: 2026-08-26.
 
 ## Current repository
 
@@ -15,6 +15,7 @@ mobile application.
 | `go_router` | 18.0.0 | BSD-3-Clause | Deep-linkable twelve-route map; replace with Router API if removed |
 | `intl` | 0.20.3 | BSD-3-Clause | Locale support required by Flutter localizations; SDK-aligned |
 | `flutter_localizations` | SDK | BSD-3-Clause | English and pt-PT platform localization delegates |
+| `path_provider` | 2.1.6 | BSD-3-Clause | Resolves the sandboxed Application Support directory; replace with direct platform channels if removed |
 
 Local path packages are original Apache-2.0 project code:
 
@@ -23,10 +24,11 @@ Local path packages are original Apache-2.0 project code:
 - `ring_design_system` — frozen tokens, theme, components, and original vector art.
 
 The mobile lockfile SHA-256 is
-`ef918a162a2d76198fec1c58acd54671a5dbce605b3849c59bd7acf0e2b8dada`.
-Source inspection found no `dart:io`, `dart:html`, HTTP client, method channel,
-or event channel usage in production libraries. These dependencies add no app
-permissions, analytics, runtime networking, or native binaries in Phase 5.
+`2cddb245ab44cf7bc78f15a042af2a01b0c384a5cc6e29e61e257e036bf51768`.
+The local repository now uses `dart:io`, and `path_provider` uses the standard
+platform channel to locate Application Support. It adds no health/network
+permission, analytics or runtime networking. BLE remains the only feature with
+radio permissions.
 
 ## Local design tooling
 
@@ -37,9 +39,9 @@ required before anyone redistributes those images; LibreRing does not do so.
 
 ## Later-phase decision record
 
-No BLE, storage, health, chart, crypto, analytics, crash-reporting, authentication,
-or database package is approved yet. Evaluate the minimum later-phase set against
-these gates:
+BLE and local-directory discovery are approved as recorded below. No health,
+chart, crypto, analytics, crash-reporting, authentication or database package is
+approved yet. Evaluate the minimum later-phase set against these gates:
 
 | Area | Required checks |
 | --- | --- |
@@ -67,6 +69,15 @@ platform-interface packages are pinned to the same commit to keep the graph
 coherent. `pubspec.lock` records the resolved revisions. The adapter supports
 scan, connect, service discovery, writes and notifications while `ring_ble`
 remains pure Dart and protocol commands remain fail-closed.
+
+### Audited local-storage dependency
+
+`path_provider` 2.1.6 is maintained by the Flutter team and licensed
+BSD-3-Clause. It resolves the platform Application Support directory but does
+not read or write health data itself. LibreRing owns the versioned JSON format,
+atomic write, 400-day retention, deterministic upsert and exact deletion
+semantics. SQLite and application-level crypto were not added. The platform
+sandbox is the current protection boundary; see ADR 0002 for the limitation.
 
 ## Rejected first-stage dependencies
 
