@@ -1,11 +1,16 @@
 import 'dart:async';
 
 import 'package:flutter_reactive_ble/flutter_reactive_ble.dart';
+import 'package:flutter/services.dart';
 import 'package:ring_ble/ring_ble.dart';
 import 'package:ring_core/ring_core.dart';
 
 abstract interface class ReactiveBleClient {
   Stream<DiscoveredDevice> scanForDevices({required List<Uuid> withServices});
+
+  Future<List<DiscoveredDevice>> connectedDevices({
+    required List<Uuid> withServices,
+  });
 
   Stream<ConnectionStateUpdate> connectToDevice({
     required String id,
@@ -60,10 +65,59 @@ class FlutterReactiveBleClient implements ReactiveBleClient {
     : _ble = ble ?? FlutterReactiveBle();
 
   final FlutterReactiveBle _ble;
+  static const _connectedPeripheralChannel = MethodChannel(
+    'org.librering/connected-peripherals',
+  );
 
   @override
   Stream<DiscoveredDevice> scanForDevices({required List<Uuid> withServices}) =>
       _ble.scanForDevices(withServices: withServices);
+
+  @override
+  Future<List<DiscoveredDevice>> connectedDevices({
+    required List<Uuid> withServices,
+  }) async {
+    try {
+      final devices =
+          await _connectedPeripheralChannel
+              .invokeListMethod<Map<Object?, Object?>>(
+                'retrieve',
+                <String, Object?>{
+                  'serviceUuids': withServices
+                      .map((uuid) => uuid.toString())
+                      .toList(growable: false),
+                },
+              ) ??
+          const <Map<Object?, Object?>>[];
+      return devices
+          .map((device) {
+            final id = device['id'];
+            final name = device['name'];
+            final serviceUuids = device['serviceUuids'];
+            if (id is! String || name is! String || serviceUuids is! List) {
+              return null;
+            }
+            return DiscoveredDevice(
+              id: id,
+              name: name,
+              serviceData: const <Uuid, Uint8List>{},
+              manufacturerData: Uint8List(0),
+              rssi: 0,
+              serviceUuids: serviceUuids
+                  .whereType<String>()
+                  .map(Uuid.parse)
+                  .toList(growable: false),
+              connectable: Connectable.available,
+            );
+          })
+          .whereType<DiscoveredDevice>()
+          .toList(growable: false);
+    } on MissingPluginException {
+      return const <DiscoveredDevice>[];
+    } on PlatformException {
+      return const <DiscoveredDevice>[];
+    }
+  }
 
   @override
   Stream<ConnectionStateUpdate> connectToDevice({
@@ -128,6 +182,9 @@ class FlutterReactiveBleTransport implements RingBleTransport {
     : _client = client ?? FlutterReactiveBleClient();
 
   final ReactiveBleClient _client;
+  static final _qringCommandService = Uuid.parse(
+    '6e40fff0-b5a3-f393-e0a9-e50e24dcca9e',
+  );
   final StreamController<BleConnectionState> _connectionStates =
       StreamController<BleConnectionState>.broadcast(sync: true);
 
@@ -139,6 +196,21 @@ class FlutterReactiveBleTransport implements RingBleTransport {
     late final StreamController<RingAdvertisement> controller;
     StreamSubscription<DiscoveredDevice>? subscription;
     Timer? timer;
+    final seenDeviceIds = <String>{};
+
+    void emit(DiscoveredDevice device) {
+      if (controller.isClosed || !seenDeviceIds.add(device.id)) return;
+      controller.add(
+        RingAdvertisement(
+          deviceId: device.id,
+          name: device.name,
+          serviceUuids: device.serviceUuids
+              .map((uuid) => uuid.toString().toLowerCase())
+              .toSet(),
+          rssi: device.rssi == 0 ? null : device.rssi,
+        ),
+      );
+    }
 
     Future<void> close() async {
       timer?.cancel();
@@ -146,25 +218,27 @@ class FlutterReactiveBleTransport implements RingBleTransport {
       if (!controller.isClosed) await controller.close();
     }
 
+    Future<void> emitConnectedPeripherals() async {
+      try {
+        final devices = await _client.connectedDevices(
+          withServices: <Uuid>[_qringCommandService],
+        );
+        for (final device in devices) {
+          emit(device);
+        }
+      } catch (_) {
+        // Connected-device retrieval is an iOS-only discovery fallback. The
+        // regular bounded advertisement scan remains authoritative elsewhere.
+      }
+    }
+
     controller = StreamController<RingAdvertisement>(
       onListen: () {
         timer = Timer(timeout, close);
+        unawaited(emitConnectedPeripherals());
         subscription = _client
             .scanForDevices(withServices: const <Uuid>[])
-            .listen(
-              (device) => controller.add(
-                RingAdvertisement(
-                  deviceId: device.id,
-                  name: device.name,
-                  serviceUuids: device.serviceUuids
-                      .map((uuid) => uuid.toString().toLowerCase())
-                      .toSet(),
-                  rssi: device.rssi,
-                ),
-              ),
-              onError: controller.addError,
-              onDone: close,
-            );
+            .listen(emit, onError: controller.addError, onDone: close);
       },
       onCancel: close,
     );

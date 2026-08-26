@@ -119,11 +119,17 @@ Last updated: 2026-08-26
 - Separated returning-user refresh from first-run pairing: a stored-data launch
   opens Today, and its sync control performs a bounded in-place scan/connect/sync
   without routing through onboarding or persisting a BLE identifier.
+- Restored the proven 12-second discovery window for routine refresh, added one
+  automatic retry after best-effort stale-link release, and separated
+  no-advertisement, unconfirmed-family and multiple-R12 failure messages.
+- Added a transient iOS CoreBluetooth fallback for an R12 that is already
+  connected and therefore not advertising. It is deduplicated with scan results
+  and does not persist the system peripheral identifier.
 
 ## In progress
 
-- Final physical acceptance: first sync, app relaunch persistence, repeated-sync
-  idempotency, and visual inspection on the connected iPhone.
+- Final physical acceptance of the revised returning-user refresh discovery on
+  the connected iPhone.
 
 ## Blocked
 
@@ -200,6 +206,9 @@ Last updated: 2026-08-26
 | 2026-08-26 | Local-network iPhone delivery | release installed over CoreDevice local-network transport; installed-app readback confirmed version `1.0.0`, build `2`; launch unavailable while phone was not foreground-launchable |
 | 2026-08-26 | Returning-user sync UX | stored-data launch and in-place Today refresh tests passed; approved demo golden remained pixel-identical; mobile suite 27/27 passed |
 | 2026-08-26 | Returning-user UX delivery | signed iOS release and Android debug APK `1.0.0+3` built; APK SHA-256 `969408daf43df1d2a4fb8afa5da280b56bcd02d7c53a049d597a18d74bb77775`; local-network installed-app readback confirmed build `3` |
+| 2026-08-26 | Physical sync persistence/idempotency | user-observed initial and repeated syncs both completed with 409 stored records; relaunch preserved the local dataset |
+| 2026-08-26 | Refresh discovery regression | targeted 9/9 and full mobile 29/29 tests passed; static analysis clean; connected-device fallback, shared 12-second scan, two bounded no-result scans and multi-ring refusal passed |
+| 2026-08-26 | Resilient refresh delivery | signed iOS release and Android debug APK `1.0.0+4` built; APK SHA-256 `aa59fb3c7e61dd0cf9ecca42766358ff9e2b69b51f595b4971719d76cd256da2`; local-network installed-app readback confirmed build `4` |
 
 ## Known limitations
 
@@ -220,10 +229,11 @@ Last updated: 2026-08-26
   background sync and application-level storage encryption are not implemented.
 - Android runtime pairing has not been device-tested; only its manifest,
   production compilation and APK output are verified.
-- Duplicate sync is code-tested. A physical relaunch/resync run, low-battery,
-  timezone-change, daylight-saving, app-contention, and partial-history transport
-  cases remain pending. The current fixture establishes one ordinary battery
-  response and the observed complete/no-data history shapes only.
+- Physical relaunch/resync persistence and duplicate safety passed with the
+  owned ring. Low-battery, timezone-change, daylight-saving, app-contention, and
+  partial-history transport cases remain pending. The current fixture establishes
+  one ordinary battery response and the observed complete/no-data history shapes
+  only.
 - The prototype is interaction-complete but not a usability study with external
   participants or a screen-reader/device-lab certification.
 - Penpot remains a verified local auxiliary environment, not the first-gate visual
@@ -233,6 +243,6 @@ Last updated: 2026-08-26
 
 ## Next concrete action
 
-Unlock the updated iPhone, open LibreRing with QRing closed, run one production
-sync, relaunch, and run one resync to confirm physical persistence/idempotency and
-visually inspect the stored-data screens. No new capture sequence is required.
+Open LibreRing build 4 with QRing force-closed and tap the Today refresh control
+once to confirm the revised discovery path against the owned ring. Do not forget
+or re-pair the ring unless later diagnostics establish that it is necessary.

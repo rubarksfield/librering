@@ -39,6 +39,38 @@ void main() {
     await transport.dispose();
   });
 
+  test('scan includes an already-connected iOS peripheral once', () async {
+    final client = _FakeReactiveBleClient();
+    client.connected = <DiscoveredDevice>[
+      DiscoveredDevice(
+        id: 'connected-device',
+        name: 'COLMI R12_CONNECTED',
+        serviceData: const <Uuid, Uint8List>{},
+        manufacturerData: Uint8List(0),
+        rssi: 0,
+        serviceUuids: <Uuid>[
+          Uuid.parse('6e40fff0-b5a3-f393-e0a9-e50e24dcca9e'),
+        ],
+      ),
+    ];
+    final transport = FlutterReactiveBleTransport(client: client);
+
+    final results = transport
+        .scan(timeout: const Duration(milliseconds: 20))
+        .toList();
+    await Future<void>.delayed(Duration.zero);
+    client.scanController.add(client.connected.single);
+
+    final advertisements = await results;
+    expect(advertisements, hasLength(1));
+    expect(advertisements.single.name, 'COLMI R12_CONNECTED');
+    expect(advertisements.single.rssi, isNull);
+    expect(client.connectedServiceFilter, <Uuid>[
+      Uuid.parse('6e40fff0-b5a3-f393-e0a9-e50e24dcca9e'),
+    ]);
+    await transport.dispose();
+  });
+
   test(
     'connect and discovery map plugin state without issuing writes',
     () async {
@@ -109,12 +141,22 @@ class _FakeReactiveBleClient implements ReactiveBleClient {
 
   List<ReactiveBleDiscoveredService> services =
       <ReactiveBleDiscoveredService>[];
+  List<DiscoveredDevice> connected = <DiscoveredDevice>[];
+  List<Uuid>? connectedServiceFilter;
   final List<List<int>> writes = <List<int>>[];
   List<int> readValue = const <int>[];
 
   @override
   Stream<DiscoveredDevice> scanForDevices({required List<Uuid> withServices}) =>
       scanController.stream;
+
+  @override
+  Future<List<DiscoveredDevice>> connectedDevices({
+    required List<Uuid> withServices,
+  }) async {
+    connectedServiceFilter = withServices;
+    return connected;
+  }
 
   @override
   Stream<ConnectionStateUpdate> connectToDevice({

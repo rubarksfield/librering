@@ -173,6 +173,7 @@ void main() {
     expect(client.connectCount, 1);
     expect(client.syncCount, 1);
     expect(client.disconnectCount, 1);
+    expect(client.scanTimeouts, const <Duration>[Duration(seconds: 12)]);
   });
 
   testWidgets('quick sync does not choose between multiple nearby R12s', (
@@ -219,6 +220,45 @@ void main() {
     );
     expect(client.connectCount, 0);
     expect(client.syncCount, 0);
+    expect(client.scanTimeouts, const <Duration>[Duration(seconds: 12)]);
+  });
+
+  testWidgets('quick sync retries a ring that is not advertising yet', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final client = _FakePairingClient(
+      candidates: const <RingPairingCandidate>[],
+    );
+
+    await tester.pumpWidget(
+      LibreRingApp(
+        initialLocation: '/today',
+        pairingClient: client,
+        ringDataRepository: _MemoryRepository(),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('today-quick-sync')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('screen-today')), findsOneWidget);
+    expect(
+      find.text(
+        'The R12 is connected elsewhere or is not advertising. Force-close QRing, wake the ring, and try again.',
+      ),
+      findsOneWidget,
+    );
+    expect(client.scanTimeouts, const <Duration>[
+      Duration(seconds: 12),
+      Duration(seconds: 12),
+    ]);
+    expect(client.connectCount, 0);
+    expect(client.syncCount, 0);
+    expect(client.disconnectCount, 1);
   });
 }
 
@@ -257,10 +297,13 @@ class _FakePairingClient implements RingPairingClient {
   int approvedSuiteCount = 0;
   int syncCount = 0;
   int disconnectCount = 0;
+  final List<Duration> scanTimeouts = <Duration>[];
 
   @override
-  Stream<RingPairingCandidate> scan({required Duration timeout}) =>
-      Stream<RingPairingCandidate>.fromIterable(candidates);
+  Stream<RingPairingCandidate> scan({required Duration timeout}) {
+    scanTimeouts.add(timeout);
+    return Stream<RingPairingCandidate>.fromIterable(candidates);
+  }
 
   @override
   Future<RingPairingEvidence> connect(RingAdvertisement advertisement) async {

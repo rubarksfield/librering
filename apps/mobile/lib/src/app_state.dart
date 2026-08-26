@@ -178,6 +178,7 @@ class RingPairingState {
 
 class RingPairingController extends Notifier<RingPairingState> {
   static const _captureControl = MethodChannel('org.librering/capture-control');
+  static const _discoveryTimeout = Duration(seconds: 12);
   StreamSubscription<RingPairingCandidate>? _scanSubscription;
   final Map<String, RingPairingCandidate> _candidates =
       <String, RingPairingCandidate>{};
@@ -209,7 +210,7 @@ class RingPairingController extends Notifier<RingPairingState> {
       message: 'Looking for a nearby COLMI R12…',
     );
     _scanSubscription = client
-        .scan(timeout: const Duration(seconds: 12))
+        .scan(timeout: _discoveryTimeout)
         .listen(
           _recordCandidate,
           onError: (Object _) {
@@ -547,22 +548,32 @@ class RingPairingController extends Notifier<RingPairingState> {
       message: 'Looking for your nearby R12…',
     );
     try {
-      await for (final candidate in client.scan(
-        timeout: const Duration(seconds: 6),
-      )) {
-        _candidates[candidate.advertisement.deviceId] = candidate;
+      await _collectQuickSyncCandidates(client);
+      var exact = _exactCandidates();
+      if (exact.isEmpty) {
+        state = state.copyWith(
+          message: 'The ring is not visible yet. Trying once more…',
+        );
+        try {
+          await client.disconnect();
+        } catch (_) {
+          // Releasing stale app-side state is best-effort before the retry.
+        }
+        _candidates.clear();
+        await _collectQuickSyncCandidates(client);
+        exact = _exactCandidates();
       }
-      final exact = _candidates.values
-          .where((candidate) => candidate.exact)
-          .toList(growable: false);
       if (exact.length != 1) {
+        final candidates = _sortedCandidates();
         state = state.copyWith(
           phase: RingPairingPhase.failed,
-          candidates: _sortedCandidates(),
+          candidates: candidates,
           syncInProgress: false,
-          syncError: exact.isEmpty
-              ? 'No COLMI R12 was found. Close QRing and try again.'
-              : 'More than one R12 was found. Use device setup to choose one.',
+          syncError: exact.isNotEmpty
+              ? 'More than one R12 was found. Use device setup to choose one.'
+              : candidates.isEmpty
+              ? 'The R12 is connected elsewhere or is not advertising. Force-close QRing, wake the ring, and try again.'
+              : 'A nearby QRing-family device was seen, but it did not advertise its R12 identity. Keep it close and try again.',
         );
         return;
       }
@@ -595,6 +606,16 @@ class RingPairingController extends Notifier<RingPairingState> {
       );
     }
   }
+
+  Future<void> _collectQuickSyncCandidates(RingPairingClient client) async {
+    await for (final candidate in client.scan(timeout: _discoveryTimeout)) {
+      _candidates[candidate.advertisement.deviceId] = candidate;
+    }
+  }
+
+  List<RingPairingCandidate> _exactCandidates() => _candidates.values
+      .where((candidate) => candidate.exact)
+      .toList(growable: false);
 
   Future<void> _setCaptureIdleTimer({required bool disabled}) async {
     try {

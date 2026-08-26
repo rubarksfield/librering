@@ -33,9 +33,12 @@ live measurement and all other settings fail closed.
 
 The presence of valid stored data, rather than a stored BLE identity, marks a
 returning user. Returning launches open Today, where routine refresh performs a
-new bounded scan and requires exactly one advertised R12 before connecting. No
-result or multiple exact matches stop safely; first-run pairing remains a
-separate setup journey.
+new bounded scan and requires exactly one R12 before connecting. On iOS, the
+same discovery pass also queries CoreBluetooth for a currently connected
+peripheral exposing the QRing command service, because it may not advertise.
+That transient system identifier is deduplicated with scan results and is never
+persisted. No result or multiple exact matches stop safely; first-run pairing
+remains a separate setup journey.
 
 ## Consequences
 

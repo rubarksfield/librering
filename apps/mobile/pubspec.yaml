@@ -1,7 +1,7 @@
 name: librering_mobile
 description: LibreRing evidence-first mobile application.
 publish_to: none
-version: 1.0.0+3
+version: 1.0.0+4
 
 environment:
   sdk: ^3.13.1
