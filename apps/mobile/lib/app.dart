@@ -8,6 +8,8 @@ import 'package:ring_design_system/ring_design_system.dart';
 import 'src/app_state.dart';
 import 'src/ble/r12_pairing_client.dart';
 import 'src/screens.dart';
+import 'src/storage/data_export_service.dart';
+import 'src/storage/journal_repository.dart';
 import 'src/storage/ring_data_repository.dart';
 
 Future<String> resolveInitialLocation({
@@ -34,6 +36,8 @@ class LibreRingApp extends StatelessWidget {
     this.locale,
     this.pairingClient,
     this.ringDataRepository,
+    this.journalRepository,
+    this.dataExportService,
     super.key,
   });
 
@@ -43,6 +47,8 @@ class LibreRingApp extends StatelessWidget {
   final Locale? locale;
   final RingPairingClient? pairingClient;
   final RingDataRepository? ringDataRepository;
+  final JournalRepository? journalRepository;
+  final DataExportService? dataExportService;
 
   @override
   Widget build(BuildContext context) {
@@ -56,6 +62,10 @@ class LibreRingApp extends StatelessWidget {
           ringPairingClientProvider.overrideWithValue(pairingClient),
         if (ringDataRepository != null)
           ringDataRepositoryProvider.overrideWithValue(ringDataRepository),
+        if (journalRepository != null)
+          journalRepositoryProvider.overrideWithValue(journalRepository),
+        if (dataExportService != null)
+          dataExportServiceProvider.overrideWithValue(dataExportService),
       ],
       child: _LibreRingShell(initialLocation: initialLocation, locale: locale),
     );

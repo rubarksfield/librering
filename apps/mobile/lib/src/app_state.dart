@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:ring_core/ring_core.dart';
 
 import 'ble/r12_pairing_client.dart';
+import 'storage/data_export_service.dart';
+import 'storage/journal_repository.dart';
 import 'storage/ring_data_repository.dart';
 
 final isDemoModeProvider = Provider<bool>((Ref ref) => false);
@@ -14,6 +16,12 @@ final ringPairingClientProvider = Provider<RingPairingClient?>(
   (Ref ref) => null,
 );
 final ringDataRepositoryProvider = Provider<RingDataRepository?>(
+  (Ref ref) => null,
+);
+final journalRepositoryProvider = Provider<JournalRepository?>(
+  (Ref ref) => null,
+);
+final dataExportServiceProvider = Provider<DataExportService?>(
   (Ref ref) => null,
 );
 
@@ -56,6 +64,102 @@ class RingDataController extends AsyncNotifier<RingSyncDataset?> {
 final ringDataProvider =
     AsyncNotifierProvider<RingDataController, RingSyncDataset?>(
       RingDataController.new,
+    );
+
+class JournalController extends AsyncNotifier<List<JournalEntry>> {
+  @override
+  Future<List<JournalEntry>> build() async =>
+      await ref.watch(journalRepositoryProvider)?.read() ??
+      const <JournalEntry>[];
+
+  Future<JournalEntry> saveSwim({
+    required int durationMinutes,
+    required String environment,
+    required String effort,
+    DateTime? occurredAtUtc,
+  }) async {
+    final repository = ref.read(journalRepositoryProvider);
+    final occurred = (occurredAtUtc ?? DateTime.now()).toUtc();
+    final entry = JournalEntry(
+      id: 'swim|${occurred.toIso8601String()}',
+      kind: JournalEntryKind.swim,
+      occurredAtUtc: occurred,
+      title: environment == 'Open water' ? 'Open-water swim' : 'Pool swim',
+      details: '$durationMinutes minutes · $effort effort',
+      durationMinutes: durationMinutes,
+      environment: environment,
+      effort: effort,
+    );
+    if (repository == null) {
+      state = AsyncData<List<JournalEntry>>(<JournalEntry>[
+        entry,
+        ...state.value ?? const <JournalEntry>[],
+      ]);
+      return entry;
+    }
+    state = const AsyncLoading<List<JournalEntry>>();
+    try {
+      final entries = await repository.upsert(entry);
+      state = AsyncData<List<JournalEntry>>(entries);
+      return entry;
+    } catch (error, stackTrace) {
+      state = AsyncError<List<JournalEntry>>(error, stackTrace);
+      rethrow;
+    }
+  }
+
+  Future<void> delete(String id) async {
+    final repository = ref.read(journalRepositoryProvider);
+    if (repository == null) {
+      state = AsyncData<List<JournalEntry>>(
+        (state.value ?? const <JournalEntry>[])
+            .where((entry) => entry.id != id)
+            .toList(growable: false),
+      );
+      return;
+    }
+    state = AsyncData<List<JournalEntry>>(await repository.delete(id));
+  }
+
+  Future<void> deleteAll() async {
+    await ref.read(journalRepositoryProvider)?.deleteAll();
+    state = const AsyncData<List<JournalEntry>>(<JournalEntry>[]);
+  }
+}
+
+final journalProvider =
+    AsyncNotifierProvider<JournalController, List<JournalEntry>>(
+      JournalController.new,
+    );
+
+class DataExportController extends AsyncNotifier<LocalExportResult?> {
+  @override
+  Future<LocalExportResult?> build() async => null;
+
+  Future<LocalExportResult> create() async {
+    final service = ref.read(dataExportServiceProvider);
+    final dataset = ref.read(ringDataProvider).value;
+    if (service == null || dataset == null) {
+      throw StateError('Local export requires stored ring data.');
+    }
+    state = const AsyncLoading<LocalExportResult?>();
+    try {
+      final result = await service.create(
+        dataset: dataset,
+        journal: ref.read(journalProvider).value ?? const <JournalEntry>[],
+      );
+      state = AsyncData<LocalExportResult?>(result);
+      return result;
+    } catch (error, stackTrace) {
+      state = AsyncError<LocalExportResult?>(error, stackTrace);
+      rethrow;
+    }
+  }
+}
+
+final dataExportProvider =
+    AsyncNotifierProvider<DataExportController, LocalExportResult?>(
+      DataExportController.new,
     );
 
 enum RingPairingPhase {

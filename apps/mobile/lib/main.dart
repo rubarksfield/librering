@@ -6,6 +6,8 @@ import 'package:path_provider/path_provider.dart';
 import 'app.dart';
 import 'src/ble/flutter_reactive_ble_transport.dart';
 import 'src/ble/r12_pairing_client.dart';
+import 'src/storage/data_export_service.dart';
+import 'src/storage/journal_repository.dart';
 import 'src/storage/ring_data_repository.dart';
 
 Future<void> main() async {
@@ -26,9 +28,18 @@ Future<void> main() async {
                 }
               : null,
         );
-  final ringDataRepository = demoMode
+  final supportDirectory = demoMode
       ? null
-      : FileRingDataRepository(await getApplicationSupportDirectory());
+      : await getApplicationSupportDirectory();
+  final ringDataRepository = supportDirectory == null
+      ? null
+      : FileRingDataRepository(supportDirectory);
+  final journalRepository = supportDirectory == null
+      ? null
+      : FileJournalRepository(supportDirectory);
+  final dataExportService = demoMode
+      ? null
+      : FileDataExportService(await getApplicationDocumentsDirectory());
   final initialLocation = await resolveInitialLocation(
     demoMode: demoMode,
     captureMode: captureMode,
@@ -41,6 +52,8 @@ Future<void> main() async {
       initialLocation: initialLocation,
       pairingClient: pairingClient,
       ringDataRepository: ringDataRepository,
+      journalRepository: journalRepository,
+      dataExportService: dataExportService,
     ),
   );
 }

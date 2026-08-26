@@ -10,6 +10,7 @@ import 'app_state.dart';
 import 'ble/r12_pairing_client.dart';
 import 'localized_copy.dart';
 import 'ring_data_view.dart';
+import 'storage/journal_repository.dart';
 
 class WelcomeScreen extends StatelessWidget {
   const WelcomeScreen({super.key});
@@ -1296,7 +1297,10 @@ class _SwimEntryScreenState extends ConsumerState<SwimEntryScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final saved = ref.watch(swimEntryProvider);
+    final journal = ref.watch(journalProvider);
+    final saved = journal.value
+        ?.where((entry) => entry.kind == JournalEntryKind.swim)
+        .firstOrNull;
     return _AppScreen(
       key: const Key('screen-swim'),
       activePath: '/trends',
@@ -1391,30 +1395,32 @@ class _SwimEntryScreenState extends ConsumerState<SwimEntryScreen> {
           key: const Key('save-swim'),
           label: copyFor(context, 'Save locally', 'Guardar localmente'),
           icon: Icons.check,
-          onPressed: () {
-            final duration = int.tryParse(_duration.text);
-            if (duration == null || duration < 1 || duration > 300) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    copyFor(
-                      context,
-                      'Enter 1–300 minutes.',
-                      'Introduza 1–300 minutos.',
-                    ),
-                  ),
-                ),
-              );
-              return;
-            }
-            ref
-                .read(swimEntryProvider.notifier)
-                .save(
-                  durationMinutes: duration,
-                  poolLength: _pool,
-                  effort: _effort,
-                );
-          },
+          onPressed: journal.isLoading
+              ? null
+              : () async {
+                  final duration = int.tryParse(_duration.text);
+                  if (duration == null || duration < 1 || duration > 300) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          copyFor(
+                            context,
+                            'Enter 1–300 minutes.',
+                            'Introduza 1–300 minutos.',
+                          ),
+                        ),
+                      ),
+                    );
+                    return;
+                  }
+                  await ref
+                      .read(journalProvider.notifier)
+                      .saveSwim(
+                        durationMinutes: duration,
+                        environment: _pool,
+                        effort: _effort,
+                      );
+                },
         ),
         const SizedBox(height: 10),
         Center(

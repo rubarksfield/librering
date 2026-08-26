@@ -7,6 +7,7 @@ environment:
   sdk: ^3.13.1
 
 dependencies:
+  crypto: 3.0.7
   flutter:
     sdk: flutter
   flutter_localizations:
@@ -26,6 +27,7 @@ dependencies:
     path: ../../packages/ring_demo
   ring_design_system:
     path: ../../packages/ring_design_system
+  share_plus: 13.3.0
   ring_ble:
     path: ../../packages/ring_ble
   ring_colmi_qring:
