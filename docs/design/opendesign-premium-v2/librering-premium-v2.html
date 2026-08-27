@@ -1,0 +1,599 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f4f1ea">
+  <meta name="description" content="LibreRing Premium V2: a complete local-first smart-ring product prototype with 26 routes and honest evidence states.">
+  <meta property="og:title" content="LibreRing Premium V2">
+  <meta property="og:description" content="Quiet, evidence-first health software for local smart-ring data.">
+  <title>LibreRing — Premium V2 product prototype</title>
+  <style>
+    :root {
+      --bg: oklch(0.9585 0.0098 87.47);
+      --surface: oklch(0.9132 0.0058 84.57);
+      --fg: oklch(0.2034 0.0058 106.91);
+      --muted: oklch(0.4958 0.0112 93.69);
+      --border: oklch(0.8518 0.0101 87.48);
+      --accent: oklch(0.5973 0.1511 33.88);
+      --paper: oklch(0.982 0.004 88);
+      --ink-soft: oklch(0.33 0.008 102);
+      --accent-soft: oklch(0.84 0.052 34);
+      --danger: oklch(0.48 0.15 29);
+      --success: oklch(0.45 0.07 145);
+      --font-display: "Avenir Next Condensed", "Helvetica Neue", "Neue Haas Grotesk Text Pro", "Nimbus Sans Narrow", sans-serif;
+      --font-body: "Avenir Next", "Helvetica Neue", "Nimbus Sans", sans-serif;
+      --font-mono: "SFMono-Regular", "SF Mono", "IBM Plex Mono", monospace;
+      --ease-out: cubic-bezier(.2, 0, 0, 1);
+      --ease-spring: cubic-bezier(.2, 1.28, .42, 1);
+      --tap: 44px;
+      --phone-width: 390px;
+      --phone-height: 844px;
+      --text-scale: 1;
+    }
+    * { box-sizing: border-box; }
+    html { min-width: 320px; color-scheme: light; background: var(--bg); scroll-behavior: smooth; }
+    body { margin: 0; color: var(--fg); background: var(--bg); font: 400 16px/1.55 var(--font-body); text-rendering: optimizeLegibility; }
+    button, input, select, textarea { font: inherit; color: inherit; }
+    button { cursor: pointer; }
+    button:disabled, input:disabled, select:disabled, textarea:disabled { cursor: not-allowed; opacity: .52; }
+    :focus-visible { outline: 3px solid var(--fg); outline-offset: 3px; }
+    .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+    .skip-link { position: fixed; z-index: 8; left: 16px; top: 12px; padding: 10px 14px; background: var(--fg); color: var(--paper); transform: translateY(-160%); transition: transform 140ms var(--ease-out); }
+    .skip-link:focus { transform: translateY(0); }
+
+    /* Review shell. Product controls never appear inside the phone. */
+    .review-shell { max-width: 1860px; margin: 0 auto; padding: 42px clamp(18px, 4vw, 72px) 108px; }
+    .review-header { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 32px; align-items: end; padding-bottom: 40px; border-bottom: 1px solid var(--border); }
+    .review-kicker, .eyebrow { margin: 0 0 9px; color: var(--muted); font: 600 11px/1.4 var(--font-body); letter-spacing: .08em; text-transform: uppercase; }
+    .review-title { max-width: 12ch; margin: 0; font: 300 clamp(46px, 6vw, 86px)/.98 var(--font-display); letter-spacing: -.035em; text-wrap: balance; }
+    .review-copy { max-width: 62ch; margin: 18px 0 0; color: var(--muted); }
+    .host-button, .host-control, .gallery-open { min-height: 44px; padding: 0 16px; border: 1px solid var(--border); border-radius: 10px; background: var(--paper); font-size: 13px; font-weight: 600; letter-spacing: .02em; transition: transform 120ms var(--ease-out), background-color 150ms var(--ease-out), border-color 150ms var(--ease-out); }
+    .host-button { border-color: var(--fg); background: var(--fg); color: var(--paper); }
+    .host-button:active, .host-control:active, .gallery-open:active { transform: scale(.97); }
+    .review-summary { display: flex; flex-wrap: wrap; gap: 16px 24px; padding: 22px 0 0; color: var(--muted); font: 500 12px/1.4 var(--font-mono); }
+    .review-summary strong { color: var(--fg); font-weight: 600; }
+    .gallery-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(390px, 1fr)); gap: 72px 34px; align-items: start; padding-top: 68px; }
+    .gallery-item { min-width: 0; display: grid; justify-items: center; gap: 14px; }
+    .gallery-caption { width: 390px; max-width: 100%; display: flex; gap: 14px; align-items: center; justify-content: space-between; }
+    .gallery-label { min-width: 0; margin: 0; font-size: 13px; font-weight: 600; }
+    .gallery-label small { display: block; margin-top: 2px; color: var(--muted); font: 500 10px/1.4 var(--font-mono); }
+
+    /* Focus mode. */
+    .focus-layer { position: fixed; z-index: 5; inset: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); background: var(--bg); }
+    .focus-layer[hidden] { display: none; }
+    .focus-toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 12px clamp(12px, 2.5vw, 34px); border-bottom: 1px solid var(--border); background: var(--bg); }
+    .focus-toolbar .route-select { min-width: min(290px, 70vw); }
+    .focus-toolbar select { min-height: 44px; padding: 0 36px 0 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--paper); font-weight: 600; }
+    .toolbar-spacer { flex: 1; }
+    .focus-stage { min-height: 0; display: grid; place-items: center; overflow: auto; padding: 18px; }
+    .phone-wrap { position: relative; flex: 0 0 auto; width: var(--phone-width); height: var(--phone-height); }
+    .focus-phone { transform-origin: top left; }
+
+    /* Canonical phone surface. */
+    .phone { position: relative; width: var(--phone-width); height: var(--phone-height); overflow: hidden; border: 1px solid oklch(0.77 0.009 86); border-radius: 38px; background: var(--bg); container-type: inline-size; }
+    .phone.is-large-text { --text-scale: 1.28; }
+    .phone-screen { position: absolute; inset: 0; overflow: hidden; border-radius: 37px; background: var(--bg); }
+    .screen-scroll { height: 100%; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none; padding: 24px 22px 114px; }
+    .screen-scroll::-webkit-scrollbar { display: none; }
+    .onboarding .screen-scroll { display: flex; flex-direction: column; padding-bottom: 24px; }
+    .route-enter { animation: route-in 230ms var(--ease-out) both; }
+    @keyframes route-in { from { opacity: 0; transform: translateX(var(--route-shift, 10px)); } to { opacity: 1; transform: translateX(0); } }
+    .appbar { min-height: 48px; display: grid; grid-template-columns: minmax(48px, 1fr) auto minmax(48px, 1fr); gap: 8px; align-items: center; }
+    .appbar > :first-child { justify-self: start; }
+    .appbar > :last-child { justify-self: end; }
+    .wordmark { min-height: 44px; display: inline-flex; align-items: center; gap: 8px; font-size: calc(15px * var(--text-scale)); font-weight: 600; letter-spacing: -.01em; }
+    .mark { position: relative; width: 18px; height: 18px; border: 1.8px solid currentColor; border-radius: 50%; }
+    .mark::after { content: ""; position: absolute; right: -3px; top: 6px; width: 7px; height: 5px; border-top: 1.8px solid currentColor; background: var(--bg); transform: rotate(-22deg); }
+    .icon-button, .text-button, .row-button, .nav-button, .seg-button, .chip, .toggle, .chart-button { border: 0; background: transparent; }
+    .icon-button { width: 44px; height: 44px; display: grid; place-items: center; border-radius: 50%; }
+    .icon-button svg, .row-icon svg, .nav-button svg, .status-icon svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.65; stroke-linecap: round; stroke-linejoin: round; }
+    .text-button { min-height: 44px; padding: 0 8px; color: var(--ink-soft); font-size: 12px; font-weight: 600; letter-spacing: .02em; }
+    .page-meta { margin: 20px 0 5px; color: var(--muted); font-size: calc(11px * var(--text-scale)); font-weight: 600; letter-spacing: .04em; }
+    .page-title { max-width: 11ch; margin: 0; font: 400 calc(43px * var(--text-scale))/1.01 var(--font-display); letter-spacing: -.028em; text-wrap: balance; }
+    .page-title.compact { max-width: 14ch; font-size: calc(36px * var(--text-scale)); line-height: 1.06; }
+    .lede { max-width: 34ch; margin: 12px 0 0; color: var(--ink-soft); font-size: calc(13px * var(--text-scale)); line-height: 1.58; text-wrap: pretty; }
+    .section { margin-top: 30px; }
+    .section-head { display: flex; gap: 16px; align-items: end; justify-content: space-between; margin-bottom: 12px; }
+    .section-head h2 { margin: 0; font-size: calc(13px * var(--text-scale)); font-weight: 650; letter-spacing: .01em; }
+    .section-head span { color: var(--muted); font: 500 calc(10px * var(--text-scale))/1.4 var(--font-mono); text-align: right; }
+    .display-value { display: block; margin-top: 28px; font: 300 calc(72px * var(--text-scale))/.88 var(--font-display); letter-spacing: -.055em; font-variant-numeric: tabular-nums; }
+    .display-value small { margin-left: 7px; color: var(--muted); font: 500 calc(12px * var(--text-scale))/1.2 var(--font-body); letter-spacing: 0; }
+    .measurement-note { max-width: 36ch; margin: 12px 0 0; color: var(--ink-soft); font-size: calc(12px * var(--text-scale)); line-height: 1.55; }
+    .primary { width: 100%; min-height: 56px; display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 0 17px 0 19px; border: 0; border-radius: 15px; background: var(--fg); color: var(--paper); font-size: calc(14px * var(--text-scale)); font-weight: 650; letter-spacing: .02em; transition: transform 120ms var(--ease-spring), background-color 150ms var(--ease-out); }
+    .primary:active, .row-button:active, .chip:active, .seg-button:active { transform: scale(.975); }
+    .primary .button-arrow { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 50%; background: oklch(0.32 0.008 103); }
+    .primary .button-arrow svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.8; }
+    .quiet-action { min-height: 44px; padding: 0; border: 0; background: transparent; font-weight: 650; text-decoration: underline; text-underline-offset: 5px; }
+    .rule-list { border-top: 1px solid var(--border); }
+    .row-button, .data-row { width: 100%; min-height: 68px; display: flex; gap: 12px; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--border); text-align: left; transition: transform 120ms var(--ease-spring), background-color 150ms var(--ease-out); }
+    .row-main { min-width: 0; display: flex; gap: 11px; align-items: center; }
+    .row-icon, .status-icon { width: 34px; height: 34px; flex: 0 0 auto; display: grid; place-items: center; border-radius: 11px; background: var(--surface); }
+    .row-title { display: block; font-size: calc(13px * var(--text-scale)); font-weight: 650; line-height: 1.3; }
+    .row-meta { display: block; margin-top: 3px; color: var(--muted); font-size: calc(10px * var(--text-scale)); line-height: 1.4; text-wrap: pretty; }
+    .row-value { flex: 0 0 auto; max-width: 34%; color: var(--ink-soft); font: 500 calc(11px * var(--text-scale))/1.35 var(--font-mono); text-align: right; overflow-wrap: anywhere; }
+    .status-line { display: inline-flex; min-height: 28px; align-items: center; gap: 6px; padding: 0 9px; border: 1px solid var(--border); border-radius: 9px; background: var(--paper); color: var(--ink-soft); font-size: 9px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
+    .status-line::before { content: ""; width: 6px; height: 6px; border: 1px solid currentColor; border-radius: 50%; }
+    .status-line[data-tone="locked"]::before { border-radius: 1px; }
+    .status-line[data-tone="partial"]::before { border-radius: 0; transform: rotate(45deg); }
+    .status-strip { margin-top: 18px; display: grid; grid-template-columns: auto 1fr; gap: 11px; align-items: start; padding: 14px 0; border-block: 1px solid var(--border); }
+    .status-strip h2 { margin: 0; font-size: calc(13px * var(--text-scale)); font-weight: 650; }
+    .status-strip p { margin: 3px 0 0; color: var(--muted); font-size: calc(10px * var(--text-scale)); line-height: 1.5; }
+    .status-strip[data-tone="error"] { color: var(--danger); }
+    .status-strip[data-tone="success"] { color: var(--success); }
+
+    /* Ring motif: flat layers only; state is encoded by shape, label, and motion. */
+    .ring-stage { flex: 1; min-height: 330px; display: grid; place-items: center; }
+    .ring-motif { position: relative; width: 208px; height: 208px; display: grid; place-items: center; border: 1px solid var(--border); border-radius: 50%; }
+    .ring-motif .body { width: 104px; height: 136px; border: 24px solid oklch(0.83 0.008 82); border-radius: 50%; transform: rotate(-24deg); box-shadow: inset 0 0 0 5px var(--paper); }
+    .ring-motif .sensor { position: absolute; left: 118px; top: 140px; width: 9px; height: 9px; border-radius: 50%; background: var(--accent); }
+    .ring-motif .orbit { position: absolute; inset: 20px; border: 1px solid var(--border); border-top-color: var(--fg); border-radius: 50%; opacity: 0; }
+    .ring-motif[data-mode="searching"] .orbit, .ring-motif[data-mode="syncing"] .orbit { opacity: 1; animation: orbit 920ms var(--ease-out) 4; }
+    .ring-motif[data-mode="partial"] .orbit { opacity: 1; border-style: dashed; }
+    .ring-motif[data-mode="error"] .orbit { opacity: 1; border-color: var(--danger); border-left-color: transparent; }
+    .ring-motif[data-mode="locked"] .sensor { width: 12px; height: 10px; border: 1.5px solid var(--fg); border-radius: 2px; background: var(--bg); }
+    @keyframes orbit { to { transform: rotate(360deg); } }
+    .privacy-figure { flex: 1; min-height: 330px; display: grid; place-items: center; }
+    .privacy-disc { position: relative; width: 216px; height: 216px; display: grid; place-items: center; border: 1px solid var(--border); border-radius: 50%; }
+    .privacy-disc::before { content: ""; width: 104px; height: 104px; border: 22px solid var(--surface); border-radius: 50%; }
+    .privacy-disc svg { position: absolute; width: 48px; height: 48px; fill: var(--bg); stroke: var(--fg); stroke-width: 1.5; }
+    .onboard-copy { margin-top: auto; }
+    .onboard-title { max-width: 9ch; margin: 0; font: 400 calc(50px * var(--text-scale))/1 var(--font-display); letter-spacing: -.03em; text-wrap: balance; }
+    .onboard-sub { max-width: 32ch; margin: 13px 0 21px; color: var(--ink-soft); font-size: calc(13px * var(--text-scale)); line-height: 1.55; }
+
+    /* Instruments and state surfaces. */
+    .instrument { padding: 18px; border-radius: 18px; background: var(--surface); }
+    .instrument svg { display: block; width: 100%; height: auto; overflow: visible; touch-action: none; }
+    .chart-grid { stroke: oklch(0.80 0.009 87); stroke-width: 1; }
+    .chart-area { fill: var(--accent-soft); opacity: .7; }
+    .chart-line { fill: none; stroke: var(--accent); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+    .chart-point { fill: var(--paper); stroke: var(--accent); stroke-width: 2; }
+    .chart-point[aria-current="true"] { fill: var(--accent); stroke: var(--fg); stroke-width: 2.5; }
+    .chart-bar { fill: var(--fg); }
+    .chart-range { fill: var(--accent); }
+    .chart-gap { fill: var(--border); }
+    .chart-axis { display: flex; justify-content: space-between; margin-top: 8px; color: var(--muted); font: 500 9px/1.4 var(--font-mono); }
+    .scrub-output { min-height: 34px; display: block; margin-top: 10px; color: var(--ink-soft); font: 500 calc(10px * var(--text-scale))/1.5 var(--font-mono); }
+    .chart-swap .chart-area, .chart-swap .chart-line, .chart-swap .chart-bar, .chart-swap .chart-range { animation: chart-enter 260ms var(--ease-out) both; transform-origin: bottom; }
+    .chart-swap .chart-point { animation: point-enter 180ms var(--ease-out) both; }
+    @keyframes chart-enter { from { opacity: 0; transform: scaleY(.86); } to { opacity: 1; transform: scaleY(1); } }
+    @keyframes point-enter { from { opacity: 0; } to { opacity: 1; } }
+    .segment { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding: 4px; border: 1px solid var(--border); border-radius: 13px; }
+    .seg-button { min-height: 44px; border-radius: 9px; color: var(--muted); font-size: calc(11px * var(--text-scale)); font-weight: 650; transition: transform 120ms var(--ease-spring), background-color 150ms var(--ease-out), color 150ms var(--ease-out); }
+    .seg-button[aria-pressed="true"] { background: var(--fg); color: var(--paper); }
+    .metric-ledger { border-top: 1px solid var(--border); }
+    .metric-entry { min-height: 122px; display: grid; grid-template-columns: minmax(108px, .8fr) 1.2fr auto; gap: 14px; align-items: center; padding: 16px 0; border-bottom: 1px solid var(--border); }
+    .metric-entry strong { font: 300 calc(42px * var(--text-scale))/.9 var(--font-display); letter-spacing: -.04em; font-variant-numeric: tabular-nums; }
+    .metric-entry h2 { margin: 0; font-size: calc(13px * var(--text-scale)); }
+    .metric-entry p { margin: 4px 0 0; color: var(--muted); font-size: calc(10px * var(--text-scale)); line-height: 1.45; }
+    .story { margin-top: 30px; padding: 22px 0 24px; border-block: 1px solid var(--fg); }
+    .story .story-label { color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+    .story h2 { max-width: 10ch; margin: 8px 0 10px; font: 400 calc(37px * var(--text-scale))/1.02 var(--font-display); letter-spacing: -.025em; text-wrap: balance; }
+    .story p { max-width: 34ch; margin: 0; color: var(--ink-soft); font-size: calc(12px * var(--text-scale)); }
+    .mini-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+    .mini-stat { min-width: 0; }
+    .mini-stat strong { display: block; font: 400 calc(25px * var(--text-scale))/1 var(--font-display); letter-spacing: -.025em; font-variant-numeric: tabular-nums; }
+    .mini-stat span { display: block; margin-top: 5px; color: var(--muted); font-size: calc(9px * var(--text-scale)); line-height: 1.35; }
+    .evidence-line { position: relative; padding-left: 28px; }
+    .evidence-line::before { content: ""; position: absolute; left: 7px; top: 10px; bottom: 10px; width: 1px; background: var(--border); }
+    .evidence-item { position: relative; padding: 0 0 25px; }
+    .evidence-item::before { content: ""; position: absolute; left: -25px; top: 7px; width: 9px; height: 9px; border: 1px solid var(--fg); border-radius: 50%; background: var(--bg); }
+    .evidence-item h2 { margin: 0; font-size: calc(13px * var(--text-scale)); }
+    .evidence-item p { margin: 5px 0 0; color: var(--muted); font-size: calc(11px * var(--text-scale)); line-height: 1.5; }
+    .evidence-item strong { font: 600 calc(10px * var(--text-scale))/1.4 var(--font-mono); }
+    .empty-state { min-height: 350px; display: grid; align-content: center; justify-items: start; }
+    .empty-mark { width: 78px; height: 78px; display: grid; place-items: center; margin-bottom: 26px; border: 1px solid var(--border); border-radius: 50%; }
+    .empty-mark svg { width: 30px; height: 30px; fill: none; stroke: var(--fg); stroke-width: 1.5; }
+    .empty-state h2 { max-width: 11ch; margin: 0; font: 400 calc(38px * var(--text-scale))/1.03 var(--font-display); letter-spacing: -.025em; }
+    .empty-state p { max-width: 32ch; margin: 12px 0 18px; color: var(--ink-soft); font-size: calc(12px * var(--text-scale)); }
+    .skeleton { border-radius: 8px; background: var(--surface); }
+    .skeleton.title { width: 76%; height: 42px; margin-top: 26px; }
+    .skeleton.copy { width: 92%; height: 58px; margin-top: 14px; }
+    .skeleton.chart { height: 230px; margin-top: 30px; }
+
+    /* Forms, toggles, sheets, and bottom navigation. */
+    .form-stack { display: grid; gap: 19px; margin-top: 28px; }
+    .field-label { display: block; margin-bottom: 7px; font-size: calc(12px * var(--text-scale)); font-weight: 650; }
+    .field-hint, .field-error { display: block; margin-top: 5px; color: var(--muted); font-size: calc(10px * var(--text-scale)); }
+    .field-error { color: var(--danger); }
+    .field, .select-field, textarea { width: 100%; min-height: 56px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 13px; background: var(--paper); }
+    .field[aria-invalid="true"], textarea[aria-invalid="true"] { border-color: var(--danger); }
+    textarea { min-height: 110px; resize: vertical; }
+    .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+    .chip { min-height: 44px; padding: 0 13px; border: 1px solid var(--border); border-radius: 11px; background: var(--paper); font-size: calc(11px * var(--text-scale)); font-weight: 600; transition: transform 120ms var(--ease-spring), background-color 150ms var(--ease-out), color 150ms var(--ease-out); }
+    .chip[aria-pressed="true"] { border-color: var(--fg); background: var(--fg); color: var(--paper); }
+    .toggle-row { min-height: 92px; display: grid; grid-template-columns: 1fr auto; gap: 16px; align-items: center; border-bottom: 1px solid var(--border); }
+    .toggle-row h2 { margin: 0; font-size: calc(13px * var(--text-scale)); }
+    .toggle-row p { margin: 4px 0 0; color: var(--muted); font-size: calc(10px * var(--text-scale)); line-height: 1.45; }
+    .toggle { width: 54px; height: 44px; display: grid; place-items: center; }
+    .toggle-track { position: relative; width: 48px; height: 28px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); transition: background-color 150ms var(--ease-out), border-color 150ms var(--ease-out); }
+    .toggle-track::after { content: ""; position: absolute; left: 3px; top: 3px; width: 20px; height: 20px; border-radius: 50%; background: var(--paper); border: 1px solid var(--border); transition: transform 160ms var(--ease-spring), background-color 150ms var(--ease-out); }
+    .toggle[aria-checked="true"] .toggle-track { border-color: var(--fg); background: var(--fg); }
+    .toggle[aria-checked="true"] .toggle-track::after { transform: translateX(20px); }
+    .toggle[data-loading="true"] .toggle-track::after { animation: toggle-wait 620ms var(--ease-out) 2; }
+    @keyframes toggle-wait { 50% { transform: translateX(10px); } }
+    .bottom-nav { position: absolute; z-index: 2; left: 16px; right: 16px; bottom: 17px; height: 66px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 3px; padding: 6px; border-radius: 21px; background: var(--fg); color: var(--paper); }
+    .nav-button { min-width: 0; min-height: 52px; display: grid; place-items: center; align-content: center; gap: 2px; border-radius: 15px; color: oklch(0.77 0.006 90); font-size: 8px; font-weight: 650; letter-spacing: .035em; transition: transform 120ms var(--ease-spring), background-color 150ms var(--ease-out), color 150ms var(--ease-out); }
+    .nav-button[aria-current="page"] { background: oklch(0.35 0.008 104); color: var(--paper); }
+    .nav-button:active { transform: scale(.95); }
+    .nav-button svg { width: 18px; height: 18px; }
+    .sheet-backdrop { position: absolute; z-index: 3; inset: 0; display: grid; align-items: end; padding: 12px; background: oklch(0.25 0.006 105 / .28); }
+    .sheet { padding: 22px; border-radius: 24px; background: var(--paper); }
+    .sheet h2 { margin: 0; font: 500 calc(26px * var(--text-scale))/1.1 var(--font-display); letter-spacing: -.02em; }
+    .sheet p { margin: 9px 0 18px; color: var(--ink-soft); font-size: 12px; }
+    .sheet-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .sheet-actions button { min-height: 48px; border: 1px solid var(--border); border-radius: 12px; background: var(--paper); font-weight: 650; }
+    .sheet-actions .danger { border-color: var(--danger); color: var(--danger); }
+    .toast { position: absolute; z-index: 4; left: 22px; right: 22px; bottom: 96px; min-height: 54px; display: flex; align-items: center; padding: 12px 15px; border-radius: 14px; background: var(--fg); color: var(--paper); font-size: 12px; animation: toast-in 180ms var(--ease-out) both; }
+    @keyframes toast-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+    @media (hover: hover) and (pointer: fine) {
+      .host-button:hover { background: var(--ink-soft); }
+      .host-control:hover, .gallery-open:hover { border-color: var(--fg); background: var(--surface); }
+      .icon-button:hover, .text-button:hover, .row-button:hover, .quiet-action:hover { background: var(--surface); color: var(--fg); }
+      .primary:hover { background: var(--ink-soft); }
+      .nav-button:hover { color: var(--paper); }
+    }
+    @media (max-width: 760px) {
+      .review-shell { padding-inline: 16px; padding-top: 28px; }
+      .review-header { grid-template-columns: 1fr; }
+      .review-title { font-size: 48px; }
+      .gallery-grid { grid-template-columns: 1fr; gap: 54px; }
+      .toolbar-label { display: none; }
+      .focus-toolbar .route-select { order: 3; width: 100%; }
+      .focus-stage { padding: 10px; }
+    }
+    @container (max-width: 340px) {
+      .screen-scroll { padding-inline: 17px; }
+      .page-title { font-size: calc(37px * var(--text-scale)); }
+      .onboard-title { font-size: calc(43px * var(--text-scale)); }
+      .display-value { font-size: calc(62px * var(--text-scale)); }
+      .metric-entry { grid-template-columns: 92px 1fr auto; gap: 9px; }
+      .metric-entry strong { font-size: calc(34px * var(--text-scale)); }
+      .ring-stage, .privacy-figure { min-height: 300px; }
+      .ring-motif { transform: scale(.86); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+      .route-enter, .toast { transform: none !important; }
+    }
+    .force-reduced *, .force-reduced *::before, .force-reduced *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+    .force-reduced .route-enter, .force-reduced .toast { transform: none !important; }
+    body.using-keyboard .phone .primary:active, body.using-keyboard .phone .row-button:active, body.using-keyboard .phone .chip:active, body.using-keyboard .phone .seg-button:active, body.using-keyboard .phone .nav-button:active { transform: none; }
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#gallery-grid">Skip to route gallery</a>
+  <main class="review-shell" id="review-shell" data-od-id="premium-v2-gallery">
+    <header class="review-header">
+      <div>
+        <p class="review-kicker">LibreRing · Premium product system · V2</p>
+        <h1 class="review-title">Evidence you can feel calm about.</h1>
+        <p class="review-copy">Twenty-six independently reachable routes for a local-first smart ring: daily reading first, evidence on demand, manual context kept separate, and unsupported capability left visibly locked.</p>
+      </div>
+      <button class="host-button" type="button" data-open-focus="/welcome" data-od-id="open-focused-prototype">Open focused prototype</button>
+    </header>
+    <div class="review-summary" aria-label="Prototype scope">
+      <span><strong>26</strong> routes</span><span><strong>390 × 844</strong> canonical</span><span><strong>320 px</strong> compact QA</span><span><strong>4</strong> stable destinations</span><span><strong>0</strong> inferred health scores</span>
+    </div>
+    <section class="gallery-grid" id="gallery-grid" aria-label="All LibreRing routes"></section>
+  </main>
+
+  <section class="focus-layer" id="focus-layer" role="dialog" aria-modal="true" aria-label="Focused LibreRing prototype" hidden>
+    <header class="focus-toolbar" data-od-id="prototype-review-controls">
+      <button class="host-control" type="button" data-close-focus aria-label="Close focused prototype">Close</button>
+      <label class="route-select"><span class="sr-only">Route</span><select data-route-select aria-label="Choose route"></select></label>
+      <label><span class="sr-only">Route state</span><select data-state-select aria-label="Choose route state"></select></label>
+      <span class="toolbar-spacer"></span>
+      <button class="host-control" type="button" data-width-toggle aria-pressed="false">320 px</button>
+      <button class="host-control" type="button" data-text-toggle aria-pressed="false">Large text</button>
+      <button class="host-control" type="button" data-motion-toggle aria-pressed="false">Reduce motion</button>
+      <button class="host-control" type="button" data-prev-route aria-label="Previous route">Previous</button>
+      <button class="host-control" type="button" data-next-route aria-label="Next route">Next</button>
+    </header>
+    <div class="focus-stage" id="focus-stage">
+      <div class="phone-wrap" id="phone-wrap"><div class="phone focus-phone" id="focus-phone"></div></div>
+    </div>
+  </section>
+  <div class="sr-only" id="host-live" role="status" aria-live="polite"></div>
+  <div class="sr-only" id="host-alert" role="alert" aria-live="assertive"></div>
+
+  <script>
+    const ICONS = {
+      arrow: '<path d="M5 12h13M13 6l6 6-6 6"/>',
+      back: '<path d="M19 12H6m6-6-6 6 6 6"/>',
+      today: '<path d="M5 10.5 12 5l7 5.5V20h-5v-5h-4v5H5Z"/>',
+      trends: '<path d="M4 17 9 12l3 2 7-8"/><path d="M16 6h3v3"/>',
+      journal: '<path d="M6 4h12v16H6z"/><path d="M9 8h6M9 12h6M9 16h4"/>',
+      you: '<circle cx="12" cy="8" r="3.5"/><path d="M5 20c.7-4 3.2-6 7-6s6.3 2 7 6"/>',
+      lock: '<rect x="6" y="10" width="12" height="10" rx="2"/><path d="M9 10V7a3 3 0 0 1 6 0v3"/>',
+      sync: '<path d="M19 7v5h-5M5 17v-5h5"/><path d="M18 12a6 6 0 0 0-10-4L5 11M6 12a6 6 0 0 0 10 4l3-3"/>',
+      heart: '<path d="M12 20S4 15.5 4 9.5A4.5 4.5 0 0 1 12 7a4.5 4.5 0 0 1 8 2.5C20 15.5 12 20 12 20Z"/>',
+      drop: '<path d="M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11Z"/>',
+      moon: '<path d="M19 15.5A8 8 0 0 1 8.5 5 7.5 7.5 0 1 0 19 15.5Z"/>',
+      move: '<path d="M5 17h4l2-10 3 12 2-7h3"/>',
+      info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5h.01"/>',
+      check: '<path d="m5 12 4 4L19 6"/>',
+      plus: '<path d="M12 5v14M5 12h14"/>',
+      folder: '<path d="M4 7h6l2 2h8v10H4Z"/>',
+      pool: '<path d="M4 10c2 0 2 2 4 2s2-2 4-2 2 2 4 2 2-2 4-2M4 16c2 0 2 2 4 2s2-2 4-2 2 2 4 2 2-2 4-2"/>',
+      alert: '<path d="M12 4 21 20H3Z"/><path d="M12 9v5M12 17h.01"/>',
+      export: '<path d="M12 4v11m-4-4 4 4 4-4"/><path d="M5 19h14"/>',
+      trash: '<path d="M5 7h14M9 7V4h6v3M7 7l1 13h8l1-13"/>'
+    };
+    const icon = (name) => `<svg viewBox="0 0 24 24" aria-hidden="true">${ICONS[name]}</svg>`;
+    const wordmark = () => `<span class="wordmark" data-od-id="librering-wordmark"><span class="mark" aria-hidden="true"></span>LibreRing</span>`;
+    const primary = (label, route, id, attrs = '') => `<button class="primary" type="button" ${route ? `data-route="${route}"` : ''} ${attrs} data-od-id="${id}"><span>${label}</span><span class="button-arrow" aria-hidden="true">${icon('arrow')}</span></button>`;
+    const back = (route, label = 'Back') => `<button class="icon-button" type="button" data-route="${route}" aria-label="${label}">${icon('back')}</button>`;
+    const appbar = (title, backRoute, trailing = '<span></span>') => `<header class="appbar">${backRoute ? back(backRoute) : wordmark()}<span class="eyebrow">${title}</span>${trailing}</header>`;
+    const status = (tone, title, detail, iconName = 'info') => `<section class="status-strip" data-tone="${tone}" role="${tone === 'error' ? 'alert' : 'status'}"><span class="status-icon">${icon(iconName)}</span><div><h2>${title}</h2><p>${detail}</p></div></section>`;
+    const ring = (mode, label) => `<div class="ring-motif" data-mode="${mode}" role="img" aria-label="${label}"><span class="body" aria-hidden="true"></span><span class="orbit" aria-hidden="true"></span><span class="sensor" aria-hidden="true"></span></div>`;
+    const row = (iconName, title, meta, value = '', route = '', id = '') => `${route ? '<button class="row-button" type="button"' : '<div class="data-row"'} ${route ? `data-route="${route}"` : ''} ${id ? `data-od-id="${id}"` : ''}><span class="row-main"><span class="row-icon">${icon(iconName)}</span><span><span class="row-title">${title}</span><span class="row-meta">${meta}</span></span></span>${value ? `<span class="row-value">${value}</span>` : route ? '<span aria-hidden="true">→</span>' : ''}${route ? '</button>' : '</div>'}`;
+    const stateBadge = (label, tone = '') => `<span class="status-line" ${tone ? `data-tone="${tone}"` : ''}>${label}</span>`;
+    const sectionHead = (title, meta = '') => `<div class="section-head"><h2>${title}</h2>${meta ? `<span>${meta}</span>` : ''}</div>`;
+    const miniStats = (items) => `<div class="mini-stats">${items.map(([value, label]) => `<div class="mini-stat"><strong>${value}</strong><span>${label}</span></div>`).join('')}</div>`;
+    const segment = (route, values, selected) => `<div class="segment" role="group" aria-label="Time range">${values.map(([value, label]) => `<button class="seg-button" type="button" data-range="${value}" data-range-route="${route}" aria-pressed="${value === selected}">${label}</button>`).join('')}</div>`;
+    const nav = (active) => `<nav class="bottom-nav" aria-label="Primary"><button class="nav-button" type="button" data-route="/today" ${active === 'today' ? 'aria-current="page"' : ''}>${icon('today')}<span>Today</span></button><button class="nav-button" type="button" data-route="/trends" ${active === 'trends' ? 'aria-current="page"' : ''}>${icon('trends')}<span>Trends</span></button><button class="nav-button" type="button" data-route="/journal" ${active === 'journal' ? 'aria-current="page"' : ''}>${icon('journal')}<span>Journal</span></button><button class="nav-button" type="button" data-route="/you" ${active === 'you' ? 'aria-current="page"' : ''}>${icon('you')}<span>You</span></button></nav>`;
+    const shell = (path, content, active = '', onboarding = false) => {
+      const semanticHeading = content.includes('<h1') ? '' : `<h1 class="sr-only">${byPath(path).label}</h1>`;
+      return `<section class="phone-screen ${onboarding ? 'onboarding' : ''}" data-route-path="${path}" data-od-id="screen-${path.replaceAll('/', '-').replace(/^-/, '') || 'welcome'}"><div class="screen-scroll" role="main">${semanticHeading}${content}</div>${active ? nav(active) : ''}<div class="sr-only" role="status" aria-live="polite" data-phone-live></div></section>`;
+    };
+    const loading = () => `<div role="status" aria-label="Loading content"><div class="skeleton title"></div><div class="skeleton copy"></div><div class="skeleton chart"></div><p class="field-hint">Loading local records. If this takes longer than 15 seconds, LibreRing will stop and offer recovery.</p></div>`;
+    const emptyState = (iconName, title, copy, action = '') => `<section class="empty-state"><span class="empty-mark">${icon(iconName)}</span><h2>${title}</h2><p>${copy}</p>${action}</section>`;
+
+    const RANGE_DATA = {
+      day: [{ label: '00:12', value: 76 }, { label: '03:18', value: null }, { label: '06:42', value: 52 }, { label: '09:10', value: 63 }, { label: '12:26', value: 71 }, { label: '15:04', value: 66 }, { label: '18:22', value: 91 }, { label: '23:10', value: 82 }],
+      week: [{ label: 'Mon', value: 72 }, { label: 'Tue', value: 68 }, { label: 'Wed', value: null }, { label: 'Thu', value: 75 }, { label: 'Fri', value: 71 }, { label: 'Sat', value: 79 }, { label: 'Sun', value: 76 }],
+      month: [{ label: '1 Aug', value: 70 }, { label: '4 Aug', value: 72 }, { label: '7 Aug', value: null }, { label: '10 Aug', value: 69 }, { label: '13 Aug', value: 74 }, { label: '16 Aug', value: 71 }, { label: '19 Aug', value: 77 }, { label: '22 Aug', value: null }, { label: '26 Aug', value: 76 }]
+    };
+    function lineChart(prefix, id, data, unit, source, ariaLabel) {
+      const valid = data.filter(d => d.value !== null); const min = Math.min(...valid.map(d => d.value)); const max = Math.max(...valid.map(d => d.value)); const span = Math.max(1, max - min); const x = i => 16 + (data.length === 1 ? 0 : i * 268 / (data.length - 1)); const y = v => 142 - ((v - min) / span) * 104;
+      const groups = []; let current = []; data.forEach((d, i) => { if (d.value === null) { if (current.length) groups.push(current); current = []; } else current.push({ ...d, i, x: x(i), y: y(d.value) }); }); if (current.length) groups.push(current);
+      const paths = groups.map(group => `<path class="chart-area" d="M${group[0].x} 148 L${group.map(p => `${p.x} ${p.y}`).join(' L')} L${group[group.length - 1].x} 148Z"/><path class="chart-line" d="M${group.map(p => `${p.x} ${p.y}`).join(' L')}"/>`).join('');
+      const points = groups.flat().map((p, n, arr) => `<circle class="chart-point" cx="${p.x}" cy="${p.y}" r="5" tabindex="-1" data-point data-index="${p.i}" data-order="${n}" data-detail="${p.label} · ${p.value} ${unit} · ${source}" aria-current="${n === arr.length - 1}"/>`).join('');
+      const last = valid[valid.length - 1]; const outputId = `${prefix}-${id}-summary`;
+      return `<figure class="instrument chart-swap" data-od-id="${id}"><svg viewBox="0 0 300 160" role="img" tabindex="0" data-chart aria-label="${ariaLabel}" aria-describedby="${outputId}"><path class="chart-grid" d="M16 38H284M16 90H284M16 142H284"/>${paths}${points}</svg><div class="chart-axis"><span>${data[0].label}</span><span>Gaps remain gaps</span><span>${data[data.length - 1].label}</span></div><output class="scrub-output" id="${outputId}" data-scrub-output>${last.label} · ${last.value} ${unit} · ${source}</output></figure>`;
+    }
+    function barChart(prefix, id, data, unit, source, ariaLabel) {
+      const max = Math.max(1, ...data.filter(d => d.value !== null).map(d => d.value)); const width = 244 / data.length; const bars = data.map((d, i) => { const h = d.value === null ? 5 : Math.max(4, d.value / max * 108); const cls = d.value === null ? 'chart-gap' : 'chart-bar'; const detail = d.value === null ? `${d.label} · no record · ${source}` : `${d.label} · ${d.value} ${unit} · ${source}`; return `<rect class="${cls}" x="${22 + i * (width + 4)}" y="${140 - h}" width="${Math.max(5, width)}" height="${h}" rx="3" tabindex="-1" data-point data-index="${i}" data-order="${i}" data-detail="${detail}" aria-current="${i === data.length - 1}"/>`; }).join(''); const last = data[data.length - 1]; const outputId = `${prefix}-${id}-summary`;
+      return `<figure class="instrument chart-swap" data-od-id="${id}"><svg viewBox="0 0 300 154" role="img" tabindex="0" data-chart aria-label="${ariaLabel}" aria-describedby="${outputId}"><path class="chart-grid" d="M16 36H284M16 88H284M16 140H284"/>${bars}</svg><div class="chart-axis"><span>${data[0].label}</span><span>Missing ≠ zero</span><span>${last.label}</span></div><output class="scrub-output" id="${outputId}" data-scrub-output>${last.value === null ? `${last.label} · no record` : `${last.label} · ${last.value} ${unit}`} · ${source}</output></figure>`;
+    }
+    function oxygenChart(prefix, state) {
+      const values = state === 'partial' ? [{ label: '01:00', min: 96, max: 99 }, { label: '04:00' }, { label: '08:00', min: 94, max: 97 }, { label: '12:00' }, { label: '16:00', min: 95, max: 98 }, { label: '22:00', min: 96, max: 99 }] : [{ label: '00:00', min: 96, max: 99 }, { label: '03:00', min: 95, max: 98 }, { label: '06:00', min: 94, max: 97 }, { label: '09:00', min: 96, max: 98 }, { label: '12:00', min: 95, max: 99 }, { label: '15:00', min: 94, max: 98 }, { label: '18:00', min: 96, max: 99 }, { label: '22:00', min: 95, max: 98 }];
+      const bar = values.map((d, i) => { const x = 22 + i * 34; if (d.min === undefined) return `<rect class="chart-gap" x="${x}" y="133" width="8" height="5" rx="3" tabindex="-1" data-point data-index="${i}" data-order="${i}" data-detail="${d.label} · no captured range · ring history"/>`; const yTop = 138 - (d.max - 90) * 11; const h = Math.max(8, (d.max - d.min) * 11); return `<rect class="chart-range" x="${x}" y="${yTop}" width="8" height="${h}" rx="4" tabindex="-1" data-point data-index="${i}" data-order="${i}" data-detail="${d.label} · ${d.min}–${d.max}% · hourly firmware range" aria-current="${i === values.length - 1}"/>`; }).join(''); const outputId = `${prefix}-oxygen-range-summary`; const latest = values.filter(d => d.min !== undefined).at(-1);
+      return `<figure class="instrument chart-swap" data-od-id="oxygen-range-map"><svg viewBox="0 0 300 154" role="img" tabindex="0" data-chart aria-label="Hourly oxygen range map; missing hours are gaps" aria-describedby="${outputId}"><path class="chart-grid" d="M16 39H284M16 88H284M16 138H284"/>${bar}</svg><div class="chart-axis"><span>00:00</span><span>Hourly min–max</span><span>23:59</span></div><output class="scrub-output" id="${outputId}" data-scrub-output>${latest.label} · ${latest.min}–${latest.max}% · hourly firmware range</output></figure>`;
+    }
+    function sleepChart(prefix, partial = false) {
+      const stages = partial ? [['Light', 48, 42], ['Gap', 26, null], ['Deep', 41, 30], ['REM', 34, 24], ['Awake', 18, 14]] : [['Light', 78, 48], ['Deep', 38, 28], ['Light', 64, 46], ['REM', 42, 31], ['Awake', 19, 12], ['Light', 68, 50], ['REM', 39, 29]]; const total = stages.reduce((sum, s) => sum + s[1], 0); let cursor = 16; const shapes = stages.map((s, i) => { const w = s[1] / total * 268; const missing = s[2] === null; const h = missing ? 7 : s[2]; const y = 126 - h; const out = `<rect class="${missing ? 'chart-gap' : 'chart-range'}" x="${cursor}" y="${y}" width="${Math.max(8, w - 3)}" height="${h}" rx="3" tabindex="-1" data-point data-index="${i}" data-order="${i}" data-detail="${s[0]} · ${s[1]} minutes · firmware estimate"/>`; cursor += w; return out; }).join(''); const outputId = `${prefix}-sleep-stage-summary`;
+      return `<figure class="instrument chart-swap" data-od-id="sleep-stage-timeline"><svg viewBox="0 0 300 142" role="img" tabindex="0" data-chart aria-label="Firmware sleep stage runs; stages are estimates, not EEG" aria-describedby="${outputId}"><path class="chart-grid" d="M16 42H284M16 84H284M16 126H284"/>${shapes}</svg><div class="chart-axis"><span>23:34</span><span>Firmware stages</span><span>07:42</span></div><output class="scrub-output" id="${outputId}" data-scrub-output>Press or use arrow keys to inspect a stage run · firmware estimate</output></figure>`;
+    }
+
+    const stateLabels = { default: 'Default', idle: 'Idle', searching: 'Searching', multiple: 'Multiple rings', connected: 'Connected', syncing: 'Syncing', success: 'Complete', partial: 'Partial data', stale: 'Stale data', loading: 'Loading', saving: 'Saving', empty: 'Empty', error: 'Error', unavailable: 'Unavailable', locked: 'Locked', populated: 'Populated', exportReady: 'Export ready', failure: 'Recoverable failure', enabled: 'Enabled', submitted: 'Saved' };
+    const routeState = new Map(); const rangeState = new Map(); let trendMetric = 'sleep'; let lastFocused = null; let sheetReturnFocus = null; let timers = []; let currentPath = '/welcome'; let focusMode = false; let compactMode = false; let largeText = false; let reducedMotion = false; let keyboardMode = false; let sheetState = null; let toastText = '';
+    const formData = { checkIn: { tags: new Set(), note: '' }, swim: { duration: '42', pool: '25 metres', effort: 'Steady' } };
+    const privacyPrefs = { keep: true, context: false, export: false };
+    let ringRecordCount = 51; let manualEntryCount = 2;
+    const escapeHTML = value => String(value).replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character]));
+    const getState = route => routeState.get(route.path) || route.defaultState;
+    const getRange = path => rangeState.get(path) || 'day';
+    const clearTimers = () => { timers.forEach(window.clearTimeout); timers = []; };
+    const schedule = (fn, ms) => { const timer = window.setTimeout(fn, ms); timers.push(timer); return timer; };
+    function appStateNotice(state) {
+      if (state === 'loading') return loading();
+      if (state === 'error') return status('error', 'Local data could not be read', 'Existing files were preserved. Retry once; after three failures, contact support with error LR-204.', 'alert');
+      return '';
+    }
+
+    function welcome() { return shell('/welcome', `${appbar('', '', '<button class="text-button" type="button" data-route="/today">Skip</button>')}<div class="ring-stage">${ring('quiet', 'Matte titanium LibreRing with a small coral sensor mark')}</div><div class="onboard-copy"><h1 class="onboard-title" data-od-id="welcome-heading">Know what your ring knows.</h1><p class="onboard-sub">A clear daily reading, with the original evidence kept close and private.</p>${primary('Set up LibreRing', '/privacy', 'welcome-start')}</div>`, '', true); }
+    function privacy() { return shell('/privacy', `${appbar('Privacy', '/welcome')}<div class="privacy-figure"><div class="privacy-disc" role="img" aria-label="Local privacy boundary">${icon('lock')}</div></div><div class="onboard-copy"><h1 class="onboard-title" data-od-id="privacy-heading">Your body data stays yours.</h1><p class="onboard-sub">Stored on this device by default. Sharing and export always require a clear choice.</p>${primary('Continue privately', '/pairing/scan', 'privacy-continue')}</div>`, '', true); }
+    function scan(route, state) {
+      let mode = 'quiet', title = 'Bring your ring close', copy = 'Bluetooth starts only after you choose Scan. Nearby identifiers stay in memory and raw packets are not retained.', action = primary('Scan nearby', '', 'scan-nearby', 'data-scan-start'); let extra = '';
+      if (state === 'searching') { mode = 'searching'; title = 'Looking nearby'; copy = 'Searching for an exact COLMI R12 service profile. No health or settings command is being sent.'; action = primary('Searching', '', 'scan-searching', 'disabled'); }
+      if (state === 'multiple') { mode = 'partial'; title = 'Choose the ring you own'; copy = 'Two nearby names appeared. Only the exact R12 profile can continue.'; extra = `<div class="rule-list">${row('info', 'COLMI R12_A7', 'Exact name and service profile', 'Ready', '/pairing/found', 'candidate-exact')}${row('alert', 'COLMI R02_31', 'Name does not match the verified model', 'Unavailable')}</div>`; action = ''; }
+      if (state === 'unavailable') { mode = 'locked'; title = 'Bluetooth is unavailable'; copy = 'This build cannot reach Bluetooth. Existing local history remains readable and unchanged.'; action = primary('Continue to local history', '/today', 'scan-unavailable-continue'); }
+      if (state === 'failure') { mode = 'error'; title = 'The ring could not be verified'; copy = 'Close QRing, keep the ring nearby, and retry. No settings or health command was sent.'; action = primary('Try scan again', '', 'scan-retry', 'data-scan-start'); }
+      return shell(route.path, `${appbar('Pairing', '/privacy')}<div class="ring-stage">${ring(mode, `${title}. ${copy}`)}</div><div class="onboard-copy"><h1 class="onboard-title">${title}</h1><p class="onboard-sub">${copy}</p>${extra}${action}</div>`, '', true);
+    }
+    function found(route, state) {
+      const mode = state === 'syncing' ? 'syncing' : state === 'partial' ? 'partial' : state === 'failure' ? 'error' : 'quiet'; let title = 'COLMI R12 verified', copy = 'Command and history services confirmed. Device identifiers remain transient.', action = primary('Sync ring history', '', 'pairing-sync', 'data-pairing-sync');
+      if (state === 'syncing') { title = 'Receiving verified history'; copy = 'Decoded records are being stored locally. Existing history remains available during sync.'; action = primary('Syncing', '', 'pairing-syncing', 'disabled'); }
+      if (state === 'partial') { title = 'Useful history, partially received'; copy = 'Pulse and activity were stored. Oxygen history did not complete, so its previous value remains labelled stale.'; action = primary('Review partial data', '/today', 'pairing-partial-review'); }
+      if (state === 'failure') { title = 'Sync stopped safely'; copy = 'The connection ended before any new records were committed. Existing local history was preserved.'; action = primary('Try once more', '', 'pairing-sync-retry', 'data-pairing-sync'); }
+      if (state === 'success') { title = 'History stored locally'; copy = '51 decoded records are ready. Recovery remains unavailable until validated inputs and a transparent calculation exist.'; action = primary('Read today', '/today', 'pairing-success-today'); }
+      return shell(route.path, `${appbar('Ring found', '/pairing/scan', stateBadge(stateLabels[state], state === 'partial' ? 'partial' : ''))}<div class="ring-stage">${ring(mode, `${title}. ${copy}`)}</div><div class="onboard-copy"><h1 class="onboard-title compact">${title}</h1><p class="onboard-sub">${copy}</p>${action}</div>`, '', true);
+    }
+    function today(route, state) {
+      const top = appbar('', '', `<button class="icon-button" type="button" data-sync-start aria-label="Refresh ring data">${icon('sync')}</button>`);
+      if (state === 'loading') return shell(route.path, `${top}${loading()}`, 'today');
+      if (state === 'empty') return shell(route.path, `${top}${emptyState('today', 'No ring history on this phone', 'Pair a verified COLMI R12 or continue using Journal without ring data.', primary('Pair a ring', '/pairing/scan', 'today-pair'))}`, 'today');
+      if (state === 'error') return shell(route.path, `${top}${status('error', 'Local history needs attention', 'LibreRing could not read the versioned store. Existing files were not overwritten.', 'alert')}<div class="section">${primary('Retry local read', '', 'today-retry', 'data-state-action="populated"')}</div>`, 'today');
+      let notice = ''; if (state === 'syncing') notice = status('', 'Refreshing quietly', 'Searching → connecting → receiving. Already synced data remains readable.', 'sync'); if (state === 'partial') notice = status('partial', 'Partial refresh', 'New sleep and pulse records were stored. Oxygen remains from the previous sync and is marked stale.', 'alert'); if (state === 'stale') notice = status('partial', 'Last sync was 18 hours ago', 'The reading below is preserved local history, not a current measurement.', 'info'); if (state === 'success') notice = status('success', 'Local history is current', 'No duplicate records were added. Device identifiers were discarded after refresh.', 'check');
+      return shell(route.path, `${top}<p class="page-meta">Wednesday, 26 August · Prototype dataset · stored locally</p>${notice}<section class="story" data-od-id="daily-story"><span class="story-label">Last night · firmware estimate</span><h2>Eight hours were recorded. One gap remains visible.</h2><p>The ring retained eight firmware stage runs. LibreRing does not convert them into a sleep or recovery score.</p><button class="quiet-action" type="button" data-route="/sleep">Read last night</button></section><section class="section">${sectionHead('Today at a glance', 'Measured + firmware estimates')}${miniStats([['4,960', 'Steps · ring estimate'], ['91 bpm', 'Latest spot sample'], ['94–99%', 'Captured oxygen range']])}</section><section class="section">${sectionHead('Signals', 'Ask for evidence when needed')}<div class="rule-list">${row('move', 'Activity', '3.55 km · 11 recorded hours', '4,960', '/movement')}${row('moon', 'Sleep', 'Firmware session · 23:34–07:42', '8:08', '/sleep')}${row('heart', 'Heart', '11 retained spot samples', '91 bpm', '/heart')}${row('drop', 'Oxygen', '10 hourly ranges · no average', '94–99%', '/oxygen')}${row('lock', 'Recovery', 'Protected until inputs are validated', 'Unavailable', '/recovery')}</div></section>`, 'today');
+    }
+    function metrics(route, state) {
+      const top = appbar('All signals', '/today', stateBadge(state === 'partial' ? 'Partial' : 'Local')); if (state === 'loading') return shell(route.path, `${top}${loading()}`, 'today'); if (state === 'empty') return shell(route.path, `${top}${emptyState('info', 'No decoded signals yet', 'Sync a verified ring. Missing data will remain visibly missing.', primary('Open ring', '/you/ring', 'metrics-open-ring'))}`, 'today'); if (state === 'error') return shell(route.path, `${top}${appStateNotice(state)}`, 'today');
+      const partial = state === 'partial'; const entries = [
+        ['4,960', 'Activity', 'Ring estimate · 11 recorded hours', '/movement'], ['8:08', 'Sleep', 'Firmware interval · stages are estimates', '/sleep'], ['91 bpm', 'Heart', 'Latest of 11 measured spot samples', '/heart'], [partial ? '—' : '94–99%', 'Oxygen', partial ? 'No range captured in this partial sync' : '10 hourly min–max ranges', '/oxygen'], ['47', 'Firmware HRV index', 'Unitless · semantics unvalidated', '/signals/hrv-index'], ['43', 'Firmware stress index', 'Unitless · no categorical label', '/signals/stress-index'], ['—', 'Recovery', 'No defensible score exists', '/recovery']
+      ];
+      return shell(route.path, `${top}<p class="page-meta">Decoded signal ledger · Prototype dataset</p><h1 class="page-title">Every signal, with its limits intact.</h1><div class="metric-ledger section">${entries.map(([value, title, copy, path]) => `<button class="metric-entry row-button" type="button" data-route="${path}"><strong>${value}</strong><span><h2>${title}</h2><p>${copy}</p></span><span aria-hidden="true">→</span></button>`).join('')}</div>`, 'today');
+    }
+    function activity(route, state, prefix) {
+      const range = getRange(route.path); const top = appbar('Activity', '/today', stateBadge(state === 'partial' ? 'Partial' : 'Estimated', state === 'partial' ? 'partial' : '')); if (state === 'loading') return shell(route.path, `${top}${loading()}`, 'today'); if (state === 'empty') return shell(route.path, `${top}${emptyState('move', 'No activity buckets yet', 'Sync the ring to load supported hourly activity history.', primary('Refresh ring', '/you/ring', 'activity-refresh'))}`, 'today');
+      const values = range === 'day' ? [{label:'00',value:null},{label:'03',value:28},{label:'06',value:302},{label:'09',value:811},{label:'12',value:496},{label:'15',value:1040},{label:'18',value:912},{label:'23',value:1371}] : RANGE_DATA[range].map((d, i) => ({label:d.label,value:d.value === null ? null : Math.round(d.value * 62 + i * 17)})); if (state === 'partial') { values[2].value = null; values[5].value = null; }
+      return shell(route.path, `${top}<p class="page-meta">Ring estimates · Missing periods stay missing</p><span class="display-value">4,960<small>steps</small></span><p class="measurement-note">Distance and energy are retained firmware estimates. Manual sports remain separate.</p><div class="section">${segment(route.path, [['day','Day'],['week','Week'],['month','Month']], range)}</div><section class="section">${sectionHead(range === 'day' ? 'Today, hour by hour' : `Activity · ${range}`, state === 'partial' ? '2 gaps' : '11 recorded hours')}${barChart(prefix, 'activity-chart', values, 'steps', 'ring estimate', 'Activity history with gaps preserved')}</section><section class="section">${miniStats([['3.55 km','Firmware distance'],['208','Firmware kcal'],['11 h','Coverage']])}</section><section class="section">${row('pool', 'Sport record', 'Manual activities never become ring steps', 'Separate', '/sport')}</section>`, 'today');
+    }
+    function sleep(route, state, prefix) {
+      const top = appbar('Sleep', '/metrics', `<button class="icon-button" type="button" data-route="/sleep/evidence" aria-label="View sleep evidence">${icon('info')}</button>`); if (state === 'loading') return shell(route.path, `${top}${loading()}`, 'today'); if (state === 'empty') return shell(route.path, `${top}${emptyState('moon', 'No retained sleep session', 'A missing night is a gap, not zero sleep.', primary('View all signals', '/metrics', 'sleep-signals'))}`, 'today'); if (state === 'error') return shell(route.path, `${top}${appStateNotice(state)}`, 'today'); const partial = state === 'partial';
+      return shell(route.path, `${top}<p class="page-meta">Wednesday, 26 August · Firmware estimate</p><span class="display-value">8:08<small>recorded</small></span><p class="measurement-note">23:34–07:42. Firmware stages are estimates, not EEG measurements, and no sleep score is invented.</p><section class="section">${sectionHead('Night architecture', partial ? 'Partial stage coverage' : '8 firmware stage runs')}${sleepChart(prefix, partial)}</section><section class="section">${sectionHead('Continuity, without a score')}${miniStats([['1','Awake run'],['4 h 47','Longest run'],[partial ? '391' : '488','Stage minutes']])}</section><section class="section">${row('info', 'How this was calculated', 'Source records, confidence, and limits', '', '/sleep/evidence')}</section>`, 'today');
+    }
+    function heart(route, state, prefix) {
+      const range = getRange(route.path); const top = appbar('Heart', '/metrics', stateBadge('Measured')); if (state === 'loading') return shell(route.path, `${top}${loading()}`, 'today'); if (state === 'empty') return shell(route.path, `${top}${emptyState('heart', 'No measured pulse yet', 'Sync the ring to load retained spot samples. LibreRing will not interpolate missing hours.', primary('Open ring', '/you/ring', 'heart-ring'))}`, 'today'); if (state === 'error') return shell(route.path, `${top}${appStateNotice(state)}`, 'today'); let data = RANGE_DATA[range].map(d => ({...d})); if (state === 'partial') { data[1].value = null; data[4].value = null; }
+      return shell(route.path, `${top}<p class="page-meta">Measured spot samples · Prototype dataset</p><span class="display-value">91<small>bpm latest</small></span><p class="measurement-note">11 samples across the latest recorded day. This is not continuous ECG or a rhythm assessment.</p><div class="section">${segment(route.path,[['day','Day'],['week','Week'],['month','Month']],range)}</div><section class="section">${sectionHead('Pulse timeline', state === 'partial' ? 'Limited coverage' : '11 samples')}${lineChart(prefix,'heart-chart',data,'bpm','measured spot sample','Measured pulse samples; gaps are not interpolated')}</section><section class="section">${miniStats([['76','Mean bpm'],['52','Minimum'],['96','Maximum']])}</section>`, 'today');
+    }
+    function oxygen(route, state, prefix) {
+      const range = getRange(route.path); const top = appbar('Oxygen', '/metrics', stateBadge(state === 'partial' ? 'Partial' : 'Hourly ranges', state === 'partial' ? 'partial' : '')); if (state === 'loading') return shell(route.path, `${top}${loading()}`, 'today'); if (state === 'empty') return shell(route.path, `${top}${emptyState('drop', 'No oxygen history yet', 'A live no-reading does not erase stored hourly history, and neither is shown as zero.', primary('Understand no-reading', '/no-result', 'oxygen-no-reading'))}`, 'today');
+      return shell(route.path, `${top}<p class="page-meta">Captured hourly ranges · Prototype dataset</p><span class="display-value">94–99<small>% range</small></span><p class="measurement-note">The decoder supplies minimum–maximum ranges, not an hourly or daily average.</p><div class="section">${segment(route.path,[['day','Day'],['week','Week'],['month','Month']],range)}</div><section class="section">${sectionHead('Range map', state === 'partial' ? '4 captured · 2 gaps' : '10 captured hours')}${oxygenChart(prefix,state)}</section><section class="section">${miniStats([['94%','Lowest bound'],['99%','Highest bound'],[state === 'partial' ? '4 h' : '10 h','Coverage']])}</section>`, 'today');
+    }
+    function vendor(route, state, prefix, kind) {
+      const range = getRange(route.path); const stress = kind === 'stress'; const latest = stress ? 43 : 47; const top = appbar(stress ? 'Stress index' : 'HRV index', '/metrics', stateBadge('Opaque', 'partial')); if (state === 'loading') return shell(route.path, `${top}${loading()}`, 'today'); if (state === 'empty') return shell(route.path, `${top}${emptyState('info', 'No vendor index stored', 'LibreRing will not infer a value or a unit from other readings.', primary('Back to signals', '/metrics', 'vendor-signals'))}`, 'today'); let data = RANGE_DATA[range].map((d,i)=>({label:d.label,value:d.value === null || (state === 'partial' && i === 3) ? null : latest - 8 + ((i * 7) % 13)}));
+      const disclosure = stress ? 'The firmware names this a stress index. Its formula and thresholds are unverified, so LibreRing does not call it relaxed, normal, or high.' : 'The firmware names this an HRV index. Its unit and calculation are unverified, so LibreRing does not label it milliseconds or use it for Recovery.';
+      return shell(route.path, `${top}<p class="page-meta">Opaque vendor field · exploratory</p><span class="display-value">${latest}<small>unitless index</small></span><p class="measurement-note">${disclosure}</p><div class="section">${segment(route.path,[['day','Day'],['week','Week'],['month','Month']],range)}</div><section class="section">${sectionHead('Captured index timeline', state === 'partial' ? 'Coverage limited' : '9 captured values')}${lineChart(prefix,`${kind}-chart`,data,'index','opaque firmware field',`${stress ? 'Stress' : 'HRV'} vendor index values with unvalidated semantics`)}</section><section class="section">${miniStats([[stress ? '39' : '43','Median index'],[stress ? '32' : '36','Minimum'],[stress ? '44' : '48','Maximum']])}</section>`, 'today');
+    }
+    function recovery(route) { return shell(route.path, `${appbar('Recovery','/today',stateBadge('Protected','locked'))}<p class="page-meta">Evidence boundary · Current R12 firmware</p><h1 class="page-title">No Recovery score is the honest result.</h1><p class="lede">Verified inputs and a transparent calculation do not exist yet. A precise-looking number would create false confidence.</p><section class="section">${sectionHead('What remains useful')}<div class="rule-list">${row('moon','Recorded sleep','Firmware estimate · shown separately','8:08')}${row('heart','Measured pulse','History only · not interpreted as readiness','91 bpm')}${row('info','Firmware HRV / stress','Semantics and units remain unvalidated','Excluded')}${row('drop','Oxygen history','Hourly min–max ranges only','Separate')}</div></section>${status('', 'Recovery stays unavailable by design', 'LibreRing will only add it after independently validated inputs and a documented calculation exist.', 'lock')}`, 'today'); }
+    function sport(route, state) {
+      const top = appbar('Sport record','/movement',stateBadge('Manual')); if (state === 'loading') return shell(route.path, `${top}${loading()}`, 'trends'); if (state === 'error') return shell(route.path, `${top}${appStateNotice(state)}`, 'trends'); const populated = state === 'populated';
+      return shell(route.path, `${top}<p class="page-meta">Manual context · local only</p>${populated ? `<h1 class="page-title compact">One activity, clearly separate.</h1><section class="section rule-list">${row('pool','Pool swim','42 minutes · 25 metre pool · steady','Manual')}</section>` : emptyState('pool','No activities yet','Add an activity when the ring cannot identify the context. Manual records never alter ring measurements.',primary('Add a swim','/journal/swim','sport-add-swim'))}${populated ? `<div class="section">${primary('Add another swim','/journal/swim','sport-add-another')}</div>` : ''}`, 'trends');
+    }
+    function evidence(route, state) {
+      const top = appbar('Evidence','/sleep',stateBadge(state === 'partial' ? 'Partial' : 'Firmware',state === 'partial' ? 'partial' : '')); if (state === 'empty') return shell(route.path, `${top}${emptyState('info','No sleep evidence attached','No retained session exists, so LibreRing does not show a duration or stage chart.',primary('Back to sleep','/sleep','evidence-back'))}`, 'today');
+      return shell(route.path, `${top}<p class="page-meta">Latest stored sleep session</p><h1 class="page-title compact">What the firmware reported for 8:08.</h1><p class="lede">The original session and stage runs remain attached. Corrections can add context without erasing provenance.</p><section class="section evidence-line" data-od-id="sleep-evidence-ledger"><article class="evidence-item"><strong>PRIMARY · STORED LOCALLY</strong><h2>Firmware sleep session</h2><p>23:34–07:42 · ${state === 'partial' ? '6 of 8' : '8'} stage-duration runs retained.</p></article><article class="evidence-item"><strong>SUPPORTING · MEASURED</strong><h2>Pulse history</h2><p>11 spot samples were stored. They are not interpreted as recovery.</p></article><article class="evidence-item"><strong>${state === 'partial' ? 'PARTIAL' : 'SUPPORTING'} · HOURLY RANGES</strong><h2>Oxygen history</h2><p>${state === 'partial' ? 'Four captured hours and visible gaps.' : 'Ten min–max ranges; no average invented.'}</p></article><article class="evidence-item"><strong>UNAVAILABLE</strong><h2>Raw motion</h2><p>Not exposed by the verified R12 protocol.</p></article></section>${row('info','How a missing reading appears','Stable live measurement can return no-reading','View','/no-result')}`, 'today');
+    }
+    function noResult(route) { return shell(route.path, `${appbar('Sensor limit','/sleep/evidence')}<div class="ring-stage">${ring('partial','No stable live reading; the gap is preserved')}</div><h1 class="page-title compact">No reading is the right result.</h1><p class="lede">A live oxygen request can return no stable reading even when stored hourly history exists. LibreRing will not estimate, interpolate, or turn the gap into zero.</p><div class="section">${primary('View captured oxygen history','/oxygen','no-result-history')}</div>`, ''); }
+    function trends(route, state, prefix) {
+      const range = getRange(route.path); const days = range === 'day' ? '7 days' : range === 'week' ? '30 days' : '90 days'; const top = appbar('', '', `<button class="icon-button" type="button" data-route="/journal" aria-label="Add context">${icon('journal')}</button>`); if (state === 'loading') return shell(route.path, `${top}${loading()}`, 'trends'); if (state === 'empty') return shell(route.path, `${top}${emptyState('trends','No history to compare yet','Trend views begin after supported local records span more than one day.',primary('Open today','/today','trends-today'))}`, 'trends'); if (state === 'error') return shell(route.path, `${top}${appStateNotice(state)}`, 'trends');
+      const configs = { sleep:{title:'Sleep duration',value:'8:08',unit:'hours recorded'}, pulse:{title:'Pulse',value:'76',unit:'daily measured mean'}, movement:{title:'Movement',value:'4,960',unit:'ring-estimated steps'}, oxygen:{title:'Oxygen minimum',value:'94%',unit:'captured lower bound'} }; const cfg = configs[trendMetric]; let data = RANGE_DATA[range].map((d,i)=>({label:d.label,value:d.value === null || (state === 'partial' && i % 3 === 1) ? null : trendMetric === 'sleep' ? 430 + ((i*23)%80) : trendMetric === 'movement' ? 3800 + ((i*317)%2200) : trendMetric === 'oxygen' ? 93 + (i%4) : d.value})); const unit = trendMetric === 'sleep' ? 'min' : trendMetric === 'movement' ? 'steps' : trendMetric === 'oxygen' ? '%' : 'bpm';
+      return shell(route.path, `${top}<p class="page-meta">Your local history · ${days}</p><h1 class="page-title compact">Patterns, without guesswork.</h1><p class="lede">${state === 'partial' ? 'Limited coverage is visible in the chart.' : 'Missing days remain gaps and manual context stays separate.'}</p><div class="section">${segment(route.path,[['day','7 days'],['week','30 days'],['month','90 days']],range)}</div><div class="chips section" role="group" aria-label="Choose trend metric">${Object.entries(configs).map(([key,value])=>`<button class="chip" type="button" data-trend-metric="${key}" aria-pressed="${key===trendMetric}">${value.title}</button>`).join('')}</div><section class="section"><span class="display-value">${cfg.value}<small>${cfg.unit}</small></span>${lineChart(prefix,'trend-chart',data,unit,trendMetric === 'oxygen' ? 'hourly firmware range' : trendMetric === 'movement' ? 'ring estimate' : trendMetric === 'sleep' ? 'firmware interval' : 'measured samples',`${cfg.title} across ${days}; missing days are gaps`)}</section><section class="section">${row('journal','Manual context','Shown beside dates only · never changes values','Separate','/journal')}</section>`, 'trends');
+    }
+    function journal(route, state) {
+      const top = appbar('', '', stateBadge('Manual · local')); if (state === 'loading') return shell(route.path, `${top}${loading()}`, 'journal'); if (state === 'error') return shell(route.path, `${top}${status('error','Journal storage could not be read','Existing files were not overwritten. Ring measurements remain unaffected.','alert')}`, 'journal'); const populated = state === 'populated';
+      return shell(route.path, `${top}<p class="page-meta">Context that stays separate</p><h1 class="page-title compact">Add what the ring cannot see.</h1><p class="lede">Manual context never changes a ring measurement. It remains labelled, editable, exportable, and separately deletable.</p><section class="section rule-list">${row('plus','Quick check-in','Tags and an optional note','','/journal/check-in','journal-check-in')}${row('pool','Log a swim','Pool or open water · duration · effort','','/journal/swim','journal-swim')}</section><section class="section">${sectionHead('Recent context',populated?'2 entries':'0')}${populated ? `<div class="rule-list">${row('journal','Late meal · Travel','26 Aug · 21:18 · optional note','Manual')}${row('pool','Pool swim','25 Aug · 42 min · steady','Manual')}</div>` : `<p class="measurement-note">No manual context yet. Ring measurements remain complete without it.</p>`}</section>`, 'journal');
+    }
+    function checkIn(route, state, prefix) {
+      const saving = state === 'saving'; const saved = state === 'submitted'; const failed = state === 'failure'; const hasContent = formData.checkIn.tags.size > 0 || formData.checkIn.note.trim().length > 0;
+      const tags = ['Exercise','Late meal','Alcohol','Travel','Illness','Meditation'].map(tag => `<button class="chip" type="button" data-checkin-tag aria-pressed="${formData.checkIn.tags.has(tag)}" ${saving?'disabled':''}>${tag}</button>`).join('');
+      const feedback = saving ? status('', 'Saving locally', 'The form is locked against duplicate submission. Ring records remain unchanged.', 'sync') : saved ? status('success', 'Check-in saved locally', 'Manual source · separately deletable', 'check') : failed ? status('error', 'Check-in was not saved', 'Your tags and note are preserved. Retry after checking local storage.', 'alert') : '';
+      return shell(route.path, `${appbar('Check-in','/journal',stateBadge('Manual'))}<p class="page-meta">Optional context · stored locally</p><h1 class="page-title compact">What shaped today?</h1><p class="lede">Choose only what matters. Nothing here changes a measured value.</p><form class="form-stack" data-checkin-form novalidate><fieldset style="border:0;padding:0;margin:0"><legend class="field-label">Tags</legend><div class="chips">${tags}</div></fieldset><label for="${prefix}-checkin-note"><span class="field-label">Note <span style="font-weight:400">optional</span></span><textarea id="${prefix}-checkin-note" maxlength="280" aria-describedby="${prefix}-checkin-hint" ${saving?'disabled':''}>${escapeHTML(formData.checkIn.note)}</textarea><span class="field-hint" id="${prefix}-checkin-hint">Stored as manual context. Maximum 280 characters.</span></label>${primary(saving?'Saving locally':saved?'Save another check-in':'Save check-in','', 'save-checkin', `${saving||!hasContent?'disabled ':''}data-form-submit data-checkin-save`)}</form>${feedback}`, 'journal');
+    }
+    function swim(route, state, prefix) {
+      const saving = state === 'saving'; const saved = state === 'submitted'; const failed = state === 'failure'; const options = ['25 metres','50 metres','Open water'].map(value => `<option ${value===formData.swim.pool?'selected':''}>${value}</option>`).join(''); const efforts = ['Easy','Steady','Hard'].map(value => `<button class="seg-button" type="button" aria-pressed="${value===formData.swim.effort}" ${saving?'disabled':''}>${value}</button>`).join('');
+      const feedback = saving ? status('', 'Saving locally', 'The form is locked against duplicate submission. Ring records remain unchanged.', 'sync') : saved ? status('success', 'Swim saved locally', `${escapeHTML(formData.swim.duration)} minutes · manual source · ring records unchanged`, 'check') : failed ? status('error', 'Swim was not saved', 'Your duration, environment, and effort are preserved. Retry after checking local storage.', 'alert') : '';
+      return shell(route.path, `${appbar('Manual context','/journal',stateBadge('Manual'))}<p class="page-meta">Activity entry · stored separately</p><h1 class="page-title compact">Add a swim.</h1><p class="lede">A manual swim never becomes ring steps, calories, sleep, or a health score.</p><form class="form-stack" data-swim-form novalidate><label for="${prefix}-swim-duration"><span class="field-label">Duration in minutes</span><input class="field" id="${prefix}-swim-duration" name="duration" type="number" inputmode="numeric" min="1" max="300" value="${escapeHTML(formData.swim.duration)}" required aria-describedby="${prefix}-swim-duration-hint ${prefix}-swim-duration-error" ${saving?'disabled':''}><span class="field-hint" id="${prefix}-swim-duration-hint">Enter 1–300 minutes.</span><span class="field-error" id="${prefix}-swim-duration-error" role="alert" hidden></span></label><label for="${prefix}-swim-pool"><span class="field-label">Pool length</span><select class="select-field" id="${prefix}-swim-pool" data-swim-pool ${saving?'disabled':''}>${options}</select></label><fieldset style="border:0;padding:0;margin:0"><legend class="field-label">Effort</legend><div class="segment" data-effort>${efforts}</div></fieldset>${primary(saving?'Saving locally':saved?'Save another swim':'Save locally','', 'save-swim', `${saving?'disabled ':''}data-form-submit`)}</form>${feedback}`, 'journal');
+    }
+    function you(route) { return shell(route.path, `${appbar('', '', stateBadge('Local only'))}<p class="page-meta">You</p><h1 class="page-title compact">Your ring. Your context. Your files.</h1><section class="section rule-list">${row('info','Ring',`Battery 55% · ${ringRecordCount} local records`,'','/you/ring','you-ring')}${row('journal','Journal',`${manualEntryCount} manual entries · kept separate`,'','/journal','you-journal')}${row('folder','Data and export','Portable · inspectable · removable','','/you/data','you-data')}${row('lock','Cycle privacy','Optional · separate consent boundary','','/privacy/cycle','you-cycle')}${row('info','About LibreRing','Evidence model · licence · product limits','','/you/about','you-about')}</section>`, 'you'); }
+    function device(route, state) {
+      let notice=''; if(state==='syncing') notice=status('','Refreshing quietly','Existing data remains readable while the ring reconnects.','sync'); if(state==='partial') notice=status('partial','Refresh completed with gaps','Pulse and activity updated. Oxygen remains labelled stale.','alert'); if(state==='failure') notice=status('error','Ring was not reached','Existing local history was preserved. Bring the ring close and retry.','alert');
+      return shell(route.path, `${appbar('Ring','/you',stateBadge(state==='failure'?'Recoverable':'Local link',state==='partial'?'partial':''))}<div class="ring-stage" style="min-height:220px">${ring(state==='syncing'?'syncing':state==='partial'?'partial':state==='failure'?'error':'quiet','COLMI R12 local ring')}</div><h1 class="page-title compact">COLMI R12</h1>${notice}<section class="section rule-list">${row('info','Battery','Value from the last successful sync','55%')}${row('info','Firmware','Exact verified production gate','RT11CR…260424')}${row('lock','Identifier','Rediscovered transiently on refresh','Not stored')}${row('info','Capabilities','Available, partial, and locked','','/you/ring/capabilities')}</section><div class="section">${primary(state==='syncing'?'Refreshing':'Refresh ring','', 'device-refresh', state==='syncing'?'disabled':'data-sync-start')}</div>`, 'you');
+    }
+    function capabilities(route) {
+      const entries = [
+        ['Battery','55% at last sync','Available',''],['Activity history','11 decoded buckets','Available',''],['Pulse history','11 measured samples','Available',''],['Sleep and stages','1 firmware session','Available',''],['Oxygen history','10 hourly ranges','Partial','partial'],['Firmware indexes','Opaque unitless values','Partial','partial'],['Device time','Necessary synchronisation only','Available',''],['Monitoring schedules','Write semantics incomplete','Locked','locked'],['Gesture / display controls','Write protocol not enabled','Locked','locked'],['Find ring / camera shutter','Command path not safely validated','Locked','locked'],['Live vital measurement','Stable user flow not validated','Locked','locked'],['Apple Health / background sync','Integration not built','Locked','locked'],['Firmware update / ring game','No safe signed path','Locked','locked']
+      ];
+      return shell(route.path, `${appbar('Capabilities','/you/ring',stateBadge('Read-only','locked'))}<p class="page-meta">Exact protocol and firmware boundary</p><h1 class="page-title compact">What works now—and what stays locked.</h1><p class="lede">Unavailable does not mean the ring has no capability. It means LibreRing will not expose it without verified, reversible behavior.</p><section class="section rule-list">${entries.map(([title,meta,value,tone])=>row(tone==='locked'?'lock':tone==='partial'?'alert':'check',title,meta,stateBadge(value,tone))).join('')}</section>`, 'you');
+    }
+    function dataHub(route, state) {
+      const top=appbar('Data','/you',stateBadge('On device')); if(state==='loading') return shell(route.path,`${top}${loading()}`,'you'); if(state==='empty') return shell(route.path,`${top}${emptyState('folder','No local files yet','Exports become available after verified ring history or manual context exists.',primary('Open ring','/you/ring','data-ring'))}`,'you'); if(state==='error') return shell(route.path,`${top}${status('error','Export stopped safely','No existing data changed. Retry after checking available device storage.','alert')}`,'you');
+      const exportReady=state==='exportReady'; const totalRows=ringRecordCount+manualEntryCount; const downloads=exportReady?`<div class="sheet-actions section" aria-label="Download prepared export"><button type="button" data-download="json">Download JSON</button><button type="button" data-download="csv">Download CSV</button></div>`:''; const deleteRows=`<div class="rule-list"><button class="row-button" type="button" data-confirm="manual" data-od-id="delete-manual-context" ${manualEntryCount===0?'disabled':''}><span class="row-main"><span class="row-icon">${icon('trash')}</span><span><span class="row-title">Delete manual context</span><span class="row-meta">Keeps ring measurements and prior exports</span></span></span><span aria-hidden="true">→</span></button><button class="row-button" type="button" data-confirm="ring" data-od-id="delete-ring-history" ${ringRecordCount===0?'disabled':''}><span class="row-main"><span class="row-icon">${icon('trash')}</span><span><span class="row-title">Delete ring history</span><span class="row-meta">Keeps manual context and prior exports · the ring is unchanged</span></span></span><span aria-hidden="true">→</span></button></div>`;
+      return shell(route.path, `${top}<p class="page-meta">Portable · inspectable · removable</p><h1 class="page-title compact">Your data has an exit.</h1><section class="section rule-list">${row('folder','Ring history','Decoded records · no raw packets',String(ringRecordCount))}${row('journal','Manual context','Stored and deletable separately',String(manualEntryCount))}${row('lock','BLE identifier','Excluded from storage and export','Not stored')}</section><div class="section">${primary(exportReady?'Prepare another export':'Prepare local export','', 'prepare-export','data-export')}</div>${exportReady?status('success','Export ready',`${totalRows} rows · JSON + CSV · identifiers and raw packets excluded`,'check'):''}${downloads}<section class="section">${sectionHead('Delete separately')}${deleteRows}</section>`, 'you');
+    }
+    function about(route) { return shell(route.path, `${appbar('About','/you')}<p class="page-meta">LibreRing · Open-source wellness software</p><h1 class="page-title compact">Premium health software without a private cloud.</h1><p class="lede">LibreRing is not a medical device. It does not diagnose, prevent, monitor, treat, or cure a condition.</p><section class="section rule-list">${row('info','Application','Local-first product preview','1.1.0 (5)')}${row('info','Health model','No opaque production score','Evidence first')}${row('info','Licence','Original LibreRing code','Apache-2.0')}</section>${status('','Consumer device boundary','Smart-ring measurements can be incomplete or inaccurate. Seek qualified medical advice for health concerns.','info')}`, 'you'); }
+    function cycle(route, state) {
+      const loadingState=state==='loading', failure=state==='failure', locked=state==='locked'; const keep=locked?false:privacyPrefs.keep; const dependentLocked=locked||!keep; return shell(route.path, `${appbar('Cycle privacy','/you',stateBadge('Separate consent','locked'))}<p class="page-meta">Optional cycle context · local by default</p><h1 class="page-title compact">Choose what stays available.</h1><p class="lede">Cycle entries never change measured values and are excluded from Recovery.</p>${failure?status('error','The privacy change was not saved','The previous setting remains active. Retry without losing any local entries.','alert'):''}<section class="section rule-list"><div class="toggle-row"><div><h2>Keep cycle entries on this phone</h2><p>Turning this off removes local entries from future views.</p></div><button class="toggle" type="button" role="switch" aria-checked="${keep}" data-privacy-toggle="keep" ${loadingState?'data-loading="true" ':''}${loadingState||locked?'disabled':''} aria-label="Keep cycle entries on this phone"><span class="toggle-track"></span></button></div><div class="toggle-row"><div><h2>Use for personal trend context</h2><p>Shown beside trends only. Never changes measured values.</p></div><button class="toggle" type="button" role="switch" aria-checked="${keep&&privacyPrefs.context}" data-privacy-toggle="context" ${dependentLocked||loadingState?'disabled':''} aria-label="Use cycle entries for trend context"><span class="toggle-track"></span></button></div><div class="toggle-row"><div><h2>Allow export</h2><p>Requires a separate confirmation for every export.</p></div><button class="toggle" type="button" role="switch" aria-checked="${keep&&privacyPrefs.export}" data-privacy-toggle="export" ${dependentLocked||loadingState?'disabled':''} aria-label="Allow cycle data export"><span class="toggle-track"></span></button></div></section>${dependentLocked?status('','Dependent controls are locked','Keep-local must remain enabled before context or export can be changed.','lock'):status('','Changing controls shares nothing','Every future export still requires explicit confirmation.','lock')}<div class="section">${primary('Done','/you','cycle-done')}</div>`, 'you');
+    }
+
+    const ROUTES = [
+      {path:'/welcome',label:'Welcome',group:'Setup',states:['default'],defaultState:'default',render:welcome},
+      {path:'/privacy',label:'Privacy promise',group:'Setup',states:['default'],defaultState:'default',render:privacy},
+      {path:'/pairing/scan',label:'Pairing scan',group:'Setup',states:['idle','searching','multiple','unavailable','failure'],defaultState:'idle',render:scan},
+      {path:'/pairing/found',label:'Ring found',group:'Setup',states:['connected','syncing','partial','failure','success'],defaultState:'connected',render:found},
+      {path:'/today',label:'Today',group:'Daily',states:['populated','syncing','success','partial','stale','loading','empty','error'],defaultState:'populated',render:today},
+      {path:'/metrics',label:'All signals',group:'Daily',states:['populated','partial','loading','empty','error'],defaultState:'populated',render:metrics},
+      {path:'/movement',label:'Activity',group:'Signals',states:['populated','partial','loading','empty'],defaultState:'populated',render:activity},
+      {path:'/sleep',label:'Sleep',group:'Signals',states:['populated','partial','loading','empty','error'],defaultState:'populated',render:sleep},
+      {path:'/heart',label:'Heart',group:'Signals',states:['populated','partial','loading','empty','error'],defaultState:'populated',render:heart},
+      {path:'/oxygen',label:'Oxygen',group:'Signals',states:['populated','partial','loading','empty'],defaultState:'populated',render:oxygen},
+      {path:'/signals/hrv-index',label:'Firmware HRV index',group:'Signals',states:['populated','partial','loading','empty'],defaultState:'populated',render:(r,s,p)=>vendor(r,s,p,'hrv')},
+      {path:'/signals/stress-index',label:'Firmware stress index',group:'Signals',states:['populated','partial','loading','empty'],defaultState:'populated',render:(r,s,p)=>vendor(r,s,p,'stress')},
+      {path:'/recovery',label:'Recovery unavailable',group:'Signals',states:['unavailable'],defaultState:'unavailable',render:recovery},
+      {path:'/sport',label:'Sport record',group:'Context',states:['empty','populated','loading','error'],defaultState:'empty',render:sport},
+      {path:'/sleep/evidence',label:'Sleep evidence',group:'Evidence',states:['populated','partial','empty'],defaultState:'populated',render:evidence},
+      {path:'/no-result',label:'No-result state',group:'Evidence',states:['unavailable'],defaultState:'unavailable',render:noResult},
+      {path:'/trends',label:'Trends',group:'History',states:['populated','partial','loading','empty','error'],defaultState:'populated',render:trends},
+      {path:'/journal',label:'Journal',group:'Context',states:['empty','populated','loading','error'],defaultState:'empty',render:journal},
+      {path:'/journal/check-in',label:'Check-in',group:'Context',states:['default','saving','submitted','failure'],defaultState:'default',render:checkIn},
+      {path:'/journal/swim',label:'Add swim',group:'Context',states:['default','saving','submitted','failure'],defaultState:'default',render:swim},
+      {path:'/you',label:'You',group:'Settings',states:['default'],defaultState:'default',render:you},
+      {path:'/you/ring',label:'Ring device',group:'Settings',states:['connected','syncing','partial','failure'],defaultState:'connected',render:device},
+      {path:'/you/ring/capabilities',label:'Ring capabilities',group:'Settings',states:['locked'],defaultState:'locked',render:capabilities},
+      {path:'/you/data',label:'Data hub',group:'Settings',states:['populated','exportReady','loading','empty','error'],defaultState:'populated',render:dataHub},
+      {path:'/you/about',label:'About',group:'Settings',states:['default'],defaultState:'default',render:about},
+      {path:'/privacy/cycle',label:'Cycle privacy',group:'Privacy',states:['enabled','locked','loading','failure'],defaultState:'enabled',render:cycle}
+    ];
+    const byPath = path => ROUTES.find(route => route.path === path) || ROUTES[0];
+    const routeIndex = path => ROUTES.findIndex(route => route.path === path);
+    function renderRoute(route, state, prefix, animate=false) { const html = route.render(route,state,prefix); return animate ? html.replace('class="phone-screen', 'class="phone-screen route-enter') : html; }
+    function renderGallery() {
+      const grid=document.getElementById('gallery-grid'); grid.innerHTML=ROUTES.map((route,index)=>`<article class="gallery-item" data-od-id="gallery-${route.path.replaceAll('/','-').replace(/^-/,'')}"><div class="phone gallery-phone" inert>${renderRoute(route,route.defaultState,`g${index}`)}</div><div class="gallery-caption"><p class="gallery-label">${String(index+1).padStart(2,'0')} · ${route.label}<small>${route.path} · ${stateLabels[route.defaultState]}</small></p><button class="gallery-open" type="button" data-open-focus="${route.path}">Open</button></div></article>`).join(''); fitGallery();
+    }
+    function updateStateSelect(route) { const select=document.querySelector('[data-state-select]'); select.innerHTML=route.states.map(state=>`<option value="${state}" ${state===getState(route)?'selected':''}>${stateLabels[state]}</option>`).join(''); }
+    function renderFocus(animate=true) {
+      clearTimers(); const route=byPath(currentPath); const state=getState(route); currentPath=route.path; const phone=document.getElementById('focus-phone'); phone.className=`phone focus-phone${largeText?' is-large-text':''}${reducedMotion||keyboardMode?' force-reduced':''}`; phone.style.setProperty('--phone-width',compactMode?'320px':'390px'); phone.innerHTML=renderRoute(route,state,'f',animate&&!keyboardMode); document.querySelector('[data-route-select]').value=route.path; updateStateSelect(route); document.querySelector('[data-width-toggle]').setAttribute('aria-pressed',String(compactMode)); document.querySelector('[data-text-toggle]').setAttribute('aria-pressed',String(largeText)); document.querySelector('[data-motion-toggle]').setAttribute('aria-pressed',String(reducedMotion)); document.getElementById('host-live').textContent=`${route.label}: ${stateLabels[state]}`; document.getElementById('host-alert').textContent=['error','failure'].includes(state)?`${route.label}: ${stateLabels[state]}`:''; localStorage.setItem('librering-v2-route',route.path); initReveals(); fitPhone(); if(toastText) showToast(toastText);
+    }
+    function go(path, animate=true) { const route=byPath(path); currentPath=route.path; if(!focusMode) openFocus(route.path); else { if(location.hash!==`#${route.path}`) history.pushState(null,'',`#${route.path}`); renderFocus(animate); } }
+    function openFocus(path) { lastFocused=document.activeElement; focusMode=true; currentPath=byPath(path).path; document.getElementById('focus-layer').hidden=false; document.getElementById('review-shell').inert=true; document.body.style.overflow='hidden'; history.replaceState(null,'',`#${currentPath}`); renderFocus(false); requestAnimationFrame(()=>document.querySelector('[data-close-focus]').focus()); }
+    function closeFocus() { focusMode=false; clearTimers(); document.getElementById('focus-layer').hidden=true; document.getElementById('review-shell').inert=false; document.body.style.overflow=''; history.replaceState(null,'',location.pathname+location.search); if(lastFocused) lastFocused.focus(); }
+    function setRouteState(state) { routeState.set(currentPath,state); renderFocus(); }
+    function fitPhone() { if(!focusMode) return; const stage=document.getElementById('focus-stage'); const width=compactMode?320:390; const scale=Math.min(1,(stage.clientWidth-20)/width,(stage.clientHeight-20)/844); const wrap=document.getElementById('phone-wrap'); const phone=document.getElementById('focus-phone'); wrap.style.width=`${width*scale}px`; wrap.style.height=`${844*scale}px`; phone.style.transform=`scale(${scale})`; }
+    function fitGallery() { document.querySelectorAll('.gallery-item').forEach(item=>{ const phone=item.querySelector('.gallery-phone'); const scale=Math.min(1,item.clientWidth/390); phone.style.transform=`scale(${scale})`; phone.style.transformOrigin='top center'; phone.style.marginBottom=`${844*(scale-1)}px`; }); }
+    function showToast(text) { toastText=''; const screen=document.querySelector('#focus-phone .phone-screen'); if(!screen) return; document.getElementById('host-live').textContent=text; screen.querySelector('.toast')?.remove(); const toast=document.createElement('div'); toast.className='toast'; toast.setAttribute('role','status'); toast.tabIndex=0; toast.textContent=text; screen.append(toast); let remaining=4800; let started=Date.now(); let timer=schedule(()=>toast.remove(),remaining); const pause=()=>{ window.clearTimeout(timer); remaining=Math.max(0,remaining-(Date.now()-started)); }; const resume=()=>{ if(!toast.isConnected||remaining<=0) return toast.remove(); started=Date.now(); timer=schedule(()=>toast.remove(),remaining); }; toast.addEventListener('mouseenter',pause); toast.addEventListener('mouseleave',resume); toast.addEventListener('focusin',pause); toast.addEventListener('focusout',resume); }
+    function initReveals() { const items=document.querySelectorAll('#focus-phone .evidence-item'); if(!items.length||reducedMotion) return; const observer=new IntersectionObserver(entries=>entries.forEach(entry=>{ if(entry.isIntersecting){ entry.target.animate([{opacity:.2,transform:'translateY(8px)'},{opacity:1,transform:'translateY(0)'}],{duration:220,easing:'cubic-bezier(.2,0,0,1)',fill:'both'}); observer.unobserve(entry.target); } }),{root:document.querySelector('#focus-phone .screen-scroll'),threshold:.2}); items.forEach(item=>observer.observe(item)); }
+    function activatePoint(chart,point) { chart.querySelectorAll('[data-point]').forEach(p=>p.setAttribute('aria-current',String(p===point))); const output=chart.closest('figure').querySelector('[data-scrub-output]'); if(output) output.textContent=point.dataset.detail; }
+    function confirmSheet(kind) { sheetState=kind; sheetReturnFocus=document.activeElement; const screen=document.querySelector('#focus-phone .phone-screen'); const copy=kind==='ring'?['Delete local ring history?','This removes decoded records from this phone. Manual context and prior exports remain. The ring itself is not changed.']:['Delete manual context?','Ring measurements and prior exports remain on this phone.']; const layer=document.createElement('div'); layer.className='sheet-backdrop'; layer.innerHTML=`<section class="sheet" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby="confirm-copy"><h2 id="confirm-title">${copy[0]}</h2><p id="confirm-copy">${copy[1]}</p><div class="sheet-actions"><button type="button" data-cancel-delete>Cancel</button><button class="danger" type="button" data-confirm-delete>Delete locally</button></div></section>`; screen.append(layer); layer.querySelector('[data-cancel-delete]').focus(); }
+    function closeSheet(restore=true) { document.querySelector('#focus-phone .sheet-backdrop')?.remove(); sheetState=null; if(restore&&sheetReturnFocus?.isConnected) sheetReturnFocus.focus(); sheetReturnFocus=null; }
+    function startSync(target='today') { const route=byPath(currentPath); const finalState=target==='pairing'||route.path==='/today'?'success':'connected'; const sequence=['syncing',finalState]; let i=0; setRouteState(sequence[i]); const advance=()=>{ i+=1; if(i<sequence.length){ routeState.set(route.path,sequence[i]); renderFocus(); showToast('Ring history refreshed locally.'); } }; schedule(advance,reducedMotion?120:1550); }
+    function validateSwim(form) { const input=form.querySelector('input[name="duration"]'); const error=form.querySelector('.field-error'); const value=Number(input.value); const valid=Number.isFinite(value)&&value>=1&&value<=300; input.setAttribute('aria-invalid',String(!valid)); error.hidden=valid; error.textContent=valid?'':'Enter a duration from 1 to 300 minutes.'; return valid; }
+    function downloadExport(kind) { const records={ generatedBy:'LibreRing Premium V2 prototype', ringRecordCount, manualEntryCount, exclusions:['BLE identifiers','raw BLE packets'], provenance:'prototype dataset' }; const csv=`family,count,provenance\nring_history,${ringRecordCount},prototype_dataset\nmanual_context,${manualEntryCount},manual_source\n`; const blob=new Blob([kind==='json'?JSON.stringify(records,null,2):csv],{type:kind==='json'?'application/json':'text/csv'}); const link=document.createElement('a'); link.href=URL.createObjectURL(blob); link.download=`librering-prototype-export.${kind}`; document.body.append(link); link.click(); link.remove(); URL.revokeObjectURL(link.href); }
+
+    document.addEventListener('click',event=>{
+      const opener=event.target.closest('[data-open-focus]'); if(opener) return openFocus(opener.dataset.openFocus);
+      if(event.target.closest('[data-close-focus]')) return closeFocus();
+      if(!focusMode) return;
+      const routeButton=event.target.closest('[data-route]'); if(routeButton) return go(routeButton.dataset.route);
+      if(event.target.closest('[data-prev-route]')) return go(ROUTES[(routeIndex(currentPath)-1+ROUTES.length)%ROUTES.length].path);
+      if(event.target.closest('[data-next-route]')) return go(ROUTES[(routeIndex(currentPath)+1)%ROUTES.length].path);
+      if(event.target.closest('[data-width-toggle]')) { compactMode=!compactMode; localStorage.setItem('librering-v2-compact',String(compactMode)); return renderFocus(false); }
+      if(event.target.closest('[data-text-toggle]')) { largeText=!largeText; localStorage.setItem('librering-v2-large-text',String(largeText)); return renderFocus(false); }
+      if(event.target.closest('[data-motion-toggle]')) { reducedMotion=!reducedMotion; localStorage.setItem('librering-v2-reduced-motion',String(reducedMotion)); return renderFocus(false); }
+      const range=event.target.closest('[data-range]'); if(range) { rangeState.set(range.dataset.rangeRoute,range.dataset.range); return renderFocus(); }
+      const metric=event.target.closest('[data-trend-metric]'); if(metric) { trendMetric=metric.dataset.trendMetric; return renderFocus(); }
+      const chip=event.target.closest('[data-checkin-tag]'); if(chip) { const selected=chip.getAttribute('aria-pressed')!=='true'; chip.setAttribute('aria-pressed',String(selected)); selected?formData.checkIn.tags.add(chip.textContent):formData.checkIn.tags.delete(chip.textContent); const save=document.querySelector('#focus-phone [data-checkin-save]'); if(save) save.disabled=formData.checkIn.tags.size===0&&formData.checkIn.note.trim().length===0; return; }
+      const effort=event.target.closest('[data-effort] .seg-button'); if(effort) { formData.swim.effort=effort.textContent; effort.parentElement.querySelectorAll('.seg-button').forEach(button=>button.setAttribute('aria-pressed',String(button===effort))); return; }
+      const toggle=event.target.closest('[data-privacy-toggle]'); if(toggle) { const key=toggle.dataset.privacyToggle; const next=toggle.getAttribute('aria-checked')!=='true'; if(getState(byPath('/privacy/cycle'))==='failure') return showToast('Privacy preference was not changed.'); toggle.setAttribute('data-loading','true'); schedule(()=>{ privacyPrefs[key]=next; if(key==='keep'&&!next){ privacyPrefs.context=false; privacyPrefs.export=false; } renderFocus(false); showToast('Privacy preference saved locally.'); },reducedMotion?80:420); return; }
+      if(event.target.closest('[data-scan-start]')) { routeState.set('/pairing/scan','searching'); renderFocus(); schedule(()=>{ routeState.set('/pairing/scan','multiple'); renderFocus(); },reducedMotion?160:1300); return; }
+      if(event.target.closest('[data-pairing-sync]')) return startSync('pairing');
+      if(event.target.closest('[data-sync-start]')) return startSync('today');
+      if(event.target.closest('[data-state-action]')) return setRouteState(event.target.closest('[data-state-action]').dataset.stateAction);
+      if(event.target.closest('[data-export]')) { routeState.set('/you/data','exportReady'); renderFocus(); return showToast('Export prepared locally.'); }
+      const download=event.target.closest('[data-download]'); if(download) { downloadExport(download.dataset.download); return showToast(`${download.dataset.download.toUpperCase()} export downloaded.`); }
+      if(event.target.closest('[data-confirm]')) return confirmSheet(event.target.closest('[data-confirm]').dataset.confirm);
+      if(event.target.closest('[data-cancel-delete]')) return closeSheet();
+      if(event.target.closest('[data-confirm-delete]')) { const kind=sheetState; closeSheet(false); if(kind==='ring') ringRecordCount=0; else manualEntryCount=0; routeState.set('/you/data',ringRecordCount===0&&manualEntryCount===0?'empty':'populated'); renderFocus(); return showToast(kind==='ring'?'Local ring history deleted. The ring was not changed.':'Manual context deleted. Ring history was preserved.'); }
+      const formSubmit=event.target.closest('[data-form-submit]'); if(formSubmit) { const form=formSubmit.closest('form'); if(form.matches('[data-swim-form]')&&!validateSwim(form)) return form.querySelector('[aria-invalid="true"]').focus(); routeState.set(currentPath,'saving'); renderFocus(); schedule(()=>{ routeState.set(currentPath,'submitted'); manualEntryCount+=1; renderFocus(); showToast('Saved locally as manual context.'); },reducedMotion?100:520); }
+    });
+    document.addEventListener('change',event=>{
+      if(event.target.matches('[data-route-select]')) go(event.target.value);
+      if(event.target.matches('[data-state-select]')) setRouteState(event.target.value);
+      if(event.target.matches('[data-swim-pool]')) formData.swim.pool=event.target.value;
+    });
+    document.addEventListener('input',event=>{ if(event.target.matches('[data-checkin-form] textarea')) { formData.checkIn.note=event.target.value; const save=document.querySelector('#focus-phone [data-checkin-save]'); if(save) save.disabled=formData.checkIn.tags.size===0&&formData.checkIn.note.trim().length===0; } if(event.target.matches('[data-swim-form] input[name="duration"]')) formData.swim.duration=event.target.value; });
+    document.addEventListener('blur',event=>{ if(focusMode&&event.target.matches('[data-swim-form] input[name="duration"]')) validateSwim(event.target.form); },true);
+    document.addEventListener('focusin',event=>{ const point=event.target.closest('[data-point]'); if(point) activatePoint(point.closest('[data-chart]'),point); });
+    document.addEventListener('pointermove',event=>{ const chart=event.target.closest('[data-chart]'); if(!chart||event.pointerType==='touch'&&event.buttons===0) return; const points=[...chart.querySelectorAll('[data-point]')]; if(!points.length) return; const rect=chart.getBoundingClientRect(); const ratio=Math.max(0,Math.min(1,(event.clientX-rect.left)/rect.width)); const point=points.reduce((best,p)=>Math.abs((Number(p.dataset.order)/(Math.max(1,points.length-1)))-ratio)<Math.abs((Number(best.dataset.order)/(Math.max(1,points.length-1)))-ratio)?p:best,points[0]); activatePoint(chart,point); });
+    document.addEventListener('pointerdown',()=>{ keyboardMode=false; document.body.classList.remove('using-keyboard'); },{passive:true});
+    document.addEventListener('keydown',event=>{
+      keyboardMode=true; document.body.classList.add('using-keyboard');
+      if(!focusMode) return;
+      const chart=event.target.closest('[data-chart]'); if(chart&&(event.key==='ArrowLeft'||event.key==='ArrowRight')) { event.preventDefault(); const points=[...chart.querySelectorAll('[data-point]')]; const active=Math.max(0,points.findIndex(p=>p.getAttribute('aria-current')==='true')); const next=event.key==='ArrowRight'?Math.min(points.length-1,active+1):Math.max(0,active-1); activatePoint(chart,points[next]); return; }
+      if(event.key==='Escape') { if(sheetState) closeSheet(); else closeFocus(); return; }
+      if((event.key==='ArrowLeft'||event.key==='ArrowRight')&&!/INPUT|TEXTAREA|SELECT/.test(event.target.tagName)) { event.preventDefault(); const delta=event.key==='ArrowRight'?1:-1; go(ROUTES[(routeIndex(currentPath)+delta+ROUTES.length)%ROUTES.length].path); }
+      if(event.key==='Tab') { const scope=sheetState?'#focus-phone .sheet-backdrop':'#focus-layer'; const focusables=[...document.querySelectorAll(`${scope} button:not(:disabled),${scope} select:not(:disabled),${scope} input:not(:disabled),${scope} textarea:not(:disabled),${scope} [tabindex="0"]`)].filter(el=>el.offsetParent!==null); if(!focusables.length) return; if(event.shiftKey&&document.activeElement===focusables[0]) { event.preventDefault(); focusables.at(-1).focus(); } else if(!event.shiftKey&&document.activeElement===focusables.at(-1)) { event.preventDefault(); focusables[0].focus(); } }
+    });
+    window.addEventListener('resize',()=>{ fitPhone(); fitGallery(); },{passive:true});
+    window.addEventListener('popstate',()=>{ const path=location.hash.startsWith('#/')?location.hash.slice(1):''; if(path&&byPath(path).path===path){ if(!focusMode) openFocus(path); else { currentPath=path; renderFocus(); } } });
+
+    document.querySelector('[data-route-select]').innerHTML=ROUTES.map(route=>`<option value="${route.path}">${route.group} · ${route.label}</option>`).join('');
+    compactMode=localStorage.getItem('librering-v2-compact')==='true'; largeText=localStorage.getItem('librering-v2-large-text')==='true'; reducedMotion=localStorage.getItem('librering-v2-reduced-motion')==='true'; currentPath=location.hash.startsWith('#/')?byPath(location.hash.slice(1)).path:(localStorage.getItem('librering-v2-route')||'/welcome');
+    renderGallery(); if(location.hash.startsWith('#/')) openFocus(currentPath);
+  </script>
+</body>
+</html>
