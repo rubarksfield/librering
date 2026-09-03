@@ -528,51 +528,51 @@ class _TodayScreenState extends ConsumerState<TodayScreen>
       children: <Widget>[
         _TopBar(
           leading: const LibreRingWordmark(),
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              if (!demo)
-                IconButton(
-                  key: const Key('today-quick-sync'),
-                  tooltip: copyFor(context, 'Sync ring', 'Sincronizar anel'),
-                  onPressed: pairing.syncInProgress
-                      ? null
-                      : () async {
-                          await ref
-                              .read(ringPairingProvider.notifier)
-                              .quickSync();
-                          if (!context.mounted) return;
-                          final result = ref.read(ringPairingProvider);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                result.syncError ??
-                                    copyFor(
-                                      context,
-                                      'Ring data refreshed locally.',
-                                      'Dados do anel atualizados localmente.',
-                                    ),
+          trailing: TextButton(
+            key: const Key('today-quick-sync'),
+            onPressed: demo || pairing.syncInProgress
+                ? null
+                : () async {
+                    await ref.read(ringPairingProvider.notifier).quickSync();
+                    if (!context.mounted) return;
+                    final result = ref.read(ringPairingProvider);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          result.syncError ??
+                              copyFor(
+                                context,
+                                'Ring data refreshed locally.',
+                                'Dados do anel atualizados localmente.',
                               ),
-                            ),
-                          );
-                        },
-                  icon: pairing.syncInProgress
-                      ? const SizedBox.square(
-                          dimension: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.sync, size: 20),
-                ),
-              IconButton(
-                tooltip: copyFor(
-                  context,
-                  'Privacy controls',
-                  'Controlos de privacidade',
-                ),
-                onPressed: () => context.go('/privacy/cycle'),
-                icon: const Icon(Icons.lock_outline, size: 20),
-              ),
-            ],
+                        ),
+                      ),
+                    );
+                  },
+            child: pairing.syncInProgress
+                ? const SizedBox.square(
+                    dimension: 16,
+                    child: CircularProgressIndicator(strokeWidth: 1.5),
+                  )
+                : Text(
+                    demo
+                        ? copyFor(
+                            context,
+                            'Illustrative sample',
+                            'Amostra ilustrativa',
+                          )
+                        : dataset == null
+                        ? copyFor(context, 'Sync ring', 'Sincronizar anel')
+                        : copyFor(
+                            context,
+                            'Synced ${RingDashboardView.clockLabel(dataset.lastSyncedAtUtc)}',
+                            'Sincronizado ${RingDashboardView.clockLabel(dataset.lastSyncedAtUtc)}',
+                          ),
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w400,
+                    ),
+                  ),
           ),
         ),
         const SizedBox(height: 20),
@@ -613,13 +613,12 @@ class _TodayScreenState extends ConsumerState<TodayScreen>
           _SectionHeading(
             title: copyFor(context, 'Today at a glance', 'Hoje em resumo'),
             action: copyFor(context, 'All signals', 'Todos os sinais'),
-            onAction: () => context.go('/metrics'),
+            onAction: () => context.go('/vitals'),
           ),
           const SizedBox(height: 12),
           for (final domain in <ProductDomain>[
             ProductDomain.movement,
             ProductDomain.sleep,
-            ProductDomain.recovery,
           ].map(product.domain)) ...<Widget>[
             _DomainSummaryCard(
               summary: domain,
@@ -692,69 +691,135 @@ class _TodayScreenState extends ConsumerState<TodayScreen>
             label: Text(copyFor(context, 'Add context', 'Adicionar contexto')),
           ),
         ] else ...<Widget>[
+          const LibreRingEyebrow('Today'),
+          const SizedBox(height: 8),
+          Text(
+            copyFor(
+              context,
+              'Your body looks ready for a demanding day.',
+              'O seu corpo parece pronto para um dia exigente.',
+            ),
+            style: Theme.of(context).textTheme.displayMedium?.copyWith(
+              color: LibreRingTokens.accent,
+              fontSize: 46,
+              height: 1,
+              letterSpacing: -2.2,
+            ),
+          ),
+          const SizedBox(height: 26),
           Semantics(
-            label: '${snapshot!.recoveryScore}, ${snapshot.recoveryLabel}',
+            label:
+                '${copyFor(context, 'Illustrative readiness score', 'Pontuação de prontidão ilustrativa')} ${snapshot!.recoveryScore}',
             child: ExcludeSemantics(
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                alignment: Alignment.centerLeft,
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: <Widget>[
-                    Text(
-                      '${snapshot.recoveryScore}',
-                      style: const TextStyle(
-                        fontSize: 112,
-                        height: .82,
-                        fontWeight: FontWeight.w200,
-                        letterSpacing: -7,
-                      ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: <Widget>[
+                  Text(
+                    '${snapshot.recoveryScore}',
+                    textScaler: TextScaler.noScaling,
+                    style: const TextStyle(
+                      fontSize: 82,
+                      height: .82,
+                      fontWeight: FontWeight.w200,
+                      letterSpacing: -5,
                     ),
-                    const SizedBox(width: 14),
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
                       child: Text(
-                        copyFor(context, snapshot.recoveryLabel, 'Pronta'),
-                        style: const TextStyle(fontWeight: FontWeight.w600),
+                        copyFor(
+                          context,
+                          'Concept readiness\nIllustrative only',
+                          'Prontidão conceptual\nApenas ilustrativa',
+                        ),
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: LibreRingTokens.muted,
+                        ),
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           ),
+          const SizedBox(height: 28),
+          const Divider(),
           const SizedBox(height: 18),
           Text(
             copyFor(
               context,
-              snapshot.recoverySummary,
-              'A recuperação está estável. O sono recente e o pulso em repouso apoiam um dia normal.',
+              'Longer sleep and an earlier-settling resting pulse did most of the work in this illustrative concept. Use how you feel as the final check.',
+              'Um sono mais longo e um pulso em repouso estabilizado mais cedo tiveram maior peso neste conceito ilustrativo. Use como se sente como verificação final.',
             ),
-            style: Theme.of(context).textTheme.bodySmall,
+            style: Theme.of(context).textTheme.bodyMedium,
           ),
-          const SizedBox(height: 34),
+          const SizedBox(height: 22),
+          LibreRingCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  copyFor(
+                    context,
+                    'Your normal plan looks reasonable.',
+                    'O seu plano normal parece razoável.',
+                  ),
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 7),
+                Text(
+                  copyFor(
+                    context,
+                    'Symptoms, illness, or injury should always take priority over a score.',
+                    'Sintomas, doença ou lesão devem sempre ter prioridade sobre uma pontuação.',
+                  ),
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 28),
           _SectionHeading(
+            title: copyFor(context, 'What changed', 'O que mudou'),
+            action: copyFor(context, 'Timeline', 'Cronologia'),
+            onAction: () => context.go('/day-timeline'),
+          ),
+          const SizedBox(height: 4),
+          _DataRow(
+            icon: Icons.bedtime_outlined,
             title: copyFor(
               context,
-              'Eight-week recovery',
-              'Recuperação em oito semanas',
+              "Last night's sleep",
+              'Sono da última noite',
             ),
-            action: copyFor(context, 'View metrics', 'Ver métricas'),
-            onAction: () => context.go('/metrics'),
-          ),
-          const SizedBox(height: 12),
-          Semantics(
-            button: true,
-            label: copyFor(
+            meta: copyFor(
               context,
-              'Open eight-week recovery trend',
-              'Abrir tendência de recuperação de oito semanas',
+              'Longer and well timed · Demo data',
+              'Mais longo e bem sincronizado · Dados de demonstração',
             ),
-            child: InkWell(
-              onTap: () => context.go('/trends'),
-              borderRadius: BorderRadius.circular(12),
-              child: _Heatmap(levels: snapshot.recoveryHistory),
+            value: '7:42',
+            onTap: () => context.go('/sleep'),
+          ),
+          _DataRow(
+            icon: Icons.timeline,
+            title: copyFor(
+              context,
+              'Your day in context',
+              'O seu dia em contexto',
             ),
+            meta: copyFor(
+              context,
+              'Pulse, movement, sleep, and activities together',
+              'Pulso, movimento, sono e atividades em conjunto',
+            ),
+            value: copyFor(context, 'Open', 'Abrir'),
+            onTap: () => context.go('/day-timeline'),
           ),
         ],
       ],
@@ -780,11 +845,14 @@ class MetricsScreen extends ConsumerWidget {
     final largeText = MediaQuery.textScalerOf(context).scale(1) >= 1.5;
     return _AppScreen(
       key: const Key('screen-metrics'),
-      activePath: '/today',
+      activePath: '/vitals',
       children: <Widget>[
         _TopBar(
           leading: const LibreRingWordmark(),
-          trailing: LibreRingEyebrow(copyFor(context, 'Today', 'Hoje')),
+          trailing: Text(
+            copyFor(context, 'Limits stay visible', 'Limites visíveis'),
+            style: const TextStyle(fontSize: 10, color: LibreRingTokens.muted),
+          ),
         ),
         const SizedBox(height: 20),
         _DateLabel(
@@ -806,9 +874,18 @@ class MetricsScreen extends ConsumerWidget {
         _Heading(
           copyFor(
             context,
-            'Every decoded signal.\nNo invented score.',
-            'Todos os sinais descodificados.\nSem pontuação inventada.',
+            'Your most useful signals,\nwith their limits.',
+            'Os sinais mais úteis,\ncom os seus limites.',
           ),
+        ),
+        const SizedBox(height: 12),
+        Text(
+          copyFor(
+            context,
+            'Measured signals lead. Experimental, unavailable, and unsupported interpretations stay visibly separate.',
+            'Os sinais medidos vêm primeiro. Interpretações experimentais, indisponíveis e não suportadas permanecem separadas.',
+          ),
+          style: Theme.of(context).textTheme.bodySmall,
         ),
         const SizedBox(height: 32),
         if (metrics == null)
@@ -828,9 +905,13 @@ class MetricsScreen extends ConsumerWidget {
               final metric = metrics[index];
               return _MetricCard(
                 metric: metric,
-                onTap: metric.label == 'Sleep'
-                    ? () => context.go('/sleep')
-                    : () => context.go('/trends'),
+                onTap: () => context.go(switch (metric.label) {
+                  'Steps' || 'Distance' || 'Firmware energy' => '/activity',
+                  'Latest pulse' => '/heart',
+                  'Sleep' => '/sleep',
+                  'Oxygen range' => '/oxygen',
+                  _ => '/trends',
+                }),
               );
             },
           ),
@@ -2440,12 +2521,27 @@ class YouScreen extends ConsumerWidget {
         _Heading(
           copyFor(
             context,
-            'Your ring. Your context. Your files.',
-            'O seu anel. O seu contexto. Os seus ficheiros.',
+            'Your ring, your data,\nyour choices.',
+            'O seu anel, os seus dados,\nas suas escolhas.',
           ),
           fontSize: 44,
         ),
         const SizedBox(height: 28),
+        _ActionTile(
+          key: const Key('you-profile'),
+          icon: Icons.tune,
+          title: copyFor(
+            context,
+            'Profile and preferences',
+            'Perfil e preferências',
+          ),
+          body: copyFor(
+            context,
+            'Name, units, emphasis, and notifications',
+            'Nome, unidades, ênfase e notificações',
+          ),
+          onTap: () => context.go('/you/profile'),
+        ),
         _ActionTile(
           key: const Key('you-ring'),
           icon: Icons.radio_button_checked,
@@ -2462,6 +2558,17 @@ class YouScreen extends ConsumerWidget {
                   'Bateria ${dataset.batteryLevel == null ? 'indisponível' : '${dataset.batteryLevel}%'} · ${dataset.recordCount} registos',
                 ),
           onTap: () => context.go('/you/ring'),
+        ),
+        _ActionTile(
+          key: const Key('you-setup'),
+          icon: Icons.auto_awesome_outlined,
+          title: copyFor(context, 'Setup walkthrough', 'Guia de configuração'),
+          body: copyFor(
+            context,
+            'Pairing, privacy, and first sync',
+            'Emparelhamento, privacidade e primeira sincronização',
+          ),
+          onTap: () => context.go('/onboarding'),
         ),
         _ActionTile(
           key: const Key('you-journal'),
@@ -2621,6 +2728,21 @@ class RingDeviceScreen extends ConsumerWidget {
                   'Apenas leitura até os comandos serem verificados',
                 ),
                 value: copyFor(context, 'Locked', 'Bloqueado'),
+              ),
+              _DataRow(
+                icon: Icons.history,
+                title: copyFor(
+                  context,
+                  'Connection history',
+                  'Histórico de ligação',
+                ),
+                meta: copyFor(
+                  context,
+                  'Review an interrupted sync without losing local data',
+                  'Rever uma sincronização interrompida sem perder dados locais',
+                ),
+                value: copyFor(context, 'Review', 'Rever'),
+                onTap: () => context.go('/you/ring/sync-issue'),
               ),
             ],
           ),
@@ -3275,10 +3397,11 @@ class _BottomNav extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const items = <(String, IconData, String)>[
-      ('/today', Icons.home_outlined, 'Today'),
-      ('/trends', Icons.trending_up, 'Trends'),
-      ('/you', Icons.person_outline, 'You'),
+    const items = <(String, String)>[
+      ('/today', 'Today'),
+      ('/vitals', 'Vitals'),
+      ('/trends', 'Trends'),
+      ('/you', 'You'),
     ];
     return ColoredBox(
       color: Colors.transparent,
@@ -3288,37 +3411,73 @@ class _BottomNav extends StatelessWidget {
         child: Center(
           heightFactor: 1,
           child: Container(
-            width: 226,
+            width: MediaQuery.sizeOf(context).width - 32,
+            constraints: const BoxConstraints(maxWidth: 430),
             height: 64,
-            padding: const EdgeInsets.all(6),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
             decoration: BoxDecoration(
               color: LibreRingTokens.foreground,
-              borderRadius: BorderRadius.circular(22),
+              borderRadius: BorderRadius.circular(18),
             ),
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: items.map(((String, IconData, String) item) {
-                final selected = activePath == item.$1;
-                return Semantics(
-                  selected: selected,
-                  label: item.$3,
-                  button: true,
-                  child: IconButton(
-                    onPressed: () => context.go(item.$1),
-                    color: selected ? Colors.white : const Color(0xFFC5C2BC),
-                    style: IconButton.styleFrom(
-                      minimumSize: const Size(54, 50),
-                      backgroundColor: selected
-                          ? const Color(0xFF42423E)
-                          : Colors.transparent,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
+              children: items
+                  .map(((String, String) item) {
+                    final selected =
+                        activePath == item.$1 ||
+                        (item.$1 == '/vitals' && activePath == '/metrics');
+                    return Expanded(
+                      child: Semantics(
+                        selected: selected,
+                        label: item.$2,
+                        button: true,
+                        child: ExcludeSemantics(
+                          child: TextButton(
+                            onPressed: () => context.go(item.$1),
+                            style: TextButton.styleFrom(
+                              foregroundColor: selected
+                                  ? Colors.white
+                                  : const Color(0xFFC5C2BC),
+                              minimumSize: const Size(64, 48),
+                              padding: EdgeInsets.zero,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              mainAxisSize: MainAxisSize.min,
+                              children: <Widget>[
+                                Text(
+                                  item.$2,
+                                  maxLines: 1,
+                                  textScaler: TextScaler.noScaling,
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                AnimatedContainer(
+                                  duration:
+                                      MediaQuery.disableAnimationsOf(context)
+                                      ? Duration.zero
+                                      : LibreRingTokens.fast,
+                                  curve: LibreRingTokens.curve,
+                                  width: selected ? 18 : 0,
+                                  height: 2,
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(2),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
                       ),
-                    ),
-                    icon: Icon(item.$2, size: 20),
-                  ),
-                );
-              }).toList(),
+                    );
+                  })
+                  .toList(growable: false),
             ),
           ),
         ),
@@ -3444,33 +3603,23 @@ class _DailySignalCard extends StatelessWidget {
       child: InkWell(
         key: const Key('daily-signal'),
         onTap: onTap,
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(LibreRingTokens.controlRadius),
         child: Container(
           width: double.infinity,
-          padding: const EdgeInsets.fromLTRB(22, 22, 22, 20),
-          decoration: BoxDecoration(
-            color: LibreRingTokens.foreground,
-            borderRadius: BorderRadius.circular(22),
+          padding: const EdgeInsets.fromLTRB(0, 4, 0, 22),
+          decoration: const BoxDecoration(
+            border: Border(bottom: BorderSide(color: LibreRingTokens.border)),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
               Row(
                 children: <Widget>[
-                  Container(
-                    width: 8,
-                    height: 8,
-                    decoration: const BoxDecoration(
-                      color: LibreRingTokens.accent,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                  const SizedBox(width: 9),
                   Expanded(
                     child: Text(
                       signal.eyebrow.toUpperCase(),
                       style: const TextStyle(
-                        color: Color(0xFFC9C6BF),
+                        color: LibreRingTokens.foreground,
                         fontSize: 10,
                         fontWeight: FontWeight.w600,
                         letterSpacing: .9,
@@ -3484,17 +3633,17 @@ class _DailySignalCard extends StatelessWidget {
               Text(
                 signal.headline,
                 style: Theme.of(context).textTheme.displayMedium?.copyWith(
-                  color: Colors.white,
-                  fontSize: 38,
-                  height: 1.04,
-                  letterSpacing: -1.5,
+                  color: LibreRingTokens.accent,
+                  fontSize: 44,
+                  height: 1.01,
+                  letterSpacing: -2,
                 ),
               ),
               const SizedBox(height: 14),
               Text(
                 signal.body,
                 style: const TextStyle(
-                  color: Color(0xFFC9C6BF),
+                  color: LibreRingTokens.foreground,
                   fontSize: 13,
                   height: 1.45,
                 ),
@@ -3507,7 +3656,7 @@ class _DailySignalCard extends StatelessWidget {
                       signal.actionLabel,
                       maxLines: 2,
                       style: const TextStyle(
-                        color: Colors.white,
+                        color: LibreRingTokens.foreground,
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
                       ),
@@ -3544,9 +3693,13 @@ class _DomainSummaryCard extends StatelessWidget {
       child: InkWell(
         key: Key('domain-${summary.domain.name}'),
         onTap: onTap,
-        borderRadius: BorderRadius.circular(LibreRingTokens.cardRadius),
-        child: LibreRingCard(
-          padding: const EdgeInsets.all(18),
+        borderRadius: BorderRadius.circular(LibreRingTokens.controlRadius),
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 86),
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          decoration: const BoxDecoration(
+            border: Border(bottom: BorderSide(color: LibreRingTokens.border)),
+          ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
@@ -3556,37 +3709,27 @@ class _DomainSummaryCard extends StatelessWidget {
                   children: <Widget>[
                     Row(
                       children: <Widget>[
-                        Text(
-                          summary.label,
-                          style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
+                        Flexible(
+                          child: Text(
+                            summary.label,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
                         const SizedBox(width: 8),
                         _ConfidenceDot(confidence: summary.confidence),
                       ],
                     ),
-                    const SizedBox(height: 16),
-                    FittedBox(
-                      fit: BoxFit.scaleDown,
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        summary.value,
-                        style: const TextStyle(
-                          fontSize: 48,
-                          height: .9,
-                          fontWeight: FontWeight.w200,
-                          letterSpacing: -3,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 5),
                     Text(
                       summary.status,
                       style: const TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
+                        fontSize: 10,
+                        color: LibreRingTokens.muted,
                       ),
                     ),
                     const SizedBox(height: 3),
@@ -3600,9 +3743,29 @@ class _DomainSummaryCard extends StatelessWidget {
                   ],
                 ),
               ),
-              const Padding(
-                padding: EdgeInsets.only(top: 4),
-                child: Icon(Icons.arrow_forward, size: 18),
+              const SizedBox(width: 12),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: <Widget>[
+                  Text(
+                    summary.value,
+                    style: const TextStyle(
+                      fontSize: 28,
+                      height: 1,
+                      fontWeight: FontWeight.w300,
+                      letterSpacing: -1.4,
+                    ),
+                  ),
+                  const SizedBox(height: 7),
+                  Text(
+                    summary.source,
+                    textAlign: TextAlign.end,
+                    style: const TextStyle(
+                      fontSize: 9,
+                      color: LibreRingTokens.muted,
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -3626,7 +3789,7 @@ class _DarkConfidence extends StatelessWidget {
       ProductConfidence.unavailable => 'UNAVAILABLE',
     },
     style: const TextStyle(
-      color: Color(0xFFC9C6BF),
+      color: LibreRingTokens.muted,
       fontSize: 9,
       fontWeight: FontWeight.w600,
       letterSpacing: .6,
@@ -3724,48 +3887,54 @@ class _ActionTile extends StatelessWidget {
   final VoidCallback? onTap;
 
   @override
-  Widget build(BuildContext context) => InkWell(
-    onTap: onTap,
-    child: Container(
-      constraints: const BoxConstraints(minHeight: 78),
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: LibreRingTokens.border)),
-      ),
-      child: Row(
-        children: <Widget>[
-          Container(
-            width: 42,
-            height: 42,
-            decoration: const BoxDecoration(
-              color: LibreRingTokens.surface,
-              shape: BoxShape.circle,
-            ),
-            child: Icon(icon, size: 20),
+  Widget build(BuildContext context) => Semantics(
+    label: '$title. $body',
+    button: onTap != null,
+    child: ExcludeSemantics(
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 78),
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          decoration: const BoxDecoration(
+            border: Border(bottom: BorderSide(color: LibreRingTokens.border)),
           ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                  ),
+          child: Row(
+            children: <Widget>[
+              Container(
+                width: 42,
+                height: 42,
+                decoration: const BoxDecoration(
+                  color: LibreRingTokens.surface,
+                  shape: BoxShape.circle,
                 ),
-                const SizedBox(height: 3),
-                Text(
-                  body,
-                  style: Theme.of(context).textTheme.bodySmall
-                      ?.copyWith(fontSize: 11),
+                child: Icon(icon, size: 20),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      body,
+                      style: Theme.of(context).textTheme.bodySmall
+                          ?.copyWith(fontSize: 11),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+              if (onTap != null) const Icon(Icons.arrow_forward, size: 18),
+            ],
           ),
-          if (onTap != null) const Icon(Icons.arrow_forward, size: 18),
-        ],
+        ),
       ),
     ),
   );
@@ -4029,45 +4198,6 @@ class _MetricCard extends StatelessWidget {
   );
 }
 
-class _Heatmap extends StatelessWidget {
-  const _Heatmap({required this.levels});
-
-  final List<int> levels;
-
-  @override
-  Widget build(BuildContext context) => LayoutBuilder(
-    builder: (BuildContext context, BoxConstraints constraints) {
-      final width = math.min(constraints.maxWidth, 276.0);
-      final cell = (width - 35) / 8;
-      return Center(
-        child: SizedBox(
-          width: width,
-          child: Wrap(
-            spacing: 5,
-            runSpacing: 5,
-            children: levels.map((int level) {
-              final colors = <Color>[
-                LibreRingTokens.surface,
-                const Color(0xFFDCA999),
-                const Color(0xFFD17B63),
-                LibreRingTokens.accent,
-              ];
-              return Container(
-                width: cell,
-                height: cell,
-                decoration: BoxDecoration(
-                  color: colors[level.clamp(0, 3)],
-                  borderRadius: BorderRadius.circular(3),
-                ),
-              );
-            }).toList(),
-          ),
-        ),
-      );
-    },
-  );
-}
-
 const _axisStyle = TextStyle(
   fontSize: 10,
   color: LibreRingTokens.muted,
@@ -4288,57 +4418,63 @@ class _DataRow extends StatelessWidget {
   final VoidCallback? onTap;
 
   @override
-  Widget build(BuildContext context) => InkWell(
-    onTap: onTap,
-    child: Container(
-      constraints: const BoxConstraints(minHeight: 68),
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: LibreRingTokens.border)),
-      ),
-      child: Row(
-        children: <Widget>[
-          Container(
-            width: 36,
-            height: 36,
-            decoration: const BoxDecoration(
-              color: LibreRingTokens.surface,
-              shape: BoxShape.circle,
-            ),
-            child: Icon(icon, size: 19),
+  Widget build(BuildContext context) => Semantics(
+    label: '$title. $meta${value == null ? '' : '. $value'}',
+    button: onTap != null,
+    child: ExcludeSemantics(
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 68),
+          decoration: const BoxDecoration(
+            border: Border(bottom: BorderSide(color: LibreRingTokens.border)),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                  ),
+          child: Row(
+            children: <Widget>[
+              Container(
+                width: 36,
+                height: 36,
+                decoration: const BoxDecoration(
+                  color: LibreRingTokens.surface,
+                  shape: BoxShape.circle,
                 ),
-                const SizedBox(height: 2),
+                child: Icon(icon, size: 19),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      meta,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: LibreRingTokens.muted,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (value != null)
                 Text(
-                  meta,
+                  value!,
                   style: const TextStyle(
-                    fontSize: 11,
+                    fontSize: 12,
                     color: LibreRingTokens.muted,
                   ),
                 ),
-              ],
-            ),
+              if (onTap != null) const Icon(Icons.arrow_forward, size: 18),
+            ],
           ),
-          if (value != null)
-            Text(
-              value!,
-              style: const TextStyle(
-                fontSize: 12,
-                color: LibreRingTokens.muted,
-              ),
-            ),
-          if (onTap != null) const Icon(Icons.arrow_forward, size: 18),
-        ],
+        ),
       ),
     ),
   );

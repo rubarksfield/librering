@@ -1,6 +1,6 @@
 # LibreRing progress
 
-Last updated: 2026-08-26
+Last updated: 2026-09-03
 
 ## Current status
 
@@ -11,7 +11,7 @@ Last updated: 2026-08-26
 - Design/scoring freeze: **complete in commit `04563fe`**
 - Phase 5 production foundation: **complete and verified**
 - Phase 6 decoded local sync: **physically accepted on the owned R12**
-- Product preview 1.1.0 (5): **implemented, QA-verified, and installed on the owned iPhone**
+- Product preview 1.2.0 (10): **implemented, QA-verified, installed, and independently launched on the owned iPhone**
 
 ## Completed
 
@@ -145,13 +145,17 @@ Last updated: 2026-08-26
   A final Quick check-in pass also verified native tag/note entry, local-save
   readback, outside-tap keyboard dismissal, and Journal's selected You state.
 - Built the signed production iOS release and production-mode Android debug APK,
-  installed `1.1.0 (5)` over the local network, and confirmed the installed
+  installed the release over the local network, and confirmed the installed
   version/build through CoreDevice readback.
+- Integrated the premium product-system pass, exposed every R12-supported data
+  family with truthful missing/estimate states, and added the branded app icon.
+- Installed `1.2.0 (10)` on the owned iPhone, launched it independently of
+  Flutter tooling, and confirmed the running process through CoreDevice.
 
 ## In progress
 
-- Unlock and foreground-QA the already-installed LibreRing 1.1.0 (5), then
-  confirm quiet stale refresh against the owned R12.
+- Complete the remaining owned-ring foreground-sync edge cases and physical
+  VoiceOver pass described in the public roadmap.
 
 ## Blocked
 
@@ -166,7 +170,7 @@ Last updated: 2026-08-26
   validity. R12 firmware HRV/stress and stages are excluded from score math.
 - R12 temperature, respiration, raw acceleration, R–R intervals, and automatic
   swim detection are unsupported.
-- Navigation is Today / Trends / You; Log is a labelled Today action.
+- Navigation is Today / Vitals / Trends / You; Log is a labelled Today action.
 - Structured Health Dashboard is selected over Quiet Ledger and Daily Brief.
 - The approved reference-led Open Design artifact supersedes the earlier
   prototype's visual treatment; it does not supersede its functional journeys.
@@ -238,6 +242,8 @@ Last updated: 2026-08-26
 | 2026-08-26 | Product preview package regression | core 3/3, BLE 12/12, QRing 27/27, demo 1/1, design system 3/3, scoring 13/13 and mobile 44/44 passed; all analyzers clean |
 | 2026-08-26 | Product preview native builds | signed production iOS release and production-mode Android debug APK `1.1.0+5` passed; APK SHA-256 `13402cfc8a62e12781ddf216545be8acf3be449d610475427f95c67eb7f62004` |
 | 2026-08-26 | Product preview iPhone delivery | local-network install passed; installed-app readback confirmed `1.1.0 (5)`; automatic launch was correctly reported unavailable because the phone was locked |
+| 2026-09-03 | Premium data-coverage regression | mobile analyzer clean; 68/68 mobile tests and all reusable-package suites passed; 22 current golden screens reviewed |
+| 2026-09-03 | Release-mode iPhone delivery | signed `1.2.0 (10)` installed on the owned iPhone; CoreDevice version readback, independent launch, and running-process readback passed |
 
 ## Known limitations
 
@@ -262,8 +268,8 @@ Last updated: 2026-08-26
   owned ring. Low-battery, timezone-change, daylight-saving, app-contention, and
   partial-history transport cases remain pending. The current fixture establishes
   one ordinary battery response and the observed complete/no-data history shapes
-  only. Build 5 is installed, but its physical foreground/R12 smoke pass remains
-  pending because the phone was locked during unattended delivery.
+  only. Build 10 is installed and independently launchable; the remaining work
+  is ring-state and accessibility QA, not app-launch enablement.
 - The prototype is interaction-complete but not a usability study with external
   participants or a screen-reader/device-lab certification.
 - Penpot remains a verified local auxiliary environment, not the first-gate visual
@@ -273,7 +279,6 @@ Last updated: 2026-08-26
 
 ## Next concrete action
 
-With QRing force-closed, unlock the iPhone, open the already-installed LibreRing
-1.1.0 (5), and confirm the quiet stale-data refresh against the owned ring. Do
-not forget or re-pair the ring unless later diagnostics establish that it is
-necessary.
+Run the remaining low-battery, timezone/daylight-saving, app-contention, and
+physical VoiceOver checks without forgetting or re-pairing the ring unless a
+later diagnostic establishes that it is necessary.

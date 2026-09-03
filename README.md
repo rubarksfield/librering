@@ -1,101 +1,229 @@
-# LibreRing V1
+<p align="center">
+  <img src="docs/design/brand/librering-app-icon-master.png" width="112" alt="LibreRing app icon: an open black ring with a coral signal dot" />
+</p>
 
-Status: **`IMPLEMENTATION` — local-sync product preview 1.1.0 (5)**
+<h1 align="center">LibreRing</h1>
 
-Visual direction: **approved for V1 on 2026-08-24**  
-Scoring model: **approved for V1 on 2026-08-24**
+<p align="center"><strong>Your ring. Your data. Kept close.</strong></p>
 
-LibreRing V1 has an approved and separately committed product-design and
-scientific-model foundation for the COLMI R12. The production Flutter app now
-implements the approved Today / Trends / You shell, deterministic demo mode,
-local privacy and Journal state, transparent domain details, portable export,
-and English/pt-PT locale plumbing.
+<p align="center">
+  A local-first, open-source Flutter companion for the COLMI R12 smart ring.<br />
+  Calm daily views, transparent evidence, no account, and no invented health scores.
+</p>
 
-Phase 6 now adds a bounded platform BLE adapter, production pairing, decoded
-read-only history sync for the physically verified R12 firmware, and a
-versioned duplicate-safe local repository. It stores no raw packets or BLE
-identifier. Unknown firmware, live measurement, scoring, and unrelated settings
-remain fail-closed; necessary time synchronisation is the only setting write.
-Stale history refreshes quietly in place when Today opens or the app resumes;
-manual refresh remains available without repeating first-run pairing.
+<p align="center">
+  <a href="https://github.com/rubarksfield/librering/actions/workflows/ci.yml"><img src="https://github.com/rubarksfield/librering/actions/workflows/ci.yml/badge.svg" alt="CI status" /></a>
+  <img src="https://img.shields.io/badge/Flutter-3.47-54C5F8?logo=flutter&logoColor=white" alt="Flutter 3.47" />
+  <img src="https://img.shields.io/badge/platform-iOS%20%7C%20Android-12120F" alt="iOS and Android" />
+  <img src="https://img.shields.io/badge/data-local--first-E65B43" alt="Local-first data" />
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-12120F" alt="Apache 2.0 license" /></a>
+</p>
 
-## Run the mobile foundation
+<p align="center">
+  <a href="#quick-start">Quick start</a> ·
+  <a href="#what-the-r12-can-supply">Supported data</a> ·
+  <a href="#every-current-screen">Screens</a> ·
+  <a href="docs/ROADMAP.md">Roadmap</a> ·
+  <a href="CONTRIBUTING.md">Contribute</a>
+</p>
 
-Flutter 3.47.1 is installed at `/Users/zoerichardson/develop/flutter`.
+![LibreRing product overview](docs/media/librering-hero.png)
+
+## Why LibreRing
+
+Affordable smart rings can collect useful signals, but the experience around
+them is often cloud-dependent, vague about provenance, or overconfident about
+what a sensor can prove. LibreRing takes a narrower path:
+
+- **Local-first:** ring history and manual context stay on the phone.
+- **Evidence before interpretation:** measured, firmware-estimated, manual,
+  missing, and unsupported data remain visibly different.
+- **No account required:** the supported R12 path talks to the ring over BLE.
+- **No fake precision:** gaps stay gaps; oxygen remains a min–max range; opaque
+  firmware fields are not renamed as clinical metrics.
+- **A product, not just a protocol demo:** pairing, daily summaries, drill-downs,
+  trends, journal context, privacy controls, export, and deletion are designed
+  as one coherent mobile experience.
+
+LibreRing is a development preview, not a medical device. It is not in the App
+Store or Play Store yet.
+
+## See it in motion
+
+[![A short animated tour of the LibreRing Today, Vitals, Sleep, Activity, Heart, Oxygen, Trends, Data and You screens](docs/media/librering-tour.gif)](docs/media/librering-tour.mp4)
+
+<p align="center"><sub>11.6-second tour · click for MP4 · rendered from current Flutter golden tests using deterministic demo data</sub></p>
+
+## What the R12 can supply
+
+The current production path is deliberately gated to one physically inspected
+COLMI R12 running firmware `RT11CR_1.00.09_260424`. Protocol correctness is
+tested; physiological accuracy is not independently validated.
+
+| Signal or capability | Current status | What LibreRing says |
+| --- | --- | --- |
+| Local BLE pairing and device facts | Supported | Exact-family discovery, service validation, battery, and firmware |
+| Activity history | Supported | Steps plus clearly labelled firmware distance and calorie estimates |
+| Pulse history | Supported | Recorded BPM-like samples with gaps preserved; not a diagnosis |
+| Sleep history | Supported | Firmware session and stage-duration estimates; not EEG |
+| Blood oxygen history | Supported | Hourly firmware minimum–maximum ranges; not medical oximetry |
+| Firmware “HRV” field | Exploratory | Shown only as an opaque firmware index, never RMSSD or SDNN |
+| Firmware stress field | Exploratory | Shown only as an opaque vendor index, never emotional or clinical stress |
+| Live pulse / oxygen | Transport verified | The owned-device run produced warm-up packets but no non-zero reading, so the UI reports no reading |
+| Temperature, blood pressure, respiration, VO₂ max | Unsupported | Not shown as measured R12 data |
+| Recovery / readiness score | Not enabled from R12 data | LibreRing does not manufacture a score from unsupported inputs |
+
+See the [R12 evidence record](docs/protocol/colmi-r12-evidence.md) and
+[protocol matrix](docs/protocol/colmi-qring.md) for commands, confidence levels,
+fixtures, and remaining physical-device work.
+
+## Every current screen
+
+These are deterministic 390 × 844 renders from the app's widget tests. The
+first group is the R12-backed product path. Screens marked **concept/demo** test
+UX states and do not claim that the ring supplies a score or unsupported metric.
+
+<table>
+  <tr>
+    <td align="center"><img src="apps/mobile/test/goldens/analytics_today.png" width="210" alt="LibreRing measured-data Today screen" /><br /><sub>Today · R12-backed</sub></td>
+    <td align="center"><img src="apps/mobile/test/goldens/analytics_metrics.png" width="210" alt="LibreRing Vitals screen" /><br /><sub>Vitals · R12-backed</sub></td>
+    <td align="center"><img src="apps/mobile/test/goldens/analytics_activity.png" width="210" alt="LibreRing activity history screen" /><br /><sub>Activity · R12-backed</sub></td>
+    <td align="center"><img src="apps/mobile/test/goldens/analytics_heart.png" width="210" alt="LibreRing heart history screen" /><br /><sub>Heart · R12-backed</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="apps/mobile/test/goldens/analytics_sleep.png" width="210" alt="LibreRing sleep history screen" /><br /><sub>Sleep · firmware estimate</sub></td>
+    <td align="center"><img src="apps/mobile/test/goldens/analytics_oxygen.png" width="210" alt="LibreRing oxygen range screen" /><br /><sub>Oxygen · firmware ranges</sub></td>
+    <td align="center"><img src="apps/mobile/test/goldens/analytics_hrv_index.png" width="210" alt="LibreRing opaque HRV firmware index screen" /><br /><sub>Firmware HRV index</sub></td>
+    <td align="center"><img src="apps/mobile/test/goldens/analytics_stress_index.png" width="210" alt="LibreRing opaque stress firmware index screen" /><br /><sub>Firmware stress index</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="apps/mobile/test/goldens/analytics_capabilities.png" width="210" alt="LibreRing ring capabilities screen" /><br /><sub>Ring capabilities</sub></td>
+    <td align="center"><img src="apps/mobile/test/goldens/trends.png" width="210" alt="LibreRing trends screen" /><br /><sub>Trends</sub></td>
+    <td align="center"><img src="apps/mobile/test/goldens/journal.png" width="210" alt="LibreRing journal screen" /><br /><sub>Journal</sub></td>
+    <td align="center"><img src="apps/mobile/test/goldens/data_hub.png" width="210" alt="LibreRing local data and export screen" /><br /><sub>Data and deletion</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="apps/mobile/test/goldens/cycle_privacy.png" width="210" alt="LibreRing cycle-context privacy screen" /><br /><sub>Cycle privacy</sub></td>
+    <td align="center"><img src="apps/mobile/test/goldens/welcome.png" width="210" alt="LibreRing onboarding screen" /><br /><sub>Welcome</sub></td>
+    <td align="center"><img src="apps/mobile/test/goldens/you.png" width="210" alt="LibreRing You screen" /><br /><sub>You</sub></td>
+    <td align="center"><img src="apps/mobile/test/goldens/product_profile.png" width="210" alt="LibreRing profile preferences screen" /><br /><sub>Profile · concept/demo</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="apps/mobile/test/goldens/metrics.png" width="210" alt="LibreRing compact vitals overview" /><br /><sub>Vitals overview · concept/demo</sub></td>
+    <td align="center"><img src="apps/mobile/test/goldens/today.png" width="210" alt="LibreRing illustrative Today state" /><br /><sub>Daily conclusion · concept/demo</sub></td>
+    <td align="center"><img src="apps/mobile/test/goldens/product_day_timeline.png" width="210" alt="LibreRing provenance timeline" /><br /><sub>Timeline · concept/demo</sub></td>
+    <td align="center"><img src="apps/mobile/test/goldens/product_activity_sports.png" width="210" alt="LibreRing manual activity picker" /><br /><sub>Activity picker · concept/demo</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="apps/mobile/test/goldens/product_activity_suggestion.png" width="210" alt="LibreRing activity suggestion screen" /><br /><sub>Activity suggestion · concept/demo</sub></td>
+    <td align="center"><img src="apps/mobile/test/goldens/product_temperature_boundary.png" width="210" alt="LibreRing unsupported temperature boundary screen" /><br /><sub>Unsupported temperature</sub></td>
+    <td></td>
+    <td></td>
+  </tr>
+</table>
+
+## Architecture
+
+```mermaid
+flowchart LR
+    R[COLMI R12] -->|bounded BLE sync| D[ring_ble + ring_colmi_qring]
+    D -->|decoded records only| L[local repository]
+    L --> U[Flutter UI]
+    J[manual context] -->|separate provenance| L
+    L -->|confirmed action| E[JSON + CSV export]
+```
+
+- Raw BLE captures and stable device identifiers cannot enter the repository API.
+- Sync is duplicate-safe, bounded, and fail-closed for unknown firmware.
+- Manual entries remain separate from ring measurements.
+- Export has an explicit confirmation step and a SHA-256 manifest.
+
+## Quick start
+
+Requirements: Flutter `3.47.x`, Dart `3.13.x`, Xcode for iOS, or Android
+Studio/SDK for Android.
+
+```sh
+git clone https://github.com/rubarksfield/librering.git
+cd librering/apps/mobile
+flutter pub get
+flutter run --dart-define=LIBRERING_DEMO=true
+```
+
+The demo boundary uses fictional data and needs no ring. Omit the define for the
+production pairing and local-sync path. Production never substitutes demo
+values when stored ring data is unavailable.
+
+For an iPhone app that launches from the Home Screen, build profile or release
+mode through Flutter/Xcode; iOS intentionally restricts standalone launch of
+debug Flutter builds.
+
+```sh
+flutter build ios --release
+```
+
+## Verify the project
 
 ```sh
 cd apps/mobile
-/Users/zoerichardson/develop/flutter/bin/flutter run \
-  --dart-define=LIBRERING_DEMO=true
+flutter analyze
+flutter test
+
+cd ../../research/scoring
+python3 run_research.py
+python3 -m unittest discover tests -v
 ```
 
-Omit the flag to run production pairing and local sync. Production never
-substitutes demo health values when no stored ring data is available.
+The Flutter suite includes route, persistence, export/deletion, BLE adapter,
+decoder, compact-screen, accessibility, and golden-render coverage. The scoring
+sandbox uses a fixed seed and fictional data; passing it does not establish
+clinical validity.
 
-```sh
-/Users/zoerichardson/develop/flutter/bin/flutter analyze
-/Users/zoerichardson/develop/flutter/bin/flutter test
-/Users/zoerichardson/develop/flutter/bin/flutter build ios --simulator --debug \
-  --dart-define=LIBRERING_DEMO=true
-```
+## Project map
 
-The verified native render is archived at
-`docs/testing/screenshots/ios-welcome.png`.
+| Path | Purpose |
+| --- | --- |
+| [`apps/mobile`](apps/mobile) | Flutter app for iOS and Android |
+| [`packages/ring_ble`](packages/ring_ble) | Transport-independent BLE and sync contracts |
+| [`packages/ring_colmi_qring`](packages/ring_colmi_qring) | Fail-closed COLMI/QRing packet decoding |
+| [`packages/ring_core`](packages/ring_core) | Health-domain records and provenance |
+| [`packages/ring_design_system`](packages/ring_design_system) | LibreRing tokens and reusable UI components |
+| [`docs/protocol`](docs/protocol) | R12 evidence, command matrix, and fixture policy |
+| [`research/scoring`](research/scoring) | Independent, synthetic scoring research—not production scoring |
 
-## Review the interactive prototype
+## Looking for an open smart-ring app?
 
-```sh
-python3 -m http.server 4173 --directory prototype
-```
+People often discover this space while searching for an Oura Ring alternative,
+RingConn app, Ultrahuman Ring AIR dashboard, Samsung Galaxy Ring companion,
+WHOOP alternative, Garmin/Fitbit wearable dashboard, or an open-source
+COLMI/QRing app. LibreRing currently connects only to the verified COLMI R12
+path described above. It does **not** connect to Oura, RingConn, Ultrahuman,
+Samsung, WHOOP, Garmin, Fitbit, or Apple Ring devices.
 
-Open <http://localhost:4173/> and complete the eight numbered journeys. The
-prototype is dependency-free, uses fictional demo data, and includes light/dark,
-large-text, missing-data, swim, device-conflict, export, Cycle Context, pregnancy,
-and separate-deletion states.
+LibreRing is independent and is not affiliated with, authorised by, sponsored
+by, or endorsed by COLMI, QRing, Oura, RingConn, Ultrahuman, Samsung, WHOOP,
+Garmin, Fitbit, Apple, or their owners. All marks belong to their respective
+owners and are used only to describe interoperability and product-category
+context.
 
-See:
+## Contribute
 
-- [Approved reference-led visual direction](docs/design/approved-reference-led/README.md)
-- [Approved 12-screen visual prototype](docs/design/approved-reference-led/prototype.html)
-- [Prototype instructions](prototype/README.md)
-- [Prototype review](docs/design/prototype-review.md)
-- [Research synthesis](docs/design/research.md)
-- [R12 evidence boundary](docs/protocol/colmi-r12-evidence.md)
-- [Approved scoring model](docs/science/scoring-model-v1.md)
-- [Model evaluation](docs/science/model-evaluation.md)
-- [Progress and limitations](docs/PROGRESS.md)
-- [Production architecture](docs/architecture/system-overview.md)
-- [Autonomous mobile UI QA](docs/testing/autonomous-ui-qa.md)
+The project is ready for careful contributors—especially Flutter engineers,
+BLE/protocol researchers with owned hardware, accessibility testers, Android
+device testers, privacy reviewers, and designers who value clarity over fake
+certainty.
 
-## Reproduce the scoring research
+Start with the [contribution guide](CONTRIBUTING.md), the
+[roadmap](docs/ROADMAP.md), or an issue labelled
+[`good first issue`](https://github.com/rubarksfield/librering/labels/good%20first%20issue).
+Never post personal health data, stable device identifiers, or raw captures in a
+public issue.
 
-```sh
-python3 research/scoring/run_research.py
-python3 -m unittest discover research/scoring/tests -v
-```
+## Licence and safety
 
-The fixed seed generates 2,970 fictional daily records across 33 scenarios and
-six fictional profiles. Passing deterministic tests establish specified
-behavior, not hardware, medical, demographic, or clinical validity.
+Original LibreRing code and assets are licensed under
+[Apache-2.0](LICENSE). Reference projects informed protocol facts and design
+research only; see [third-party notices](THIRD_PARTY_NOTICES.md).
 
-## Approval gate
-
-The user supplied an unmistakable equivalent approval on 2026-08-24. The V1
-design and scoring sources are frozen, and production implementation is now
-authorised. The canonical approval phrase remains:
-
-```text
-APPROVE DESIGN AND SCORING V1
-```
-
-Future design or scoring changes require an explicit versioned revision and must
-not silently alter the frozen V1 implementation contract. Health bridges and
-validated scoring execution remain later-phase work. Portable local JSON/CSV
-export is implemented; it is not a cloud backup.
-
-The Phase 6 protocol foundation is present under `packages/ring_ble` and
-`packages/ring_colmi_qring`; the mobile app links the audited BLE adapter and
-local repository. The owned-device read-only capture cleared the exact-firmware
-command gate. Physical sync/relaunch/resync and duplicate safety passed on the
-owned ring. Build 5 is installed on the owned iPhone; its final unlocked-device
-foreground/R12 smoke pass remains.
+LibreRing is experimental wellness software, not a medical device. Do not use
+it to diagnose, treat, or make urgent health decisions.

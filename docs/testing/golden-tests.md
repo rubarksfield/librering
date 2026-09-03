@@ -11,7 +11,7 @@ false cross-platform diffs.
 
 ```sh
 cd apps/mobile
-/Users/zoerichardson/develop/flutter/bin/flutter test \
+flutter test \
   test/golden_screens_test.dart
 ```
 

@@ -52,6 +52,7 @@ class _ActivityLabScreenState extends ConsumerState<ActivityLabScreen> {
     final daysWithData = summaryDays
         .where((value) => value.buckets.isNotEmpty)
         .length;
+    final hasActivityRecords = daysWithData > 0;
     final values = _days == 1
         ? day?.hourly.map((value) => value.steps.toDouble()).toList()
         : history?.map((value) => value.steps.toDouble()).toList();
@@ -81,60 +82,64 @@ class _ActivityLabScreenState extends ConsumerState<ActivityLabScreen> {
         ),
         const SizedBox(height: 8),
         _Display(
-          day == null || summarySteps == 0
-              ? 'No activity yet'
-              : '$summarySteps steps',
+          hasActivityRecords ? '$summarySteps steps' : 'No activity records',
         ),
         const SizedBox(height: 14),
         Text(
-          day == null
+          !hasActivityRecords
               ? 'Sync the ring to load decoded hourly activity buckets.'
               : 'Distance and calories below are retained firmware estimates. Missing hours stay visible as gaps.',
           style: Theme.of(context).textTheme.bodySmall,
         ),
         const SizedBox(height: 28),
-        _HeroMetricCard(
-          title: _days == 1
-              ? 'Today, hour by hour'
-              : 'Activity across $_days days',
-          child: Column(
-            children: <Widget>[
-              _ThreeStats(
-                values: <_StatValue>[
-                  _StatValue('$summarySteps', 'Steps'),
-                  _StatValue(_distance(summaryDistance), 'Distance'),
-                  _StatValue('$summaryCalories', 'Firmware kcal'),
-                ],
-              ),
-              const SizedBox(height: 28),
-              _BarChart(
-                values: values ?? const <double>[],
-                color: LibreRingTokens.foreground,
-              ),
-              const SizedBox(height: 10),
-              _AxisLabels(
-                left: _days == 1 ? '00' : 'Earlier',
-                right: _days == 1 ? '23' : 'Latest',
-              ),
-            ],
+        if (!hasActivityRecords)
+          const _EmptyCard(
+            'No decoded activity buckets are available in this range.',
+          )
+        else ...<Widget>[
+          _HeroMetricCard(
+            title: _days == 1
+                ? 'Today, hour by hour'
+                : 'Activity across $_days days',
+            child: Column(
+              children: <Widget>[
+                _ThreeStats(
+                  values: <_StatValue>[
+                    _StatValue('$summarySteps', 'Steps'),
+                    _StatValue(_distance(summaryDistance), 'Distance'),
+                    _StatValue('$summaryCalories', 'Firmware kcal'),
+                  ],
+                ),
+                const SizedBox(height: 28),
+                _BarChart(
+                  values: values ?? const <double>[],
+                  color: LibreRingTokens.foreground,
+                ),
+                const SizedBox(height: 10),
+                _AxisLabels(
+                  left: _days == 1 ? '00' : 'Earlier',
+                  right: _days == 1 ? '23' : 'Latest',
+                ),
+              ],
+            ),
           ),
-        ),
-        const SizedBox(height: 14),
-        _MetricTimelineCard(
-          title: 'Distance',
-          value: _distance(summaryDistance),
-          note: 'Firmware estimate',
-          values: distanceValues ?? const <double>[],
-          color: const Color(0xFF727A65),
-        ),
-        const SizedBox(height: 14),
-        _MetricTimelineCard(
-          title: 'Energy',
-          value: '$summaryCalories kcal',
-          note: 'Firmware estimate · not independently validated',
-          values: calorieValues ?? const <double>[],
-          color: LibreRingTokens.accent,
-        ),
+          const SizedBox(height: 14),
+          _MetricTimelineCard(
+            title: 'Distance',
+            value: _distance(summaryDistance),
+            note: 'Firmware estimate',
+            values: distanceValues ?? const <double>[],
+            color: const Color(0xFF727A65),
+          ),
+          const SizedBox(height: 14),
+          _MetricTimelineCard(
+            title: 'Energy',
+            value: '$summaryCalories kcal',
+            note: 'Firmware estimate · not independently validated',
+            values: calorieValues ?? const <double>[],
+            color: LibreRingTokens.accent,
+          ),
+        ],
         const SizedBox(height: 18),
         _Callout(
           icon: Icons.pool_outlined,
@@ -842,10 +847,11 @@ class _AnalyticsBottomNav extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const items = <(String, IconData, String)>[
-      ('/today', Icons.home_outlined, 'Today'),
-      ('/trends', Icons.trending_up, 'Trends'),
-      ('/you', Icons.person_outline, 'You'),
+    const items = <(String, String)>[
+      ('/today', 'Today'),
+      ('/vitals', 'Vitals'),
+      ('/trends', 'Trends'),
+      ('/you', 'You'),
     ];
     return SafeArea(
       top: false,
@@ -853,36 +859,68 @@ class _AnalyticsBottomNav extends StatelessWidget {
       child: Center(
         heightFactor: 1,
         child: Container(
-          width: 226,
+          width: MediaQuery.sizeOf(context).width - 32,
+          constraints: const BoxConstraints(maxWidth: 430),
           height: 64,
-          padding: const EdgeInsets.all(6),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
           decoration: BoxDecoration(
             color: LibreRingTokens.foreground,
-            borderRadius: BorderRadius.circular(22),
+            borderRadius: BorderRadius.circular(18),
           ),
           child: Row(
             children: items
                 .map((item) {
-                  final selected = item.$1 == activePath;
+                  final selected =
+                      item.$1 == activePath ||
+                      (item.$1 == '/vitals' && activePath == '/metrics');
                   return Expanded(
                     child: Semantics(
-                      label: item.$3,
+                      label: item.$2,
                       selected: selected,
                       button: true,
-                      child: IconButton(
-                        onPressed: () => context.go(item.$1),
-                        color: selected
-                            ? Colors.white
-                            : const Color(0xFFC5C2BC),
-                        style: IconButton.styleFrom(
-                          backgroundColor: selected
-                              ? const Color(0xFF42423E)
-                              : Colors.transparent,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
+                      child: ExcludeSemantics(
+                        child: TextButton(
+                          onPressed: () => context.go(item.$1),
+                          style: TextButton.styleFrom(
+                            foregroundColor: selected
+                                ? Colors.white
+                                : const Color(0xFFC5C2BC),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            minimumSize: const Size(64, 48),
+                            padding: EdgeInsets.zero,
+                          ),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            mainAxisSize: MainAxisSize.min,
+                            children: <Widget>[
+                              Text(
+                                item.$2,
+                                maxLines: 1,
+                                textScaler: TextScaler.noScaling,
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              AnimatedContainer(
+                                duration:
+                                    MediaQuery.disableAnimationsOf(context)
+                                    ? Duration.zero
+                                    : LibreRingTokens.fast,
+                                curve: LibreRingTokens.curve,
+                                width: selected ? 18 : 0,
+                                height: 2,
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(2),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                        icon: Icon(item.$2, size: 20),
                       ),
                     ),
                   );
@@ -1625,52 +1663,51 @@ class _Callout extends StatelessWidget {
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) => InkWell(
-    onTap: onTap,
-    borderRadius: BorderRadius.circular(LibreRingTokens.cardRadius),
-    child: Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: LibreRingTokens.foreground,
+  Widget build(BuildContext context) => Semantics(
+    label: '$title. $body. $action',
+    button: true,
+    child: ExcludeSemantics(
+      child: InkWell(
+        onTap: onTap,
         borderRadius: BorderRadius.circular(LibreRingTokens.cardRadius),
-      ),
-      child: Row(
-        children: <Widget>[
-          Icon(icon, size: 26, color: Colors.white),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Text(
-                  title,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  body,
-                  style: const TextStyle(
-                    color: Color(0xFFCBC8C1),
-                    fontSize: 10.5,
-                    height: 1.35,
-                  ),
-                ),
-              ],
-            ),
+        child: Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: LibreRingTokens.foreground,
+            borderRadius: BorderRadius.circular(LibreRingTokens.cardRadius),
           ),
-          const SizedBox(width: 12),
-          Semantics(
-            label: action,
-            child: const Icon(
-              Icons.arrow_forward,
-              color: Colors.white,
-              size: 20,
-            ),
+          child: Row(
+            children: <Widget>[
+              Icon(icon, size: 26, color: Colors.white),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      body,
+                      style: const TextStyle(
+                        color: Color(0xFFCBC8C1),
+                        fontSize: 10.5,
+                        height: 1.35,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              const Icon(Icons.arrow_forward, color: Colors.white, size: 20),
+            ],
           ),
-        ],
+        ),
       ),
     ),
   );
@@ -1696,24 +1733,26 @@ class _EmptyCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => LibreRingCard(
-    child: SizedBox(
-      height: 180,
-      width: double.infinity,
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: <Widget>[
-          const Icon(
-            Icons.hourglass_empty,
-            size: 28,
-            color: LibreRingTokens.muted,
-          ),
-          const SizedBox(height: 12),
-          Text(
-            value,
-            textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-        ],
+    child: ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 180),
+      child: SizedBox(
+        width: double.infinity,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: <Widget>[
+            const Icon(
+              Icons.hourglass_empty,
+              size: 28,
+              color: LibreRingTokens.muted,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              value,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+        ),
       ),
     ),
   );

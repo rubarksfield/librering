@@ -50,6 +50,7 @@ class RingTrendDay {
   const RingTrendDay({
     required this.day,
     required this.steps,
+    required this.hasActivityRecord,
     required this.pulseSamples,
     required this.sleepMinutes,
     required this.oxygenRanges,
@@ -57,12 +58,13 @@ class RingTrendDay {
 
   final DateTime day;
   final int steps;
+  final bool hasActivityRecord;
   final List<int> pulseSamples;
   final int? sleepMinutes;
   final List<RingOxygenRange> oxygenRanges;
 
   bool get hasData =>
-      steps > 0 ||
+      hasActivityRecord ||
       pulseSamples.isNotEmpty ||
       sleepMinutes != null ||
       oxygenRanges.isNotEmpty;
@@ -101,9 +103,10 @@ class RingProductView {
     final sleep = dataset.sleep.toList(growable: false)
       ..sort((left, right) => left.endedAtUtc.compareTo(right.endedAtUtc));
     final latestSleep = sleep.isEmpty ? null : sleep.last;
-    final todayActivity = dataset.activity.where(
-      (bucket) => _isSameLocalDay(bucket.startedAtUtc, now),
-    );
+    final todayActivity = dataset.activity
+        .where((bucket) => _isSameLocalDay(bucket.startedAtUtc, now))
+        .toList(growable: false);
+    final hasTodayActivity = todayActivity.isNotEmpty;
     final todaySteps = todayActivity.fold<int>(
       0,
       (total, bucket) => total + bucket.steps,
@@ -111,6 +114,10 @@ class RingProductView {
     final todayDistance = todayActivity.fold<int>(
       0,
       (total, bucket) => total + bucket.distanceMeters,
+    );
+    final todayFirmwareCalories = todayActivity.fold<int>(
+      0,
+      (total, bucket) => total + bucket.firmwareCalories,
     );
     final recentPulse = dataset.heartRate.toList(
       growable: false,
@@ -162,12 +169,12 @@ class RingProductView {
                 ? ProductConfidence.limited
                 : ProductConfidence.moderate,
           )
-        : todaySteps > 0
+        : hasTodayActivity
         ? DailySignalView(
             eyebrow: 'Today · Ring estimate',
             headline: '$todaySteps steps are recorded so far.',
             body:
-                '${distanceLabel(todayDistance)} of ring-estimated distance is stored locally. Manual activity can add missing context.',
+                '${distanceLabel(todayDistance)} and $todayFirmwareCalories firmware kcal are stored locally. Manual activity can add missing context.',
             actionLabel: 'View movement',
             actionRoute: '/movement',
             confidence: ProductConfidence.moderate,
@@ -213,15 +220,15 @@ class RingProductView {
       ProductDomainSummary(
         domain: ProductDomain.movement,
         label: 'Movement',
-        value: todaySteps == 0 ? '—' : '$todaySteps',
-        status: todaySteps == 0 ? 'No buckets today' : 'Steps today',
-        explanation: todaySteps == 0
+        value: hasTodayActivity ? '$todaySteps' : '—',
+        status: hasTodayActivity ? 'Steps today' : 'No buckets today',
+        explanation: !hasTodayActivity
             ? 'No activity bucket has been retained for today.'
-            : '${distanceLabel(todayDistance)} · ring estimate',
+            : '${distanceLabel(todayDistance)} · $todayFirmwareCalories firmware kcal',
         source: 'Ring firmware',
-        confidence: todaySteps == 0
-            ? ProductConfidence.limited
-            : ProductConfidence.moderate,
+        confidence: hasTodayActivity
+            ? ProductConfidence.moderate
+            : ProductConfidence.limited,
         route: '/movement',
       ),
       ProductDomainSummary(
@@ -323,6 +330,7 @@ class RingProductView {
       return RingTrendDay(
         day: day,
         steps: activity[key] ?? 0,
+        hasActivityRecord: activity.containsKey(key),
         pulseSamples: List<int>.unmodifiable(pulse[key] ?? const <int>[]),
         sleepMinutes: sleep[key],
         oxygenRanges: List<RingOxygenRange>.unmodifiable(

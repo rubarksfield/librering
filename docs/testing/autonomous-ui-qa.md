@@ -77,7 +77,7 @@ Build the deterministic simulator app:
 
 ```sh
 cd apps/mobile
-/Users/zoerichardson/develop/flutter/bin/flutter build ios --simulator --debug \
+flutter build ios --simulator --debug \
   --dart-define=LIBRERING_DEMO=true
 ```
 

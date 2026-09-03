@@ -1,0 +1,42 @@
+name: Feature request
+description: Propose a product or hardware-support improvement with an evidence boundary.
+title: "[Feature]: "
+labels: [enhancement, triage]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What user problem should LibreRing solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed approach
+      description: Include the smallest useful behaviour and its empty/error states.
+    validations:
+      required: true
+  - type: dropdown
+    id: source
+    attributes:
+      label: Data source
+      options:
+        - Existing verified R12 data
+        - Manual user context
+        - New hardware or firmware evidence required
+        - No health data involved
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence and limitations
+      description: Link public sources or describe consented owned-hardware evidence. Do not upload raw captures or private data.
+  - type: checkboxes
+    id: truthfulness
+    attributes:
+      label: Truthfulness check
+      options:
+        - label: The proposal keeps missing, estimated, manual, and unsupported data visibly distinct.
+          required: true

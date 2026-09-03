@@ -11,7 +11,7 @@ abstract final class LibreRingTokens {
   static const soft = Color(0xFFFAF8F3);
 
   static const double contentInset = 24;
-  static const double controlRadius = 14;
+  static const double controlRadius = 12;
   static const double cardRadius = 16;
   static const double minimumTarget = 48;
 

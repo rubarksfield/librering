@@ -12,16 +12,23 @@ class RingDashboardView {
     DateTime? localNow,
   }) {
     final now = localNow ?? DateTime.now();
-    final activity = dataset.activity.where((bucket) {
-      final local = bucket.startedAtUtc.toLocal();
-      return local.year == now.year &&
-          local.month == now.month &&
-          local.day == now.day;
-    });
+    final activity = dataset.activity
+        .where((bucket) {
+          final local = bucket.startedAtUtc.toLocal();
+          return local.year == now.year &&
+              local.month == now.month &&
+              local.day == now.day;
+        })
+        .toList(growable: false);
+    final hasActivityRecords = activity.isNotEmpty;
     final steps = activity.fold<int>(0, (sum, bucket) => sum + bucket.steps);
     final distance = activity.fold<int>(
       0,
       (sum, bucket) => sum + bucket.distanceMeters,
+    );
+    final firmwareCalories = activity.fold<int>(
+      0,
+      (sum, bucket) => sum + bucket.firmwareCalories,
     );
     final heartRate = dataset.heartRate.toList()
       ..sort(
@@ -41,11 +48,29 @@ class RingDashboardView {
       metrics: <MetricSummary>[
         MetricSummary(
           label: 'Steps',
-          value: steps == 0 ? '—' : '$steps',
+          value: hasActivityRecords ? '$steps' : '—',
           unit: '',
-          context: steps == 0
+          context: !hasActivityRecords
               ? 'No activity buckets today'
-              : '${_distance(distance)} · Ring history',
+              : '${activity.length} retained activity buckets',
+          origin: DataOrigin.ring,
+        ),
+        MetricSummary(
+          label: 'Distance',
+          value: hasActivityRecords ? _distance(distance) : '—',
+          unit: '',
+          context: !hasActivityRecords
+              ? 'No firmware distance today'
+              : 'Firmware estimate · Ring history',
+          origin: DataOrigin.ring,
+        ),
+        MetricSummary(
+          label: 'Firmware energy',
+          value: hasActivityRecords ? '$firmwareCalories' : '—',
+          unit: hasActivityRecords ? 'kcal' : '',
+          context: !hasActivityRecords
+              ? 'No firmware energy today'
+              : 'Firmware estimate · Not calorie intake',
           origin: DataOrigin.ring,
         ),
         MetricSummary(

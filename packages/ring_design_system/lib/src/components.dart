@@ -15,21 +15,14 @@ class LibreRingWordmark extends StatelessWidget {
           child: FittedBox(
             fit: BoxFit.scaleDown,
             alignment: Alignment.centerLeft,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                CustomPaint(size: const Size(20, 20), painter: _MarkPainter()),
-                const SizedBox(width: 8),
-                const Text(
-                  'LibreRing',
-                  maxLines: 1,
-                  style: TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: -0.2,
-                  ),
-                ),
-              ],
+            child: const Text(
+              'LibreRing',
+              maxLines: 1,
+              style: TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.w700,
+                letterSpacing: -0.6,
+              ),
             ),
           ),
         ),
@@ -124,23 +117,4 @@ class LibreRingEyebrow extends StatelessWidget {
       letterSpacing: 1,
     ),
   );
-}
-
-class _MarkPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = LibreRingTokens.foreground
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2;
-    canvas.drawCircle(size.center(Offset.zero), 8, paint);
-    canvas.drawLine(
-      Offset(size.width * .7, size.height * .62),
-      Offset(size.width, size.height * .48),
-      paint,
-    );
-  }
-
-  @override
-  bool shouldRepaint(_MarkPainter oldDelegate) => false;
 }

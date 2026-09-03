@@ -43,8 +43,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('8 hours of sleep was recorded.'), findsOneWidget);
-    expect(find.byKey(const Key('domain-recovery')), findsOneWidget);
-    expect(find.text('Protected'), findsOneWidget);
+    expect(find.byKey(const Key('domain-recovery')), findsNothing);
+    expect(find.text('Recovery'), findsNothing);
     expect(find.text('500'), findsOneWidget);
     expect(find.text('82'), findsNothing);
     expect(find.textContaining('Demo data'), findsNothing);
@@ -101,16 +101,6 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-
-    await tester.ensureVisible(find.byKey(const Key('domain-recovery')));
-    await tester.tap(find.byKey(const Key('domain-recovery')));
-    await tester.pumpAndSettle();
-    expect(find.byKey(const Key('screen-recovery')), findsOneWidget);
-    expect(
-      find.text('No Recovery score is the honest result.'),
-      findsOneWidget,
-    );
-    expect(find.text('Excluded'), findsOneWidget);
 
     await tester.tap(find.bySemanticsLabel('Trends'));
     await tester.pumpAndSettle();

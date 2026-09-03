@@ -6,7 +6,7 @@ separate deletion, and foreground stale-data refresh. Real and demo health
 records remain strictly separate.
 
 ```sh
-/Users/zoerichardson/develop/flutter/bin/flutter run \
+flutter run \
   --dart-define=LIBRERING_DEMO=true
 ```
 
@@ -17,8 +17,8 @@ iOS 16+ and Android API 28+.
 Verification:
 
 ```sh
-/Users/zoerichardson/develop/flutter/bin/flutter analyze
-/Users/zoerichardson/develop/flutter/bin/flutter test
-/Users/zoerichardson/develop/flutter/bin/flutter build ios --simulator --debug \
+flutter analyze
+flutter test
+flutter build ios --simulator --debug \
   --dart-define=LIBRERING_DEMO=true
 ```

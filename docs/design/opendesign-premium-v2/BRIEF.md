@@ -11,18 +11,18 @@ This is not a cosmetic reskin and not a concept-board exercise. Deliver a cohere
 Treat the following as the source of truth, in this order:
 
 1. Product behavior, routes, claims, and safety boundaries in the current Flutter source:
-   - `/Users/zoerichardson/Documents/ChatGPT/Ring App/apps/mobile/lib/app.dart`
-   - `/Users/zoerichardson/Documents/ChatGPT/Ring App/apps/mobile/lib/src/screens.dart`
-   - `/Users/zoerichardson/Documents/ChatGPT/Ring App/apps/mobile/lib/src/analytics_screens.dart`
-   - `/Users/zoerichardson/Documents/ChatGPT/Ring App/apps/mobile/lib/src/ring_analytics.dart`
+   - `apps/mobile/lib/app.dart`
+   - `apps/mobile/lib/src/screens.dart`
+   - `apps/mobile/lib/src/analytics_screens.dart`
+   - `apps/mobile/lib/src/ring_analytics.dart`
 2. All 26 deterministic current-state captures in:
-   - `/Users/zoerichardson/Documents/ChatGPT/Ring App/docs/design/opendesign-premium-v2/current-screens/`
+   - `docs/design/opendesign-premium-v2/current-screens/`
    - Four contact sheets are beside this brief for quick audit.
 3. The approved LibreRing visual foundation:
-   - `/Users/zoerichardson/Documents/ChatGPT/Ring App/docs/design/approved-reference-led/DESIGN.md`
-   - `/Users/zoerichardson/Documents/ChatGPT/Ring App/docs/design/approved-reference-led/design-contract.md`
+   - `docs/design/approved-reference-led/DESIGN.md`
+   - `docs/design/approved-reference-led/design-contract.md`
 4. The Q Ring feature-coverage and claim-boundary map:
-   - `/Users/zoerichardson/Documents/ChatGPT/Ring App/docs/product/qring-feature-map.md`
+   - `docs/product/qring-feature-map.md`
 
 The captures are the **before state**, not a layout template. Preserve their functionality and honest states, then redesign the experience from first principles.
 

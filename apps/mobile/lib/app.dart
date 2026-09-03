@@ -9,6 +9,7 @@ import 'package:ring_design_system/ring_design_system.dart';
 import 'src/app_state.dart';
 import 'src/analytics_screens.dart';
 import 'src/ble/r12_pairing_client.dart';
+import 'src/product_system_screens.dart';
 import 'src/screens.dart';
 import 'src/storage/data_export_service.dart';
 import 'src/storage/journal_repository.dart';
@@ -96,15 +97,37 @@ class _LibreRingShellState extends State<_LibreRingShell> {
       _route('/privacy', const PrivacyPromiseScreen()),
       _route('/pairing/scan', const RingScanScreen()),
       _route('/pairing/found', const RingFoundScreen()),
+      _route('/onboarding', const ProductOnboardingScreen()),
       _route('/today', const TodayScreen()),
       _route('/metrics', const MetricsScreen()),
+      _route('/vitals', const MetricsScreen()),
       _route('/sleep', const SleepLabScreen()),
       _route('/recovery', const RecoveryScreen()),
       _route('/movement', const ActivityLabScreen()),
+      _route('/activity', const ActivityLabScreen()),
+      _route('/day-timeline', const ProductDayTimelineScreen()),
+      _route('/activity/detail', const ActivityDetailScreen()),
+      _route('/activity/suggestion', const ActivitySuggestionScreen()),
+      _route('/activity/sports', const ActivitySportsScreen()),
+      _routeBuilder(
+        '/activity/log',
+        (state) => ActivityLogScreen(
+          activityName: state.uri.queryParameters['name'] ?? 'Activity',
+        ),
+      ),
       _route('/heart', const HeartLabScreen()),
+      _route('/vitals/heart', const HeartLabScreen()),
+      _route('/vitals/rhr', const RestingPulseBoundaryScreen()),
       _route('/oxygen', const OxygenLabScreen()),
+      _route('/vitals/oxygen', const OxygenLabScreen()),
+      _route('/vitals/temperature', const TemperatureUnavailableScreen()),
+      _route('/vitals/recovery', const RecoveryScreen()),
       _route(
         '/signals/hrv-index',
+        const VendorSignalScreen(kind: RingVendorIndexKind.firmwareHrv),
+      ),
+      _route(
+        '/vitals/hrv',
         const VendorSignalScreen(kind: RingVendorIndexKind.firmwareHrv),
       ),
       _route(
@@ -119,7 +142,9 @@ class _LibreRingShellState extends State<_LibreRingShell> {
       _route('/journal/check-in', const CheckInScreen()),
       _route('/journal/swim', const SwimEntryScreen()),
       _route('/you', const YouScreen()),
+      _route('/you/profile', const ProfilePreferencesScreen()),
       _route('/you/ring', const RingDeviceScreen()),
+      _route('/you/ring/sync-issue', const SyncIssueScreen()),
       _route('/you/ring/capabilities', const CapabilitiesScreen()),
       _route('/you/data', const DataHubScreen()),
       _route('/you/about', const AboutScreen()),
@@ -129,44 +154,57 @@ class _LibreRingShellState extends State<_LibreRingShell> {
 
   GoRoute _route(String path, Widget child) => GoRoute(
     path: path,
+    pageBuilder: (BuildContext context, GoRouterState state) =>
+        _page(context, state, child),
+  );
+
+  GoRoute _routeBuilder(
+    String path,
+    Widget Function(GoRouterState state) builder,
+  ) => GoRoute(
+    path: path,
     pageBuilder: (BuildContext context, GoRouterState state) {
-      final reduceMotion =
-          MediaQuery.maybeOf(context)?.disableAnimations ?? false;
-      return CustomTransitionPage<void>(
-        key: state.pageKey,
-        child: child,
-        transitionDuration: reduceMotion
-            ? Duration.zero
-            : LibreRingTokens.standard,
-        reverseTransitionDuration: reduceMotion
-            ? Duration.zero
-            : LibreRingTokens.fast,
-        transitionsBuilder:
-            (
-              BuildContext context,
-              Animation<double> animation,
-              Animation<double> secondary,
-              Widget child,
-            ) {
-              if (reduceMotion) return child;
-              final curved = CurvedAnimation(
-                parent: animation,
-                curve: LibreRingTokens.curve,
-              );
-              return FadeTransition(
-                opacity: curved,
-                child: SlideTransition(
-                  position: Tween<Offset>(
-                    begin: const Offset(.025, 0),
-                    end: Offset.zero,
-                  ).animate(curved),
-                  child: child,
-                ),
-              );
-            },
-      );
+      return _page(context, state, builder(state));
     },
   );
+
+  Page<void> _page(BuildContext context, GoRouterState state, Widget child) {
+    final reduceMotion =
+        MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    return CustomTransitionPage<void>(
+      key: state.pageKey,
+      child: child,
+      transitionDuration: reduceMotion
+          ? Duration.zero
+          : LibreRingTokens.standard,
+      reverseTransitionDuration: reduceMotion
+          ? Duration.zero
+          : LibreRingTokens.fast,
+      transitionsBuilder:
+          (
+            BuildContext context,
+            Animation<double> animation,
+            Animation<double> secondary,
+            Widget child,
+          ) {
+            if (reduceMotion) return child;
+            final curved = CurvedAnimation(
+              parent: animation,
+              curve: LibreRingTokens.curve,
+            );
+            return FadeTransition(
+              opacity: curved,
+              child: SlideTransition(
+                position: Tween<Offset>(
+                  begin: const Offset(.025, 0),
+                  end: Offset.zero,
+                ).animate(curved),
+                child: child,
+              ),
+            );
+          },
+    );
+  }
 
   @override
   void dispose() {

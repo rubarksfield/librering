@@ -79,11 +79,40 @@ void main() {
       ProductConfidence.moderate,
     );
     expect(view.domain(ProductDomain.movement).value, '1250');
+    expect(
+      view.domain(ProductDomain.movement).explanation,
+      contains('44 firmware kcal'),
+    );
     expect(view.domain(ProductDomain.heart).value, '64');
     expect(view.domain(ProductDomain.oxygen).value, '95–98');
     expect(view.domain(ProductDomain.recovery).value, '—');
     expect(view.domain(ProductDomain.recovery).status, 'Protected');
     expect(view.sleepStageMinutes[RingSleepStage.deep], 80);
+    expect(view.validTrendDays, 1);
+  });
+
+  test('treats a retained zero activity bucket as an actual zero', () {
+    final now = DateTime(2026, 8, 26, 10);
+    final view = RingProductView.fromDataset(
+      RingSyncDataset(
+        lastSyncedAtUtc: now.toUtc(),
+        source: const RingDataSource(driverId: 'colmi-qring-v1'),
+        availability: const <RingDataKind, RingDataAvailability>{},
+        activity: <RingActivityBucket>[
+          RingActivityBucket(
+            startedAtUtc: DateTime(2026, 8, 26, 9).toUtc(),
+            steps: 0,
+            distanceMeters: 0,
+            firmwareCalories: 0,
+          ),
+        ],
+      ),
+      localNow: now,
+    );
+
+    expect(view.dailySignal.headline, '0 steps are recorded so far.');
+    expect(view.domain(ProductDomain.movement).value, '0');
+    expect(view.domain(ProductDomain.movement).status, 'Steps today');
     expect(view.validTrendDays, 1);
   });
 

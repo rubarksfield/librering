@@ -20,14 +20,28 @@ void main() {
       '/privacy': 'screen-privacy-promise',
       '/pairing/scan': 'screen-ring-scan',
       '/pairing/found': 'screen-ring-found',
+      '/onboarding': 'screen-product-onboarding',
       '/today': 'screen-today',
       '/metrics': 'screen-metrics',
+      '/vitals': 'screen-metrics',
       '/sleep': 'screen-sleep',
       '/recovery': 'screen-recovery',
       '/movement': 'screen-movement',
+      '/activity': 'screen-movement',
+      '/day-timeline': 'screen-day-timeline',
+      '/activity/detail': 'screen-activity-detail',
+      '/activity/suggestion': 'screen-activity-suggestion',
+      '/activity/sports': 'screen-activity-sports',
+      '/activity/log?name=Walking': 'screen-activity-log',
       '/heart': 'screen-heart',
+      '/vitals/heart': 'screen-heart',
+      '/vitals/rhr': 'screen-resting-pulse-boundary',
       '/oxygen': 'screen-oxygen',
+      '/vitals/oxygen': 'screen-oxygen',
+      '/vitals/temperature': 'screen-temperature-unavailable',
+      '/vitals/recovery': 'screen-recovery',
       '/signals/hrv-index': 'screen-hrv-index',
+      '/vitals/hrv': 'screen-hrv-index',
       '/signals/stress-index': 'screen-stress-index',
       '/sport': 'screen-sport-record',
       '/sleep/evidence': 'screen-evidence',
@@ -37,7 +51,9 @@ void main() {
       '/journal/check-in': 'screen-check-in',
       '/journal/swim': 'screen-swim',
       '/you': 'screen-you',
+      '/you/profile': 'screen-profile-preferences',
       '/you/ring': 'screen-ring-device',
+      '/you/ring/sync-issue': 'screen-sync-issue',
       '/you/ring/capabilities': 'screen-capabilities',
       '/you/data': 'screen-data-hub',
       '/you/about': 'screen-about',
@@ -93,9 +109,53 @@ void main() {
 
     await tester.tap(find.bySemanticsLabel('You'));
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('you-cycle')));
     await tester.tap(find.byKey(const Key('you-cycle')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('screen-cycle-privacy')), findsOneWidget);
+  });
+
+  testWidgets('product-system navigation exposes four clear destinations', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      const LibreRingApp(demoMode: true, initialLocation: '/today'),
+    );
+    await tester.pumpAndSettle();
+
+    for (final label in <String>['Today', 'Vitals', 'Trends', 'You']) {
+      expect(find.bySemanticsLabel(label), findsOneWidget);
+    }
+    await tester.tap(find.bySemanticsLabel('Vitals'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('screen-metrics')), findsOneWidget);
+    expect(find.textContaining('with their limits'), findsOneWidget);
+  });
+
+  testWidgets('new capability routes never turn unavailable into zero', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    for (final route in <String>['/vitals/rhr', '/vitals/temperature']) {
+      await tester.pumpWidget(
+        LibreRingApp(
+          key: ValueKey<String>('boundary-$route'),
+          initialLocation: route,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.textContaining('zero'), findsWidgets, reason: route);
+      expect(find.text('0'), findsNothing, reason: route);
+    }
   });
 
   testWidgets('production mode never substitutes demo health values', (
@@ -141,6 +201,11 @@ void main() {
       '/welcome',
       '/today',
       '/metrics',
+      '/vitals',
+      '/day-timeline',
+      '/activity/suggestion',
+      '/activity/sports',
+      '/activity/log?name=Walking',
       '/sleep',
       '/movement',
       '/heart',
@@ -153,6 +218,8 @@ void main() {
       '/journal',
       '/journal/check-in',
       '/you',
+      '/you/profile',
+      '/you/ring/sync-issue',
       '/you/ring/capabilities',
       '/you/data',
       '/privacy/cycle',
