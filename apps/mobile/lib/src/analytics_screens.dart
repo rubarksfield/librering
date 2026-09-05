@@ -8,11 +8,16 @@ import 'package:ring_core/ring_core.dart';
 import 'package:ring_design_system/ring_design_system.dart';
 
 import 'app_state.dart';
+import 'localized_copy.dart';
 import 'presentation_data.dart';
 import 'ring_analytics.dart';
 import 'storage/journal_repository.dart';
 import 'storage/preferences_repository.dart';
 import 'ui/app_chrome.dart';
+import 'ui/calorie_education.dart';
+import 'ui/hrv_education.dart';
+import 'ui/sleep_palette.dart';
+import 'ui/stress_education.dart';
 
 const _sage = Color(0xFF62806A);
 
@@ -105,7 +110,10 @@ class _ActivityLabScreenState extends ConsumerState<ActivityLabScreen>
     final present = history.where((value) => value.buckets.isNotEmpty).toList();
     final steps = present.fold(0, (sum, value) => sum + value.steps);
     final meters = present.fold(0, (sum, value) => sum + value.distanceMeters);
-    final kcal = present.fold(0, (sum, value) => sum + value.firmwareCalories);
+    final ringEnergy = present.fold(
+      0,
+      (sum, value) => sum + value.firmwareCalories,
+    );
     List<RingChartPoint> points(
       int Function(HourlyActivityValue) hourly,
       int Function(ActivityDay) daily,
@@ -176,16 +184,39 @@ class _ActivityLabScreenState extends ConsumerState<ActivityLabScreen>
           const SizedBox(height: 14),
           _HeroMetricCard(
             title: 'Movement summary',
-            child: _ThreeStats(
-              values: <_StatValue>[
-                _StatValue(preferences.formatDistance(meters), 'Distance'),
-                _StatValue('$kcal kcal', 'Active energy'),
-                _StatValue(
-                  days == 1
-                      ? '${present.first.coveredHours}'
-                      : '${present.length}',
-                  days == 1 ? 'Hours recorded' : 'Days recorded',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _ThreeStats(
+                  values: <_StatValue>[
+                    _StatValue(preferences.formatDistance(meters), 'Distance'),
+                    _StatValue(
+                      '$ringEnergy',
+                      copyFor(
+                        context,
+                        'Ring energy value',
+                        'Valor de energia do anel',
+                      ),
+                    ),
+                    _StatValue(
+                      days == 1
+                          ? '${present.first.coveredHours}'
+                          : '${present.length}',
+                      days == 1 ? 'Hours recorded' : 'Days recorded',
+                    ),
+                  ],
                 ),
+                const SizedBox(height: 14),
+                Text(
+                  copyFor(
+                    context,
+                    'Unverified firmware units',
+                    'Unidades do firmware não verificadas',
+                  ),
+                  style: Theme.of(context).textTheme.labelMedium,
+                ),
+                const SizedBox(height: 8),
+                const CalorieEducationPrompt(),
               ],
             ),
           ),
@@ -211,19 +242,28 @@ class _ActivityLabScreenState extends ConsumerState<ActivityLabScreen>
           ),
           const SizedBox(height: 14),
           _HeroMetricCard(
-            title: 'Active energy',
+            title: copyFor(
+              context,
+              'Ring energy value',
+              'Valor de energia do anel',
+            ),
             child: RingHistoryChart(
+              key: const Key('activity-energy-chart'),
               points: points(
                 (h) => h.firmwareCalories,
                 (d) => d.firmwareCalories,
               ),
               start: start,
               end: end,
-              unit: 'kcal',
+              unit: copyFor(context, 'firmware units', 'unidades do firmware'),
               kind: RingChartKind.bars,
               color: LibreRingTokens.accent,
             ),
           ),
+        ],
+        if (present.isEmpty) ...[
+          const SizedBox(height: 16),
+          const CalorieEducationPrompt(),
         ],
         const SizedBox(height: 16),
         _ActionRow(
@@ -232,10 +272,12 @@ class _ActivityLabScreenState extends ConsumerState<ActivityLabScreen>
           subtitle: 'Keep a personal record of your workout',
           onTap: () => context.push('/activity/sports'),
         ),
-        const _SourceDisclosure(
-          'Steps, distance and active energy are estimates from your ring. '
-          'The chart shows recorded hours only; a gap means no record was received. '
-          'Active energy is not food intake or total daily energy expenditure.',
+        _SourceDisclosure(
+          copyFor(
+            context,
+            'Steps and distance are estimates from your ring. The energy field has unverified units and is not a confirmed active-calorie count. The charts show recorded hours only; a gap means no record was received.',
+            'Os passos e a distância são estimativas do anel. O campo de energia tem unidades não verificadas e não é uma contagem confirmada de calorias ativas. Os gráficos apresentam apenas as horas registadas; uma lacuna significa que não foi recebido um registo.',
+          ),
         ),
       ],
     );
@@ -284,7 +326,7 @@ class _SleepLabScreenState extends ConsumerState<SleepLabScreen>
               ? 'No sleep recorded for this date'
               : '${_clock(session.startedAtUtc)} – ${_clock(session.endedAtUtc)} · Sleep window ${_minutes(sleep!.intervalMinutes)}',
           icon: Icons.bedtime_outlined,
-          color: const Color(0xFF776C91),
+          color: LibreRingTokens.sage,
         ),
         if (sessions.length > 1) ...<Widget>[
           const SizedBox(height: 16),
@@ -321,7 +363,7 @@ class _SleepLabScreenState extends ConsumerState<SleepLabScreen>
               target: preferences.sleepTargetMinutes,
               label: 'Your sleep target',
               targetLabel: _minutes(preferences.sleepTargetMinutes),
-              color: const Color(0xFF776C91),
+              color: LibreRingTokens.sage,
             ),
             const SizedBox(height: 20),
           ],
@@ -337,7 +379,7 @@ class _SleepLabScreenState extends ConsumerState<SleepLabScreen>
                     label: _stageName(stage),
                     minutes: sleep.stageMinutes[stage] ?? 0,
                     percent: sleep.percentFor(stage),
-                    color: _stageColor(stage),
+                    color: sleepStageColor(stage),
                   ),
                 if (sleep.unclassifiedMinutes > 0)
                   _StageRow(
@@ -661,7 +703,9 @@ class _VendorSignalScreenState extends ConsumerState<VendorSignalScreen>
     final data = analytics;
     final series = data?.vendorPeriod(widget.kind, days: days);
     final stress = widget.kind == RingVendorIndexKind.stress;
-    final label = stress ? 'Stress index' : 'HRV index';
+    final label = stress
+        ? copyFor(context, 'Stress index', 'Índice de stress')
+        : copyFor(context, 'HRV index', 'Índice de HRV');
     final points = days == 1
         ? <RingChartPoint>[
             for (final p in series?.samples ?? <TimedValue>[])
@@ -685,20 +729,28 @@ class _VendorSignalScreenState extends ConsumerState<VendorSignalScreen>
         _AnalyticsTopBar(title: label, fallbackPath: '/vitals'),
         calendar(data),
         _MetricHeader(
-          label: days == 1 ? 'Latest ring index' : 'Median ring index',
+          label: days == 1
+              ? copyFor(context, 'Latest ring index', 'Último índice do anel')
+              : copyFor(
+                  context,
+                  'Median ring index',
+                  'Mediana do índice do anel',
+                ),
           value:
               (days == 1 ? series?.latest : series?.median)?.toString() ?? '—',
-          note: 'Ring estimate · unitless index',
+          note: copyFor(
+            context,
+            'Ring estimate · unitless index',
+            'Estimativa do anel · índice sem unidade',
+          ),
           icon: stress ? Icons.spa_outlined : Icons.monitor_heart_outlined,
           color: _sage,
         ),
         const SizedBox(height: 12),
-        Text(
-          stress
-              ? 'An estimate calculated by your ring. Its scale has not been independently verified.'
-              : 'The ring reports this as an HRV index. The unit is unverified, so it is not shown in milliseconds.',
-          style: Theme.of(context).textTheme.bodySmall,
-        ),
+        if (stress)
+          StressEducationPrompt(days: days)
+        else
+          const HrvEducationPrompt(),
         const SizedBox(height: 20),
         _HeroMetricCard(
           title: days == 1 ? 'Captured index timeline' : 'Daily median index',
@@ -828,13 +880,21 @@ class CapabilitiesScreen extends ConsumerWidget {
                 value: data?.batteryLevel == null
                     ? '—'
                     : '${data!.batteryLevel}%',
-                detail: 'At last sync',
+                detail: copyFor(
+                  context,
+                  'Last reported · not live',
+                  'Último registo · não é em direto',
+                ),
               ),
               _EvidenceRow(
                 icon: Icons.directions_walk_rounded,
                 title: 'Activity',
                 value: '${data?.activity.length ?? 0}',
-                detail: 'Steps, distance and active energy records',
+                detail: copyFor(
+                  context,
+                  'Steps, distance and unverified ring energy values',
+                  'Passos, distância e valores de energia do anel não verificados',
+                ),
               ),
               _EvidenceRow(
                 icon: Icons.favorite_outline,
@@ -1582,86 +1642,251 @@ class _SleepTimeline extends StatefulWidget {
 }
 
 class _SleepTimelineState extends State<_SleepTimeline> {
-  RingSleepStageSpan? selected;
+  DateTime? _selectedAt;
+  Offset? _holdOrigin;
+  double? _holdFraction;
+  bool? _holdVertical;
+
+  int get _length => widget.session.endedAtUtc
+      .difference(widget.session.startedAtUtc)
+      .inMilliseconds;
+
   @override
   void didUpdateWidget(covariant _SleepTimeline oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.session != widget.session) selected = null;
+    if (oldWidget.session.startedAtUtc != widget.session.startedAtUtc ||
+        oldWidget.session.endedAtUtc != widget.session.endedAtUtc ||
+        oldWidget.stages.length != widget.stages.length ||
+        oldWidget.stages.indexed.any((entry) {
+          final next = widget.stages[entry.$1];
+          return entry.$2.stage != next.stage ||
+              entry.$2.startedAtUtc != next.startedAtUtc ||
+              entry.$2.durationMinutes != next.durationMinutes;
+        })) {
+      _selectedAt = null;
+      _endHold();
+    }
+  }
+
+  // The analytics layer supplies bounded, ordered, non-overlapping spans.
+  // Preserve every gap as an inspectable interval, not a nearby sleep stage.
+  List<_SleepInspectionInterval> get _intervals {
+    final result = <_SleepInspectionInterval>[];
+    var cursor = widget.session.startedAtUtc;
+    for (final stage in widget.stages) {
+      if (stage.startedAtUtc.isAfter(cursor)) {
+        result.add(_SleepInspectionInterval(cursor, stage.startedAtUtc));
+      }
+      final end = stage.startedAtUtc.add(
+        Duration(minutes: stage.durationMinutes),
+      );
+      result.add(
+        _SleepInspectionInterval(stage.startedAtUtc, end, stage.stage),
+      );
+      cursor = end;
+    }
+    if (cursor.isBefore(widget.session.endedAtUtc)) {
+      result.add(_SleepInspectionInterval(cursor, widget.session.endedAtUtc));
+    }
+    return result;
+  }
+
+  void _pick(double fraction) {
+    if (_length <= 0 || widget.stages.isEmpty) return;
+    final at = widget.session.startedAtUtc.add(
+      Duration(
+        milliseconds: (_length * fraction.clamp(0.0, 1.0)).floor().clamp(
+          0,
+          _length - 1,
+        ),
+      ),
+    );
+    if (at != _selectedAt) setState(() => _selectedAt = at);
+  }
+
+  void _endHold() {
+    _holdOrigin = null;
+    _holdFraction = null;
+    _holdVertical = null;
+  }
+
+  String _describe(_SleepInspectionInterval interval) =>
+      '${interval.stage == null ? 'Unclassified' : _stageName(interval.stage!)} · '
+      '${_clock(interval.start)}–${_clock(interval.end)} · '
+      '${_minutes(interval.end.difference(interval.start).inMinutes)}'
+      '${interval.stage == null ? ' · No stage recorded' : ''}';
+
+  void _step(List<_SleepInspectionInterval> intervals, int index) {
+    setState(() => _selectedAt = intervals[index].start);
   }
 
   @override
   Widget build(BuildContext context) {
     final stages = widget.stages;
-    final length = widget.session.endedAtUtc
-        .difference(widget.session.startedAtUtc)
-        .inMilliseconds;
+    final available = stages.isNotEmpty && _length > 0;
+    final intervals = _intervals;
+    final selectedIndex = _selectedAt == null
+        ? -1
+        : intervals.indexWhere(
+            (span) =>
+                !_selectedAt!.isBefore(span.start) &&
+                _selectedAt!.isBefore(span.end),
+          );
+    final selected = selectedIndex < 0 ? null : intervals[selectedIndex];
+    final nextIndex = selectedIndex + 1;
+    final previousIndex = selectedIndex < 0
+        ? intervals.length - 1
+        : selectedIndex - 1;
+    final canIncrease = available && nextIndex < intervals.length;
+    final canDecrease = available && previousIndex >= 0;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         Text(
-          selected == null
-              ? 'Tap a stage to explore'
-              : '${_stageName(selected!.stage)} · ${_minutes(selected!.durationMinutes)} · ${_clock(selected!.startedAtUtc)}',
+          available
+              ? 'Drag across, or hold and slide up/down'
+              : 'No sleep stages recorded for this window',
           style: const TextStyle(fontSize: 12, color: LibreRingTokens.muted),
         ),
         const SizedBox(height: 16),
         LayoutBuilder(
-          builder: (context, constraints) => SizedBox(
-            height: 112,
-            child: Stack(
-              children: <Widget>[
-                for (final stage in stages)
-                  Positioned(
-                    left:
-                        stage.startedAtUtc
-                            .difference(widget.session.startedAtUtc)
-                            .inMilliseconds /
-                        math.max(1, length) *
-                        constraints.maxWidth,
-                    width:
-                        stage.durationMinutes *
-                        60000 /
-                        math.max(1, length) *
-                        constraints.maxWidth,
-                    top: 0,
-                    bottom: 0,
-                    child: Semantics(
-                      button: true,
-                      label:
-                          '${_stageName(stage.stage)}, ${_minutes(stage.durationMinutes)}, ${_clock(stage.startedAtUtc)}',
-                      child: GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onTap: () => setState(() => selected = stage),
-                        child: Align(
-                          alignment: Alignment.bottomCenter,
-                          child: FractionallySizedBox(
-                            widthFactor: .97,
-                            heightFactor: switch (stage.stage) {
-                              RingSleepStage.awake => 1,
-                              RingSleepStage.rem => .8,
-                              RingSleepStage.light => .6,
-                              RingSleepStage.deep => .35,
-                            },
-                            child: DecoratedBox(
-                              decoration: BoxDecoration(
-                                color: _stageColor(stage.stage),
-                                borderRadius: BorderRadius.circular(4),
-                                border: selected == stage
-                                    ? Border.all(
-                                        color: LibreRingTokens.foreground,
-                                        width: 2,
-                                      )
-                                    : null,
+          builder: (context, constraints) {
+            final width = math.max(1.0, constraints.maxWidth);
+            return Semantics(
+              key: const Key('sleep-timeline-semantics'),
+              label: 'Sleep stages',
+              hint: available
+                  ? 'Swipe up or down to inspect intervals in this sleep window.'
+                  : 'No sleep stages recorded for this window',
+              value: selected == null
+                  ? 'No moment selected'
+                  : '${_clock(_selectedAt!)} · ${_describe(selected)}',
+              increasedValue: canIncrease
+                  ? '${_clock(intervals[nextIndex].start)} · ${_describe(intervals[nextIndex])}'
+                  : null,
+              decreasedValue: canDecrease
+                  ? '${_clock(intervals[previousIndex].start)} · ${_describe(intervals[previousIndex])}'
+                  : null,
+              onIncrease: canIncrease
+                  ? () => _step(intervals, nextIndex)
+                  : null,
+              onDecrease: canDecrease
+                  ? () => _step(intervals, previousIndex)
+                  : null,
+              child: GestureDetector(
+                key: const Key('sleep-timeline-touch-target'),
+                behavior: HitTestBehavior.opaque,
+                excludeFromSemantics: true,
+                onTapUp: available
+                    ? (event) => _pick(event.localPosition.dx / width)
+                    : null,
+                onHorizontalDragStart: available
+                    ? (event) => _pick(event.localPosition.dx / width)
+                    : null,
+                onHorizontalDragUpdate: available
+                    ? (event) => _pick(event.localPosition.dx / width)
+                    : null,
+                onLongPressStart: available
+                    ? (event) {
+                        _holdOrigin = event.localPosition;
+                        _holdFraction = event.localPosition.dx / width;
+                        _holdVertical = null;
+                        _pick(_holdFraction!);
+                      }
+                    : null,
+                onLongPressMoveUpdate: available
+                    ? (event) {
+                        if (_holdOrigin == null) return;
+                        final delta = event.localPosition - _holdOrigin!;
+                        // Lock the axis for this hold to avoid jumps on a
+                        // diagonal gesture. Vertical movement is relative to
+                        // the starting time; down is later, up is earlier.
+                        if (_holdVertical == null && delta.distance > 6) {
+                          _holdVertical = delta.dy.abs() > delta.dx.abs();
+                        }
+                        _pick(
+                          _holdVertical == true
+                              ? _holdFraction! + delta.dy / width
+                              : event.localPosition.dx / width,
+                        );
+                      }
+                    : null,
+                onLongPressEnd: available ? (_) => _endHold() : null,
+                onLongPressCancel: available ? _endHold : null,
+                child: SizedBox(
+                  height: 112,
+                  width: double.infinity,
+                  child: Stack(
+                    children: <Widget>[
+                      for (final stage in stages)
+                        Positioned(
+                          left:
+                              stage.startedAtUtc
+                                  .difference(widget.session.startedAtUtc)
+                                  .inMilliseconds /
+                              math.max(1, _length) *
+                              width,
+                          width:
+                              stage.durationMinutes *
+                              60000 /
+                              math.max(1, _length) *
+                              width,
+                          top: 0,
+                          bottom: 0,
+                          child: Align(
+                            alignment: Alignment.bottomCenter,
+                            child: FractionallySizedBox(
+                              widthFactor: .97,
+                              heightFactor: switch (stage.stage) {
+                                RingSleepStage.awake => 1,
+                                RingSleepStage.rem => .8,
+                                RingSleepStage.light => .6,
+                                RingSleepStage.deep => .35,
+                              },
+                              child: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  color: sleepStageColor(stage.stage),
+                                  borderRadius: BorderRadius.circular(4),
+                                  border:
+                                      selected?.start == stage.startedAtUtc &&
+                                          selected?.stage == stage.stage
+                                      ? Border.all(
+                                          color: LibreRingTokens.foreground,
+                                          width: 2,
+                                        )
+                                      : null,
+                                ),
                               ),
                             ),
                           ),
                         ),
-                      ),
-                    ),
+                      if (selected != null)
+                        Positioned(
+                          left:
+                              (_selectedAt!
+                                          .difference(
+                                            widget.session.startedAtUtc,
+                                          )
+                                          .inMilliseconds /
+                                      math.max(1, _length) *
+                                      width)
+                                  .clamp(0.0, math.max(0.0, width - 2)),
+                          top: 0,
+                          bottom: 0,
+                          child: IgnorePointer(
+                            child: Container(
+                              key: const Key('sleep-timeline-cursor'),
+                              width: 2,
+                              color: LibreRingTokens.foreground,
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
-              ],
-            ),
-          ),
+                ),
+              ),
+            );
+          },
         ),
         const SizedBox(height: 10),
         Row(
@@ -1671,9 +1896,32 @@ class _SleepTimelineState extends State<_SleepTimeline> {
             _AxisText(_clock(widget.session.endedAtUtc)),
           ],
         ),
+        if (selected != null) ...<Widget>[
+          const SizedBox(height: 14),
+          // Below the chart so a wrapped readout never moves the touch target
+          // while a finger is inspecting it. The adjustable chart announces
+          // this value itself; avoid duplicate screen-reader announcements.
+          ExcludeSemantics(
+            child: Text(
+              '${_clock(_selectedAt!)} · ${_describe(selected)}',
+              key: const Key('sleep-timeline-selection'),
+              style: const TextStyle(
+                fontSize: 13,
+                color: LibreRingTokens.foreground,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
       ],
     );
   }
+}
+
+class _SleepInspectionInterval {
+  const _SleepInspectionInterval(this.start, this.end, [this.stage]);
+  final DateTime start, end;
+  final RingSleepStage? stage;
 }
 
 class _StageRow extends StatelessWidget {
@@ -1934,12 +2182,6 @@ class _EmptyCard extends StatelessWidget {
   );
 }
 
-Color _stageColor(RingSleepStage stage) => switch (stage) {
-  RingSleepStage.awake => const Color(0xFFD4AA66),
-  RingSleepStage.rem => const Color(0xFFB3A8C8),
-  RingSleepStage.light => const Color(0xFF8D7DA6),
-  RingSleepStage.deep => const Color(0xFF5C4D76),
-};
 String _stageName(RingSleepStage stage) => switch (stage) {
   RingSleepStage.awake => 'Awake',
   RingSleepStage.rem => 'REM',

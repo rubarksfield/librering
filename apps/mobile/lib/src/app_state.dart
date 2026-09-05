@@ -3,8 +3,10 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:ring_core/ring_core.dart';
+import 'package:ring_colmi_qring/ring_colmi_qring.dart';
 
 import 'ble/r12_pairing_client.dart';
+import 'sync_progress.dart';
 import 'storage/data_export_service.dart';
 import 'storage/journal_repository.dart';
 import 'storage/preferences_repository.dart';
@@ -347,6 +349,7 @@ class RingPairingState {
     this.approvedSuiteError,
     this.syncInProgress = false,
     this.syncError,
+    this.syncProgress,
     this.lastSyncRecordCount,
     this.lastSyncedAtUtc,
   });
@@ -367,6 +370,7 @@ class RingPairingState {
   final String? approvedSuiteError;
   final bool syncInProgress;
   final String? syncError;
+  final RingSyncProgress? syncProgress;
   final int? lastSyncRecordCount;
   final DateTime? lastSyncedAtUtc;
 
@@ -389,6 +393,7 @@ class RingPairingState {
     Object? approvedSuiteError = _unset,
     bool? syncInProgress,
     Object? syncError = _unset,
+    Object? syncProgress = _unset,
     Object? lastSyncRecordCount = _unset,
     Object? lastSyncedAtUtc = _unset,
   }) => RingPairingState(
@@ -428,6 +433,9 @@ class RingPairingState {
     syncError: identical(syncError, _unset)
         ? this.syncError
         : syncError as String?,
+    syncProgress: identical(syncProgress, _unset)
+        ? this.syncProgress
+        : syncProgress as RingSyncProgress?,
     lastSyncRecordCount: identical(lastSyncRecordCount, _unset)
         ? this.lastSyncRecordCount
         : lastSyncRecordCount as int?,
@@ -442,6 +450,10 @@ class RingPairingController extends Notifier<RingPairingState> {
   static const _discoveryTimeout = Duration(seconds: 12);
   StreamSubscription<RingPairingCandidate>? _scanSubscription;
   bool _syncInFlight = false;
+  Timer? _syncTicker;
+  int _lastProgressTick = 0;
+  bool _syncSaved = false;
+  int _syncGeneration = 0;
   final Map<String, RingPairingCandidate> _candidates =
       <String, RingPairingCandidate>{};
 
@@ -449,6 +461,7 @@ class RingPairingController extends Notifier<RingPairingState> {
   RingPairingState build() {
     final client = ref.watch(ringPairingClientProvider);
     ref.onDispose(() {
+      _syncTicker?.cancel();
       unawaited(_scanSubscription?.cancel());
       if (client != null) unawaited(client.disconnect());
     });
@@ -749,7 +762,7 @@ class RingPairingController extends Notifier<RingPairingState> {
     if (state.phase != RingPairingPhase.connected && candidate == null) return;
     // Acquire synchronously and hold through disconnect, including failures.
     _syncInFlight = true;
-    state = state.copyWith(syncInProgress: true, syncError: null);
+    _beginSync(RingSyncStage.connecting);
     try {
       if (state.phase != RingPairingPhase.connected) {
         state = state.copyWith(
@@ -779,6 +792,7 @@ class RingPairingController extends Notifier<RingPairingState> {
     if (client == null || _syncInFlight || state.syncInProgress) return;
 
     _syncInFlight = true;
+    _beginSync(RingSyncStage.finding);
     state = state.copyWith(
       phase: RingPairingPhase.scanning,
       candidates: const <RingPairingCandidate>[],
@@ -797,6 +811,7 @@ class RingPairingController extends Notifier<RingPairingState> {
       if (!ref.mounted) return;
       var exact = _exactCandidates();
       if (exact.isEmpty) {
+        _reportSync(RingSyncStage.finding);
         state = state.copyWith(
           message: 'The ring is not visible yet. Trying once more…',
         );
@@ -825,6 +840,7 @@ class RingPairingController extends Notifier<RingPairingState> {
       }
 
       final selected = exact.single;
+      _reportSync(RingSyncStage.connecting);
       state = state.copyWith(
         phase: RingPairingPhase.connecting,
         candidates: _sortedCandidates(),
@@ -851,10 +867,47 @@ class RingPairingController extends Notifier<RingPairingState> {
   }
 
   Future<void> _syncAndStore(RingPairingClient client) async {
-    final dataset = await client.sync();
+    _reportSync(RingSyncStage.metadata);
+    final generation = _syncGeneration;
+    var acceptingProgress = true;
+    late final RingSyncDataset dataset;
+    try {
+      dataset = client is RingSyncProgressClient
+          ? await (client as RingSyncProgressClient).syncWithProgress(
+              onProgress: (progress) {
+                if (!ref.mounted ||
+                    !_syncInFlight ||
+                    !acceptingProgress ||
+                    generation != _syncGeneration) {
+                  return;
+                }
+                _reportSync(
+                  switch (progress.phase) {
+                    R12SyncPhase.metadata => RingSyncStage.metadata,
+                    R12SyncPhase.battery => RingSyncStage.battery,
+                    R12SyncPhase.activity => RingSyncStage.activity,
+                    R12SyncPhase.heartRate => RingSyncStage.heartRate,
+                    R12SyncPhase.sleep => RingSyncStage.sleep,
+                    R12SyncPhase.oxygen => RingSyncStage.oxygen,
+                    R12SyncPhase.stress => RingSyncStage.stress,
+                    R12SyncPhase.hrv => RingSyncStage.hrv,
+                    R12SyncPhase.normalising => RingSyncStage.normalising,
+                  },
+                  completedUnits: progress.completedUnits,
+                  totalUnits: progress.totalUnits,
+                );
+              },
+            )
+          : await client.sync();
+    } finally {
+      // A late event must not move saving/finished feedback back to reading.
+      acceptingProgress = false;
+    }
     if (!ref.mounted) return;
+    _reportSync(RingSyncStage.saving);
     final merged = await ref.read(ringDataProvider.notifier).merge(dataset);
     if (!ref.mounted) return;
+    _syncSaved = true;
     final incomplete = dataset.availability.values.any(
       (status) =>
           status == RingDataAvailability.partial ||
@@ -873,12 +926,20 @@ class RingPairingController extends Notifier<RingPairingState> {
   }
 
   Future<void> _releaseSync(RingPairingClient client) async {
+    if (ref.mounted) _reportSync(RingSyncStage.finishing);
     try {
       await client.disconnect();
     } catch (_) {
       // Release is best-effort, but it must finish before another sync starts.
     } finally {
       if (ref.mounted) {
+        _reportSync(
+          state.syncError == null
+              ? RingSyncStage.completed
+              : _syncSaved
+              ? RingSyncStage.partial
+              : RingSyncStage.failed,
+        );
         state = state.copyWith(
           phase: state.phase == RingPairingPhase.failed
               ? RingPairingPhase.failed
@@ -886,8 +947,58 @@ class RingPairingController extends Notifier<RingPairingState> {
           syncInProgress: false,
         );
       }
+      _syncTicker?.cancel();
+      _syncTicker = null;
       _syncInFlight = false;
     }
+  }
+
+  void _beginSync(RingSyncStage stage) {
+    _syncTicker?.cancel();
+    _syncGeneration++;
+    _lastProgressTick = 0;
+    _syncSaved = false;
+    state = state.copyWith(
+      syncInProgress: true,
+      syncError: null,
+      syncProgress: RingSyncProgress(
+        stage: stage,
+        startedAtUtc: DateTime.now().toUtc(),
+      ),
+    );
+    _syncTicker = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!ref.mounted) {
+        timer.cancel();
+        return;
+      }
+      final progress = state.syncProgress;
+      if (progress == null || progress.isTerminal) return;
+      state = state.copyWith(
+        syncProgress: progress.withTiming(
+          elapsed: Duration(seconds: timer.tick),
+          sinceLastProgress: Duration(seconds: timer.tick - _lastProgressTick),
+        ),
+      );
+    });
+  }
+
+  void _reportSync(
+    RingSyncStage stage, {
+    int? completedUnits,
+    int? totalUnits,
+  }) {
+    final previous = state.syncProgress;
+    if (previous == null) return;
+    _lastProgressTick = _syncTicker?.tick ?? 0;
+    state = state.copyWith(
+      syncProgress: RingSyncProgress(
+        stage: stage,
+        startedAtUtc: previous.startedAtUtc,
+        elapsed: Duration(seconds: _lastProgressTick),
+        completedUnits: completedUnits,
+        totalUnits: totalUnits,
+      ),
+    );
   }
 
   Future<void> _collectQuickSyncCandidates(RingPairingClient client) async {

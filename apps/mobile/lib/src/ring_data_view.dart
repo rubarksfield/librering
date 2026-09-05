@@ -75,12 +75,12 @@ class RingDashboardView {
           origin: DataOrigin.ring,
         ),
         MetricSummary(
-          label: 'Firmware energy',
+          label: 'Ring energy value',
           value: hasActivityRecords ? '$firmwareCalories' : '—',
-          unit: hasActivityRecords ? 'kcal' : '',
+          unit: '',
           context: !hasActivityRecords
               ? 'No firmware energy today'
-              : 'Firmware estimate · Not calorie intake',
+              : 'Unverified firmware units · Not calorie intake',
           origin: DataOrigin.ring,
         ),
         MetricSummary(

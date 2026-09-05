@@ -132,9 +132,17 @@ void main() {
     expect(client.syncCount, 1);
     expect(client.disconnectCount, 1);
     expect(repository.value, isNotNull);
-    expect(find.textContaining('0 records stored locally'), findsOneWidget);
+    expect(repository.value!.recordCount, 0);
+    expect(find.text('Sync complete'), findsOneWidget);
+    expect(
+      find.text(
+        'Your ring responded, but there are no readings to show yet. Wear it and sync again later.',
+      ),
+      findsOneWidget,
+    );
     expect(find.byKey(const Key('found-view-today')), findsOneWidget);
 
+    await tester.ensureVisible(find.byKey(const Key('sync-ring-data')));
     await tester.tap(find.byKey(const Key('sync-ring-data')));
     await tester.pumpAndSettle();
     expect(client.connectCount, 2);
@@ -169,7 +177,8 @@ void main() {
 
     expect(find.byKey(const Key('screen-today')), findsOneWidget);
     expect(find.byKey(const Key('screen-ring-scan')), findsNothing);
-    expect(find.text('Your ring is up to date.'), findsOneWidget);
+    expect(find.text('Sync complete'), findsOneWidget);
+    expect(find.byKey(const Key('ring-sync-status')), findsOneWidget);
     expect(client.connectCount, 1);
     expect(client.syncCount, 1);
     expect(client.disconnectCount, 1);

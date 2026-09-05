@@ -22,6 +22,45 @@ class UnsupportedFirmwareException implements Exception {
   String toString() => 'UnsupportedFirmwareException: $message';
 }
 
+/// The actual protocol work currently being performed by a read-only sync.
+enum R12SyncPhase {
+  metadata,
+  battery,
+  activity,
+  heartRate,
+  sleep,
+  oxygen,
+  stress,
+  hrv,
+  normalising,
+}
+
+/// Progress through bounded requests, not an estimate of elapsed time or data.
+///
+/// For day-by-day history, [completedUnits] counts requests that have settled,
+/// including unavailable or timed-out days; [totalUnits] is the number of days
+/// requested. Reaching the total does not mean every day returned valid data.
+/// Only the returned [SyncResult] describes successful and partial domains.
+/// No device identifiers, dates, readings, or raw packets are included here.
+class R12SyncProgress {
+  const R12SyncProgress({
+    required this.phase,
+    this.completedUnits,
+    this.totalUnits,
+  }) : assert((completedUnits == null) == (totalUnits == null)),
+       assert(completedUnits == null || completedUnits >= 0),
+       assert(totalUnits == null || totalUnits > 0),
+       assert(
+         completedUnits == null ||
+             totalUnits == null ||
+             completedUnits <= totalUnits,
+       );
+
+  final R12SyncPhase phase;
+  final int? completedUnits;
+  final int? totalUnits;
+}
+
 class ColmiQringDriver implements RingDriver {
   ColmiQringDriver(this.transport);
 
@@ -351,6 +390,7 @@ class ColmiQringDriver implements RingDriver {
 
   Future<Map<String, Object?>> _captureActivityHistory({
     required int days,
+    void Function(int completedDays)? onDayCompleted,
   }) async {
     final records = <Map<String, Object?>>[];
     for (var day = 0; day < days; day++) {
@@ -368,6 +408,7 @@ class ColmiQringDriver implements RingDriver {
             packets.last.bytes[1] == 0xff ? 'noData' : 'complete',
       );
       records.add(<String, Object?>{'dayOffset': day, ...capture});
+      onDayCompleted?.call(day + 1);
     }
     return <String, Object?>{
       'status': _aggregateStatus(records),
@@ -379,6 +420,7 @@ class ColmiQringDriver implements RingDriver {
   Future<Map<String, Object?>> _captureHeartRateHistory({
     required DateTime today,
     required int days,
+    void Function(int completedDays)? onDayCompleted,
   }) async {
     final records = <Map<String, Object?>>[];
     for (var day = 0; day < days; day++) {
@@ -410,6 +452,7 @@ class ColmiQringDriver implements RingDriver {
         'requestedDate': _dateOnly(target),
         ...capture,
       });
+      onDayCompleted?.call(day + 1);
     }
     return <String, Object?>{
       'status': _aggregateStatus(records),
@@ -421,6 +464,7 @@ class ColmiQringDriver implements RingDriver {
   Future<Map<String, Object?>> _captureIndexedHistory({
     required int days,
     required ColmiCommandPacket Function(int dayOffset) requestForDay,
+    void Function(int completedDays)? onDayCompleted,
   }) async {
     final records = <Map<String, Object?>>[];
     for (var day = 0; day < days; day++) {
@@ -442,6 +486,7 @@ class ColmiQringDriver implements RingDriver {
             packets.last.bytes[1] == 0xff ? 'noData' : 'complete',
       );
       records.add(<String, Object?>{'dayOffset': day, ...capture});
+      onDayCompleted?.call(day + 1);
     }
     return <String, Object?>{
       'status': _aggregateStatus(records),
@@ -803,8 +848,9 @@ class ColmiQringDriver implements RingDriver {
   @override
   Future<SyncResult> sync(
     SyncRequest request,
-    SyncCursor? previousCursor,
-  ) async {
+    SyncCursor? previousCursor, {
+    void Function(R12SyncProgress)? onProgress,
+  }) async {
     final connection = _connection;
     if (connection == null) {
       throw StateError('R12 sync requires a connected ring.');
@@ -815,6 +861,7 @@ class ColmiQringDriver implements RingDriver {
     }
 
     final startedAt = DateTime.now();
+    onProgress?.call(const R12SyncProgress(phase: R12SyncPhase.metadata));
     final firmware = await _readFirmware(connection);
     if (!physicallyVerifiedFirmwareVersions.contains(firmware.$1)) {
       throw UnsupportedFirmwareException(
@@ -842,6 +889,7 @@ class ColmiQringDriver implements RingDriver {
     final partial = <SyncDomain>{};
 
     if (request.domains.contains(SyncDomain.battery)) {
+      onProgress?.call(const R12SyncProgress(phase: R12SyncPhase.battery));
       final response = await _requestCommand(
         createBatteryRequest(),
         timeout: const Duration(seconds: 5),
@@ -854,7 +902,18 @@ class ColmiQringDriver implements RingDriver {
     }
 
     if (request.domains.contains(SyncDomain.activity)) {
-      final section = await _captureActivityHistory(days: 8);
+      void reportDays(int completedDays) => onProgress?.call(
+        R12SyncProgress(
+          phase: R12SyncPhase.activity,
+          completedUnits: completedDays,
+          totalUnits: 8,
+        ),
+      );
+      reportDays(0);
+      final section = await _captureActivityHistory(
+        days: 8,
+        onDayCompleted: reportDays,
+      );
       availability[RingDataKind.activity] = _availabilityFor(section);
       for (final day in _historyDays(section)) {
         for (final bucket in r12_history.parseActivityHistory(
@@ -879,7 +938,19 @@ class ColmiQringDriver implements RingDriver {
     }
 
     if (request.domains.contains(SyncDomain.heartRate)) {
-      final section = await _captureHeartRateHistory(today: startedAt, days: 8);
+      void reportDays(int completedDays) => onProgress?.call(
+        R12SyncProgress(
+          phase: R12SyncPhase.heartRate,
+          completedUnits: completedDays,
+          totalUnits: 8,
+        ),
+      );
+      reportDays(0);
+      final section = await _captureHeartRateHistory(
+        today: startedAt,
+        days: 8,
+        onDayCompleted: reportDays,
+      );
       availability[RingDataKind.heartRate] = _availabilityFor(section);
       for (final day in _historyDays(section)) {
         for (final sample in r12_history.parseHeartRateHistory(
@@ -904,6 +975,7 @@ class ColmiQringDriver implements RingDriver {
 
     if (request.domains.contains(SyncDomain.sleep)) {
       if (validation.supportsBigData) {
+        onProgress?.call(const R12SyncProgress(phase: R12SyncPhase.sleep));
         final section = await _captureSleepHistory();
         availability[RingDataKind.sleep] = _availabilityFor(section);
         if (section['status'] == 'complete') {
@@ -939,6 +1011,7 @@ class ColmiQringDriver implements RingDriver {
 
     if (request.domains.contains(SyncDomain.oxygen)) {
       if (validation.supportsBigData) {
+        onProgress?.call(const R12SyncProgress(phase: R12SyncPhase.oxygen));
         final section = await _captureBigData(
           dataId: colmiOxygenDataId,
           request: createBigDataRequest(colmiOxygenDataId),
@@ -971,13 +1044,25 @@ class ColmiQringDriver implements RingDriver {
     }
 
     if (request.domains.contains(SyncDomain.additional)) {
+      void reportDays(R12SyncPhase phase, int completedDays) =>
+          onProgress?.call(
+            R12SyncProgress(
+              phase: phase,
+              completedUnits: completedDays,
+              totalUnits: 7,
+            ),
+          );
+      reportDays(R12SyncPhase.stress, 0);
       final stressSection = await _captureIndexedHistory(
         days: 7,
         requestForDay: (day) => createStressHistoryRequest(dayOffset: day),
+        onDayCompleted: (day) => reportDays(R12SyncPhase.stress, day),
       );
+      reportDays(R12SyncPhase.hrv, 0);
       final hrvSection = await _captureIndexedHistory(
         days: 7,
         requestForDay: (day) => createHrvHistoryRequest(dayOffset: day),
+        onDayCompleted: (day) => reportDays(R12SyncPhase.hrv, day),
       );
       final stressAvailability = _availabilityFor(stressSection);
       final hrvAvailability = _availabilityFor(hrvSection);
@@ -1005,6 +1090,7 @@ class ColmiQringDriver implements RingDriver {
       }
     }
 
+    onProgress?.call(const R12SyncProgress(phase: R12SyncPhase.normalising));
     final dataset = RingSyncDataset(
       lastSyncedAtUtc: startedAt.toUtc(),
       source: RingDataSource(driverId: driverId, firmwareVersion: firmware.$1),

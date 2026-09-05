@@ -81,11 +81,17 @@ void main() {
     () async {
       final transport = _FakeTransport(_completeServices());
       final driver = ColmiQringDriver(transport);
+      final progress = <R12SyncProgress>[];
 
       await expectLater(
-        driver.sync(SyncRequest(<SyncDomain>{SyncDomain.sleep}), null),
+        driver.sync(
+          SyncRequest(<SyncDomain>{SyncDomain.sleep}),
+          null,
+          onProgress: progress.add,
+        ),
         throwsStateError,
       );
+      expect(progress, isEmpty);
       await expectLater(
         driver.startLiveMeasurement(LiveMeasurementType.heartRate),
         throwsA(isA<ProtocolEvidenceIncompleteException>()),
@@ -107,6 +113,7 @@ void main() {
         },
       );
       final driver = ColmiQringDriver(transport);
+      final progress = <R12SyncProgress>[];
       await driver.connect(
         const RingPeripheral(
           deviceId: 'ephemeral-only',
@@ -124,6 +131,7 @@ void main() {
           SyncDomain.additional,
         }),
         null,
+        onProgress: progress.add,
       );
 
       expect(result.partial, isEmpty);
@@ -135,6 +143,30 @@ void main() {
       expect(result.dataset!.recordCount, 0);
       expect(result.nextCursor, isNotNull);
       expect(
+        progress.map((event) => event.phase).toSet(),
+        orderedEquals(R12SyncPhase.values),
+      );
+      for (final phase in <R12SyncPhase>[
+        R12SyncPhase.activity,
+        R12SyncPhase.heartRate,
+        R12SyncPhase.stress,
+        R12SyncPhase.hrv,
+      ]) {
+        final days =
+            phase == R12SyncPhase.activity || phase == R12SyncPhase.heartRate
+            ? 8
+            : 7;
+        final phaseEvents = progress.where((event) => event.phase == phase);
+        expect(
+          phaseEvents.map((event) => event.completedUnits),
+          orderedEquals(List<int>.generate(days + 1, (index) => index)),
+        );
+        expect(phaseEvents.every((event) => event.totalUnits == days), isTrue);
+      }
+      expect(progress.last.phase, R12SyncPhase.normalising);
+      expect(progress.last.completedUnits, isNull);
+      expect(progress.last.totalUnits, isNull);
+      expect(
         transport.writes.where(
           (value) => const <int>{0x08, 0x0a, 0x50, 0xff}.contains(value.first),
         ),
@@ -142,6 +174,142 @@ void main() {
       );
     },
   );
+
+  test(
+    'sync emits only requested phases and remains RingDriver compatible',
+    () async {
+      final transport = _verifiedTransport();
+      final driver = ColmiQringDriver(transport);
+      await driver.connect(
+        const RingPeripheral(deviceId: 'test', name: 'COLMI R12_TEST'),
+      );
+      final progress = <R12SyncProgress>[];
+
+      final result = await driver.sync(
+        SyncRequest(<SyncDomain>{SyncDomain.battery}),
+        null,
+        onProgress: progress.add,
+      );
+
+      expect(result.completed, <SyncDomain>{SyncDomain.battery});
+      expect(
+        progress.map((event) => event.phase),
+        orderedEquals(<R12SyncPhase>[
+          R12SyncPhase.metadata,
+          R12SyncPhase.battery,
+          R12SyncPhase.normalising,
+        ]),
+      );
+      expect(progress.every((event) => event.completedUnits == null), isTrue);
+      expect(progress.every((event) => event.totalUnits == null), isTrue);
+      final RingDriver interfaceDriver = driver;
+      final noObserverResult = await interfaceDriver.sync(
+        SyncRequest(<SyncDomain>{SyncDomain.battery}),
+        null,
+      );
+      expect(noObserverResult.dataset!.batteryLevel, 73);
+    },
+  );
+
+  test('day progress advances only after the request settles', () async {
+    final firstDayStarted = Completer<void>();
+    final releaseFirstDay = Completer<void>();
+    final transport = _verifiedTransport(
+      beforeWrite: (value) async {
+        if (value.first == colmiActivityHistoryCommandId && value[1] == 0) {
+          firstDayStarted.complete();
+          await releaseFirstDay.future;
+        }
+      },
+    );
+    final driver = ColmiQringDriver(transport);
+    await driver.connect(
+      const RingPeripheral(deviceId: 'test', name: 'COLMI R12_TEST'),
+    );
+    final progress = <R12SyncProgress>[];
+    final syncing = driver.sync(
+      SyncRequest(<SyncDomain>{SyncDomain.activity}),
+      null,
+      onProgress: progress.add,
+    );
+
+    await firstDayStarted.future;
+    expect(progress.last.phase, R12SyncPhase.activity);
+    expect(progress.last.completedUnits, 0);
+    expect(progress.last.totalUnits, 8);
+    expect(
+      progress.where((event) => event.phase == R12SyncPhase.activity),
+      hasLength(1),
+    );
+    releaseFirstDay.complete();
+    final result = await syncing;
+    expect(result.completed, <SyncDomain>{SyncDomain.activity});
+    expect(
+      progress
+          .where((event) => event.phase == R12SyncPhase.activity)
+          .map((event) => event.completedUnits),
+      orderedEquals(<int>[0, 1, 2, 3, 4, 5, 6, 7, 8]),
+    );
+  });
+
+  test(
+    'settled failed days report progress without claiming successful data',
+    () async {
+      final transport = _verifiedTransport(
+        beforeWrite: (value) async {
+          if (value.first == colmiActivityHistoryCommandId) {
+            throw StateError('Synthetic write failure');
+          }
+        },
+      );
+      final driver = ColmiQringDriver(transport);
+      await driver.connect(
+        const RingPeripheral(deviceId: 'test', name: 'COLMI R12_TEST'),
+      );
+      final progress = <R12SyncProgress>[];
+
+      final result = await driver.sync(
+        SyncRequest(<SyncDomain>{SyncDomain.activity}),
+        null,
+        onProgress: progress.add,
+      );
+
+      expect(result.completed, isEmpty);
+      expect(result.partial, <SyncDomain>{SyncDomain.activity});
+      expect(result.dataset!.recordCount, 0);
+      expect(
+        progress
+            .where((event) => event.phase == R12SyncPhase.activity)
+            .map((event) => event.completedUnits),
+        orderedEquals(<int>[0, 1, 2, 3, 4, 5, 6, 7, 8]),
+      );
+    },
+  );
+
+  test('unsupported channels do not emit a data-transfer phase', () async {
+    final transport = _verifiedTransport(supportsBigData: false);
+    final driver = ColmiQringDriver(transport);
+    await driver.connect(
+      const RingPeripheral(deviceId: 'test', name: 'COLMI R12_TEST'),
+    );
+    final progress = <R12SyncProgress>[];
+
+    final result = await driver.sync(
+      SyncRequest(<SyncDomain>{SyncDomain.sleep, SyncDomain.oxygen}),
+      null,
+      onProgress: progress.add,
+    );
+
+    expect(result.completed, isEmpty);
+    expect(result.partial, <SyncDomain>{SyncDomain.sleep, SyncDomain.oxygen});
+    expect(
+      progress.map((event) => event.phase),
+      orderedEquals(<R12SyncPhase>[
+        R12SyncPhase.metadata,
+        R12SyncPhase.normalising,
+      ]),
+    );
+  });
 
   test('sync fails closed on an unverified firmware', () async {
     final transport = _FakeTransport(
@@ -156,12 +324,18 @@ void main() {
     await driver.connect(
       const RingPeripheral(deviceId: 'ephemeral-only', name: 'COLMI R12_TEST'),
     );
+    final progress = <R12SyncProgress>[];
 
     await expectLater(
-      driver.sync(SyncRequest(<SyncDomain>{SyncDomain.battery}), null),
+      driver.sync(
+        SyncRequest(<SyncDomain>{SyncDomain.battery}),
+        null,
+        onProgress: progress.add,
+      ),
       throwsA(isA<UnsupportedFirmwareException>()),
     );
     expect(transport.writes, isEmpty);
+    expect(progress.single.phase, R12SyncPhase.metadata);
   });
 
   test(
@@ -301,6 +475,25 @@ void main() {
   });
 }
 
+_FakeTransport _verifiedTransport({
+  Future<void> Function(List<int> value)? beforeWrite,
+  bool supportsBigData = true,
+}) => _FakeTransport(
+  _completeServices()
+      .where(
+        (service) =>
+            supportsBigData || service.uuid != ColmiQringProfile.bigDataService,
+      )
+      .toList(),
+  approvedSuiteResponses: true,
+  beforeWrite: beforeWrite,
+  readValues: <String, List<int>>{
+    '${ColmiQringProfile.deviceInformationService}/'
+            '${ColmiQringProfile.firmwareRevision}':
+        'RT11CR_1.00.09_260424'.codeUnits,
+  },
+);
+
 List<BleService> _completeServices() => <BleService>[
   BleService(
     uuid: ColmiQringProfile.commandService,
@@ -333,12 +526,14 @@ class _FakeTransport implements RingBleTransport {
     this.discoveryFailure,
     this.readValues = const <String, List<int>>{},
     this.approvedSuiteResponses = false,
+    this.beforeWrite,
   });
 
   final List<BleService> services;
   final Object? discoveryFailure;
   final Map<String, List<int>> readValues;
   final bool approvedSuiteResponses;
+  final Future<void> Function(List<int> value)? beforeWrite;
   final List<List<int>> writes = <List<int>>[];
   final _connections = StreamController<BleConnectionState>.broadcast();
   final _notifications = StreamController<List<int>>.broadcast();
@@ -390,6 +585,7 @@ class _FakeTransport implements RingBleTransport {
     required bool withResponse,
   }) async {
     writes.add(List<int>.from(value));
+    await beforeWrite?.call(value);
     if (value.isNotEmpty && value.first == 0x03) {
       final response = ColmiCommandPacket.create(0x03, <int>[73, 0]);
       scheduleMicrotask(() => _notifications.add(response.bytes));

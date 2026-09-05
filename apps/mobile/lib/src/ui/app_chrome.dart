@@ -193,24 +193,36 @@ class RingSectionHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.only(top: 4, bottom: 12),
-    child: Row(
-      children: [
-        Expanded(
-          child: Text(
-            title,
-            style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-              letterSpacing: -.35,
-            ),
+    child: LayoutBuilder(
+      builder: (context, constraints) {
+        final heading = Text(
+          title,
+          style: const TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w600,
+            letterSpacing: -.35,
           ),
-        ),
-        if (action != null)
-          TextButton(
-            onPressed: onAction,
-            child: Text(action!, style: const TextStyle(fontSize: 12)),
-          ),
-      ],
+        );
+        final button = action == null
+            ? null
+            : TextButton(
+                onPressed: onAction,
+                child: Text(action!, style: const TextStyle(fontSize: 12)),
+              );
+        if (constraints.maxWidth < 400 &&
+            MediaQuery.textScalerOf(context).scale(14) > 18) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [heading, ?button],
+          );
+        }
+        return Row(
+          children: [
+            Expanded(child: heading),
+            ?button,
+          ],
+        );
+      },
     ),
   );
 }
@@ -364,10 +376,14 @@ Future<void> showRingInfo(
   BuildContext context, {
   required String title,
   required String body,
+  String closeLabel = 'Got it',
 }) => showModalBottomSheet<void>(
   context: context,
   isScrollControlled: true,
   useSafeArea: true,
+  sheetAnimationStyle: MediaQuery.disableAnimationsOf(context)
+      ? AnimationStyle.noAnimation
+      : null,
   builder: (context) => Padding(
     padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
     child: SingleChildScrollView(
@@ -387,7 +403,7 @@ Future<void> showRingInfo(
           Text(body, style: Theme.of(context).textTheme.bodyLarge),
           const SizedBox(height: 24),
           LibreRingPrimaryButton(
-            label: 'Got it',
+            label: closeLabel,
             icon: Icons.check_rounded,
             onPressed: () => Navigator.pop(context),
           ),

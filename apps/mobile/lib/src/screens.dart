@@ -18,83 +18,118 @@ import 'storage/journal_repository.dart';
 import 'storage/data_export_service.dart';
 import 'storage/preferences_repository.dart';
 import 'ui/app_chrome.dart';
+import 'ui/sync_status_card.dart';
 
 class WelcomeScreen extends StatelessWidget {
   const WelcomeScreen({super.key});
 
   @override
-  Widget build(BuildContext context) => _OnboardingScreen(
-    key: const Key('screen-welcome'),
-    top: Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: <Widget>[
-        const LibreRingWordmark(),
-        TextButton(
-          onPressed: () => context.go('/today'),
-          child: Text(copyFor(context, 'Skip', 'Saltar')),
-        ),
-      ],
-    ),
-    art: LibreRingArtwork(
-      kind: LibreRingArtworkKind.ring,
-      size: 300,
-      semanticLabel: copyFor(
-        context,
-        'Matte silver LibreRing illustration',
-        'Ilustração de um LibreRing prateado mate',
+  Widget build(BuildContext context) {
+    final replay =
+        GoRouterState.of(context).uri.queryParameters['replay'] == 'true';
+    return _OnboardingScreen(
+      key: const Key('screen-welcome'),
+      top: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: <Widget>[
+          const LibreRingWordmark(),
+          Flexible(
+            child: TextButton(
+              onPressed: () => context.go(replay ? '/you' : '/today'),
+              child: Text(
+                replay
+                    ? copyFor(context, 'Back to You', 'Voltar ao perfil')
+                    : copyFor(context, 'Skip', 'Saltar'),
+              ),
+            ),
+          ),
+        ],
       ),
-    ),
-    title: copyFor(
-      context,
-      'Know what your ring knows.',
-      'Saiba o que o seu anel sabe.',
-    ),
-    subtitle: copyFor(
-      context,
-      'Clear daily signals, with the evidence kept close.',
-      'Sinais diários claros, com a evidência sempre por perto.',
-    ),
-    action: LibreRingPrimaryButton(
-      key: const Key('welcome-start'),
-      label: copyFor(context, 'Set up LibreRing', 'Configurar o LibreRing'),
-      onPressed: () => context.go('/privacy'),
-    ),
-  );
+      art: LibreRingArtwork(
+        kind: LibreRingArtworkKind.ring,
+        size: 300,
+        semanticLabel: copyFor(
+          context,
+          'Matte silver LibreRing illustration',
+          'Ilustração de um LibreRing prateado mate',
+        ),
+      ),
+      title: copyFor(
+        context,
+        'Know what your ring knows.',
+        'Saiba o que o seu anel sabe.',
+      ),
+      subtitle: copyFor(
+        context,
+        'Clear daily signals, with the evidence kept close.',
+        'Sinais diários claros, com a evidência sempre por perto.',
+      ),
+      detail: replay
+          ? Text(
+              copyFor(
+                context,
+                'After your first sync, LibreRing opens on Today. Revisit this introduction whenever you like; your records and settings stay as they are.',
+                'Após a primeira sincronização, o LibreRing abre em Hoje. Reveja esta apresentação quando quiser; os seus registos e definições mantêm-se.',
+              ),
+              key: const Key('intro-replay-explanation'),
+              style: Theme.of(context).textTheme.bodySmall,
+            )
+          : null,
+      action: LibreRingPrimaryButton(
+        key: const Key('welcome-start'),
+        label: replay
+            ? copyFor(context, 'Your privacy', 'A sua privacidade')
+            : copyFor(context, 'Set up LibreRing', 'Configurar o LibreRing'),
+        onPressed: () => replay
+            ? context.push('/privacy?replay=true')
+            : context.go('/privacy'),
+      ),
+    );
+  }
 }
 
 class PrivacyPromiseScreen extends StatelessWidget {
   const PrivacyPromiseScreen({super.key});
 
   @override
-  Widget build(BuildContext context) => _OnboardingScreen(
-    key: const Key('screen-privacy-promise'),
-    top: Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: <Widget>[
-        const LibreRingWordmark(),
-        _BackButton(
-          label: copyFor(context, 'Back to welcome', 'Voltar ao início'),
-          fallbackPath: '/welcome',
-        ),
-      ],
-    ),
-    art: const LibreRingArtwork(kind: LibreRingArtworkKind.privacy, size: 268),
-    title: copyFor(
-      context,
-      'Your body data stays yours.',
-      'Os dados do seu corpo continuam seus.',
-    ),
-    subtitle: copyFor(
-      context,
-      'Stored on this device by default. Sharing always requires a clear choice.',
-      'Guardados neste dispositivo por predefinição. Partilhar exige sempre uma escolha clara.',
-    ),
-    action: LibreRingPrimaryButton(
-      key: const Key('privacy-continue'),
-      label: copyFor(context, 'Continue privately', 'Continuar em privado'),
-      onPressed: () => context.go('/pairing/scan'),
-    ),
-  );
+  Widget build(BuildContext context) {
+    final replay =
+        GoRouterState.of(context).uri.queryParameters['replay'] == 'true';
+    return _OnboardingScreen(
+      key: const Key('screen-privacy-promise'),
+      top: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: <Widget>[
+          const LibreRingWordmark(),
+          _BackButton(
+            label: copyFor(context, 'Back to welcome', 'Voltar ao início'),
+            fallbackPath: replay ? '/welcome?replay=true' : '/welcome',
+          ),
+        ],
+      ),
+      art: const LibreRingArtwork(
+        kind: LibreRingArtworkKind.privacy,
+        size: 268,
+      ),
+      title: copyFor(
+        context,
+        'Your body data stays yours.',
+        'Os dados do seu corpo continuam seus.',
+      ),
+      subtitle: copyFor(
+        context,
+        'Stored on this device by default. Sharing always requires a clear choice.',
+        'Guardados neste dispositivo por predefinição. Partilhar exige sempre uma escolha clara.',
+      ),
+      action: LibreRingPrimaryButton(
+        key: const Key('privacy-continue'),
+        label: replay
+            ? copyFor(context, 'Back to Today', 'Voltar a Hoje')
+            : copyFor(context, 'Continue privately', 'Continuar em privado'),
+        onPressed: () => context.go(replay ? '/today' : '/pairing/scan'),
+      ),
+    );
+  }
 }
 
 class RingScanScreen extends ConsumerWidget {
@@ -267,20 +302,20 @@ class RingFoundScreen extends ConsumerWidget {
             'Battery ${metadata.batteryLevel}%${metadata.charging ? ' · Charging' : ''} · Firmware ${metadata.firmwareVersion ?? 'not exposed'}',
             'Bateria ${metadata.batteryLevel}%${metadata.charging ? ' · A carregar' : ''} · Firmware ${metadata.firmwareVersion ?? 'não exposto'}',
           );
-    final productionStatus = pairing.syncInProgress
+    final productionStatus =
+        pairing.syncProgress != null || pairing.syncError != null
         ? copyFor(
             context,
-            'Reading verified history and storing it on this phone…',
-            'A ler o histórico verificado e a guardá-lo neste telemóvel…',
+            'Your readings stay on this phone. The ring disconnects after each sync.',
+            'As suas leituras ficam neste telemóvel. O anel desliga-se após cada sincronização.',
           )
-        : pairing.syncError ??
-              (pairing.lastSyncedAtUtc == null
-                  ? metadataStatus
-                  : copyFor(
-                      context,
-                      '${pairing.lastSyncRecordCount ?? 0} records stored locally · Recovery scoring remains unavailable',
-                      '${pairing.lastSyncRecordCount ?? 0} registos guardados localmente · A pontuação de recuperação continua indisponível',
-                    ));
+        : (pairing.lastSyncedAtUtc == null
+              ? metadataStatus
+              : copyFor(
+                  context,
+                  '${pairing.lastSyncRecordCount ?? 0} records stored locally · Recovery scoring remains unavailable',
+                  '${pairing.lastSyncRecordCount ?? 0} registos guardados localmente · A pontuação de recuperação continua indisponível',
+                ));
     return _OnboardingScreen(
       key: const Key('screen-ring-found'),
       top: Row(
@@ -295,12 +330,17 @@ class RingFoundScreen extends ConsumerWidget {
           ),
         ],
       ),
-      art: const LibreRingArtwork(kind: LibreRingArtworkKind.ring, size: 210),
-      preTitle: const Icon(
-        Icons.check,
-        color: LibreRingTokens.onForeground,
-        size: 28,
+      art: LibreRingArtwork(
+        kind: LibreRingArtworkKind.ring,
+        size: !demo && !captureMode && pairing.syncProgress != null ? 100 : 210,
       ),
+      preTitle: !demo && !captureMode && pairing.syncProgress != null
+          ? null
+          : const Icon(
+              Icons.check,
+              color: LibreRingTokens.onForeground,
+              size: 28,
+            ),
       title: demo
           ? copyFor(context, 'LibreRing found', 'LibreRing encontrado')
           : evidence?.name ??
@@ -337,7 +377,13 @@ class RingFoundScreen extends ConsumerWidget {
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.bodySmall,
             )
-          : null,
+          : demo
+          ? null
+          : RingSyncStatusCard(
+              pairing: pairing,
+              onRetry: ref.read(ringPairingProvider.notifier).sync,
+              onHelp: () => context.push('/you/ring/sync-issue'),
+            ),
       centered: true,
       action: captureMode && !demo
           ? Column(
@@ -1581,12 +1627,16 @@ class MovementScreen extends ConsumerWidget {
                 ),
               ),
               _CompactEvidenceRow(
-                title: copyFor(context, 'Calories', 'Calorias'),
-                value: copyFor(context, 'Hidden', 'Ocultas'),
+                title: copyFor(
+                  context,
+                  'Ring energy value',
+                  'Valor de energia do anel',
+                ),
+                value: copyFor(context, 'Hidden', 'Oculto'),
                 detail: copyFor(
                   context,
-                  'Firmware estimate is retained for export, not promoted',
-                  'A estimativa do firmware é mantida para exportação, não promovida',
+                  'Unverified firmware units · retained for export, not active calories',
+                  'Unidades de firmware não verificadas · guardadas para exportação, não são calorias ativas',
                 ),
               ),
             ],
@@ -2436,6 +2486,8 @@ class CheckInScreen extends ConsumerStatefulWidget {
 
 class _CheckInScreenState extends ConsumerState<CheckInScreen> {
   static const _tags = <String>[
+    'Stress',
+    'Low energy',
     'Exercise',
     'Late meal',
     'Alcohol',
@@ -2642,44 +2694,82 @@ class YouScreen extends ConsumerWidget {
         const SizedBox(height: 24),
         LibreRingCard(
           backgroundColor: LibreRingTokens.sageSoft,
-          child: Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              CircleAvatar(
-                radius: 25,
-                backgroundColor: LibreRingTokens.sage,
-                foregroundColor: Colors.white,
-                child: profile.displayName.isEmpty
-                    ? const Icon(Icons.person_outline_rounded)
-                    : Text(profile.displayName.characters.first.toUpperCase()),
+              Row(
+                children: [
+                  CircleAvatar(
+                    radius: 25,
+                    backgroundColor: LibreRingTokens.sage,
+                    foregroundColor: Colors.white,
+                    child: profile.displayName.isEmpty
+                        ? const Icon(Icons.person_outline_rounded)
+                        : Text(
+                            profile.displayName.characters.first.toUpperCase(),
+                          ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          profile.displayName.isEmpty
+                              ? copyFor(
+                                  context,
+                                  'Your personal space',
+                                  'O seu espaço pessoal',
+                                )
+                              : profile.displayName,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          copyFor(
+                            context,
+                            'Your ring. Your data.',
+                            'O seu anel. Os seus dados.',
+                          ),
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          copyFor(
+                            context,
+                            'Stored on this phone.',
+                            'Guardados neste telemóvel.',
+                          ),
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      profile.displayName.isEmpty
-                          ? copyFor(
-                              context,
-                              'Your personal space',
-                              'O seu espaço pessoal',
-                            )
-                          : profile.displayName,
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      copyFor(
-                        context,
-                        'No account. No subscription.',
-                        'Sem conta. Sem subscrição.',
-                      ),
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  ],
+              const SizedBox(height: 12),
+              TextButton.icon(
+                key: const Key('you-account-explainer'),
+                style: TextButton.styleFrom(
+                  minimumSize: const Size(48, 48),
+                  foregroundColor: LibreRingTokens.foreground,
+                  alignment: Alignment.centerLeft,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 4,
+                    vertical: 12,
+                  ),
+                ),
+                onPressed: () => _showAccountExplanation(context),
+                icon: const Icon(Icons.info_outline_rounded, size: 18),
+                label: Text(
+                  copyFor(
+                    context,
+                    'Accounts, costs and your data',
+                    'Contas, custos e os seus dados',
+                  ),
                 ),
               ),
             ],
@@ -2717,6 +2807,21 @@ class YouScreen extends ConsumerWidget {
                   'COLMI R12 · última bateria ${dataset.batteryLevel == null ? 'indisponível' : '${dataset.batteryLevel}%'}',
                 ),
           onTap: () => context.push('/you/ring'),
+        ),
+        _ActionTile(
+          key: const Key('you-introduction'),
+          icon: Icons.auto_stories_outlined,
+          title: copyFor(
+            context,
+            'Revisit the introduction',
+            'Rever a apresentação',
+          ),
+          body: copyFor(
+            context,
+            'The welcome story is still here. After your first sync, the app opens on Today.',
+            'A apresentação continua aqui. Após a primeira sincronização, a aplicação abre em Hoje.',
+          ),
+          onTap: () => context.push('/welcome?replay=true'),
         ),
         _ActionTile(
           key: const Key('you-setup'),
@@ -2767,6 +2872,17 @@ class YouScreen extends ConsumerWidget {
   }
 }
 
+Future<void> _showAccountExplanation(BuildContext context) => showRingInfo(
+  context,
+  title: copyFor(context, 'Simple, local and yours', 'Simples, local e seu'),
+  closeLabel: copyFor(context, 'Got it', 'Entendido'),
+  body: copyFor(
+    context,
+    'No online account needed\nThe supported COLMI R12 connects directly over Bluetooth. Your profile is a name and preferences saved on this phone, not an online account.\n\nNo subscription in this app\nThe current app has no paid tier, billing or subscription-only features. There is no subscription to buy or cancel here.\n\nYour data, on this phone\nLibreRing saves ring history, journal entries and preferences locally. It does not provide a LibreRing cloud account, cloud backup or cross-phone sync. Exporting and sharing are your choice in You → Data and export.',
+    'Sem necessidade de uma conta online\nO COLMI R12 suportado liga-se diretamente por Bluetooth. O seu perfil é um nome e preferências guardados neste telemóvel, não uma conta online.\n\nSem subscrição nesta aplicação\nA aplicação atual não tem plano pago, faturação nem funcionalidades exclusivas de subscrição. Não existe aqui uma subscrição para comprar ou cancelar.\n\nOs seus dados, neste telemóvel\nO LibreRing guarda localmente o histórico do anel, o diário e as preferências. Não disponibiliza conta, cópia de segurança na nuvem nem sincronização entre telemóveis do LibreRing. Exportar e partilhar é uma escolha sua em Perfil → Dados e exportação.',
+  ),
+);
+
 class RingDeviceScreen extends ConsumerStatefulWidget {
   const RingDeviceScreen({super.key});
 
@@ -2784,37 +2900,24 @@ class _RingDeviceScreenState extends ConsumerState<RingDeviceScreen> {
       return;
     }
     setState(() => _refreshing = true);
-    String? message;
     try {
       await ref.read(ringPairingProvider.notifier).quickSync();
-      if (!mounted) return;
-      final result = ref.read(ringPairingProvider);
-      message =
-          result.syncError ??
-          (result.lastSyncedAtUtc != null
-              ? copyFor(
-                  context,
-                  'Ring history updated.',
-                  'Histórico do anel atualizado.',
-                )
-              : copyFor(
-                  context,
-                  'The ring has not synced yet. Try again or open setup.',
-                  'O anel ainda não foi sincronizado. Tente novamente ou abra a configuração.',
-                ));
     } catch (_) {
       if (!mounted) return;
-      message = copyFor(
-        context,
-        'Could not sync right now. Keep the ring nearby and try again.',
-        'Não foi possível sincronizar agora. Mantenha o anel por perto e tente novamente.',
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            copyFor(
+              context,
+              'Could not sync right now. Keep the ring nearby and try again.',
+              'Não foi possível sincronizar agora. Mantenha o anel por perto e tente novamente.',
+            ),
+          ),
+        ),
       );
     } finally {
       if (mounted) setState(() => _refreshing = false);
     }
-    if (!mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
@@ -2881,6 +2984,12 @@ class _RingDeviceScreenState extends ConsumerState<RingDeviceScreen> {
           ),
         ),
         const SizedBox(height: 22),
+        if (!demo && !ref.watch(isProtocolCaptureModeProvider))
+          RingSyncStatusCard(
+            pairing: pairing,
+            onRetry: canRefresh ? _refresh : null,
+            onHelp: () => context.push('/you/ring/sync-issue'),
+          ),
         LibreRingCard(
           child: Column(
             children: <Widget>[
@@ -2892,8 +3001,8 @@ class _RingDeviceScreenState extends ConsumerState<RingDeviceScreen> {
                 detail: dataset?.charging == true
                     ? copyFor(
                         context,
-                        'Charging at the last sync',
-                        'A carregar na última sincronização',
+                        'Last reported: charging',
+                        'Último registo: a carregar',
                       )
                     : copyFor(
                         context,
@@ -4341,6 +4450,7 @@ class _ActionTile extends StatelessWidget {
   Widget build(BuildContext context) => Semantics(
     label: '$title. $body',
     button: onTap != null,
+    onTap: onTap,
     child: ExcludeSemantics(
       child: InkWell(
         onTap: onTap,
@@ -4459,6 +4569,8 @@ class _JournalRow extends StatelessWidget {
 }
 
 String _checkInTagLabel(BuildContext context, String tag) => switch (tag) {
+  'Stress' => copyFor(context, tag, 'Stress'),
+  'Low energy' => copyFor(context, tag, 'Pouca energia'),
   'Exercise' => copyFor(context, tag, 'Exercício'),
   'Late meal' => copyFor(context, tag, 'Refeição tardia'),
   'Alcohol' => copyFor(context, tag, 'Álcool'),
@@ -4785,7 +4897,11 @@ class _DailyDecodeStrip extends StatelessWidget {
           ),
           _DecodeValue(
             value: '${activity.firmwareCalories}',
-            label: copyFor(context, 'Firmware kcal', 'kcal firmware'),
+            label: copyFor(
+              context,
+              'Ring energy value · unverified units',
+              'Energia do anel · unidades não verificadas',
+            ),
           ),
           _DecodeValue(
             value: '${pulse.samples.length + oxygen.ranges.length}',

@@ -76,7 +76,15 @@ abstract interface class RingPairingClient {
   Future<void> disconnect();
 }
 
-class PhysicalR12PairingClient implements RingPairingClient {
+/// Optional capability so other clients can retain their existing sync API.
+abstract interface class RingSyncProgressClient {
+  Future<RingSyncDataset> syncWithProgress({
+    required void Function(R12SyncProgress) onProgress,
+  });
+}
+
+class PhysicalR12PairingClient
+    implements RingPairingClient, RingSyncProgressClient {
   PhysicalR12PairingClient(this._transport, {this.captureSink})
     : _driver = ColmiQringDriver(_transport);
 
@@ -153,7 +161,16 @@ class PhysicalR12PairingClient implements RingPairingClient {
   }
 
   @override
-  Future<RingSyncDataset> sync() async {
+  Future<RingSyncDataset> sync() => _sync();
+
+  @override
+  Future<RingSyncDataset> syncWithProgress({
+    required void Function(R12SyncProgress) onProgress,
+  }) => _sync(onProgress: onProgress);
+
+  Future<RingSyncDataset> _sync({
+    void Function(R12SyncProgress)? onProgress,
+  }) async {
     final result = await _driver.sync(
       SyncRequest(const <SyncDomain>{
         SyncDomain.battery,
@@ -164,6 +181,7 @@ class PhysicalR12PairingClient implements RingPairingClient {
         SyncDomain.additional,
       }),
       null,
+      onProgress: onProgress,
     );
     final dataset = result.dataset;
     if (dataset == null) {

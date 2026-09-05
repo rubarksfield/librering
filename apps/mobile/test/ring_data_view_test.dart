@@ -34,7 +34,7 @@ void main() {
     expect(view.metrics.map((metric) => metric.label), <String>[
       'Steps',
       'Distance',
-      'Firmware energy',
+      'Ring energy value',
       'Latest pulse',
       'Sleep window',
       'Oxygen range',
@@ -42,7 +42,8 @@ void main() {
     expect(view.metrics[0].value, '500');
     expect(view.metrics[1].value, '400 m');
     expect(view.metrics[2].value, '20');
-    expect(view.metrics[2].unit, 'kcal');
+    expect(view.metrics[2].unit, '');
+    expect(view.metrics[2].context, contains('Unverified firmware units'));
     expect(view.metrics[3].value, '64');
     expect(view.averagePulse, 62);
     expect(view.pulseTrend, <double>[60, 64]);

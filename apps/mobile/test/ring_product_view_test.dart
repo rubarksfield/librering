@@ -81,7 +81,7 @@ void main() {
     expect(view.domain(ProductDomain.movement).value, '1250');
     expect(
       view.domain(ProductDomain.movement).explanation,
-      contains('44 firmware kcal'),
+      contains('Ring energy value 44 (unverified units)'),
     );
     expect(view.domain(ProductDomain.heart).value, '64');
     expect(view.domain(ProductDomain.oxygen).value, '95–98');

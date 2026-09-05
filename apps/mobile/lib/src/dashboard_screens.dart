@@ -9,10 +9,16 @@ import 'package:ring_core/ring_core.dart';
 import 'package:ring_design_system/ring_design_system.dart';
 
 import 'app_state.dart';
+import 'daily_guidance.dart';
+import 'localized_copy.dart';
 import 'presentation_data.dart';
 import 'ring_analytics.dart';
 import 'storage/preferences_repository.dart';
 import 'ui/app_chrome.dart';
+import 'ui/daily_guidance_card.dart';
+import 'ui/ring_status_help.dart';
+import 'ui/sleep_palette.dart';
+import 'ui/sync_status_card.dart';
 
 String _number(num value) =>
     NumberFormat.decimalPattern().format(value.round());
@@ -60,11 +66,6 @@ class _RefinedTodayScreenState extends ConsumerState<RefinedTodayScreen>
       return;
     }
     await ref.read(ringPairingProvider.notifier).quickSync();
-    if (!mounted) return;
-    final error = ref.read(ringPairingProvider).syncError;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(error ?? 'Your ring is up to date.')),
-    );
   }
 
   @override
@@ -72,8 +73,8 @@ class _RefinedTodayScreenState extends ConsumerState<RefinedTodayScreen>
     final data = ref.watch(displayRingDataProvider);
     final now = ref.watch(currentLocalTimeProvider);
     final demo = ref.watch(isDemoModeProvider);
-    final preferences =
-        ref.watch(appPreferencesProvider).value ?? const AppPreferences();
+    final preferencesState = ref.watch(appPreferencesProvider);
+    final preferences = preferencesState.value ?? const AppPreferences();
     final pairing = ref.watch(ringPairingProvider);
     final dataset = data.value;
     final analytics = dataset == null
@@ -85,6 +86,24 @@ class _RefinedTodayScreenState extends ConsumerState<RefinedTodayScreen>
     final oxygen = analytics?.oxygenFor(day);
     final sleep = analytics?.sleepFor(day);
     final isToday = RingCalendar.sameDay(day, now);
+    // Never combine real journal entries with example ring data.
+    final journal = demo ? null : ref.watch(journalProvider);
+    final guidance =
+        analytics == null ||
+            pairing.syncInProgress ||
+            data.isLoading ||
+            data.hasError ||
+            preferencesState.isLoading ||
+            preferencesState.hasError
+        ? null
+        : evaluateDailyGuidance(
+            analytics: analytics,
+            preferences: preferences,
+            journal: journal?.hasError == true || journal?.isLoading == true
+                ? null
+                : journal?.value,
+            demo: demo,
+          );
     final greeting = now.hour < 12
         ? 'Good morning'
         : now.hour < 18
@@ -101,17 +120,34 @@ class _RefinedTodayScreenState extends ConsumerState<RefinedTodayScreen>
           subtitle:
               '${isToday ? greeting : DateFormat('EEEE').format(day)}${preferences.displayName.isEmpty ? '' : ', ${preferences.displayName}'}',
           trailing: _SyncButton(
-            dataset: dataset,
             syncing: pairing.syncInProgress,
+            stalled: pairing.syncProgress?.isStalled == true,
             demo: demo,
             onTap: _sync,
           ),
         ),
+        RingSyncStatusCard(
+          pairing: pairing,
+          demo: demo,
+          onRetry: _sync,
+          onHelp: () => context.push('/you/ring/sync-issue'),
+        ),
+        RingStatusHelp(dataset: dataset, demo: demo),
         if (demo) const _ExampleLabel(),
         if (data.isLoading && dataset == null)
           const RingLoadingState()
         else if (data.hasError && dataset == null)
           _ReadError(onRetry: () => ref.invalidate(ringDataProvider))
+        else if (analytics == null && pairing.syncInProgress && !demo)
+          const RingEmptyState(
+            title: 'Your first readings are on their way.',
+            body: 'Keep LibreRing open while your ring history is received and saved. Your daily view will appear here when it is ready.',
+          )
+        else if (analytics == null && pairing.lastSyncedAtUtc != null && !demo)
+          const RingEmptyState(
+            title: 'No readings yet.',
+            body: 'Your ring has been checked. Wear it to collect readings, then sync again to bring them into your daily view.',
+          )
         else if (analytics == null)
           RingEmptyState(
             title: 'Your day starts here.',
@@ -127,8 +163,10 @@ class _RefinedTodayScreenState extends ConsumerState<RefinedTodayScreen>
             onChanged: (value) => setState(() => _day = value),
           ),
           const SizedBox(height: 14),
-          if (pairing.syncError != null)
-            _SyncNotice(onTap: () => context.push('/you/ring/sync-issue')),
+          if (guidance != null) ...[
+            DailyGuidanceCard(guidance: guidance, demo: demo),
+            const SizedBox(height: 16),
+          ],
           _SleepHero(
             sleep: sleep,
             dailyAsleepMinutes: analytics.asleepMinutesFor(day),
@@ -360,12 +398,19 @@ class _RefinedVitalsScreenState extends ConsumerState<RefinedVitalsScreen> {
                 onTap: () => context.push(_dateRoute('/activity', day)),
               ),
               _MetricTile(
-                title: 'Energy',
+                title: copyFor(
+                  context,
+                  'Ring energy value',
+                  'Valor de energia do anel',
+                ),
                 value: activity?.hasRecords == true
                     ? '${activity!.firmwareCalories}'
                     : '—',
-                unit: 'kcal',
-                detail: 'Ring estimate',
+                detail: copyFor(
+                  context,
+                  'Unverified firmware units',
+                  'Unidades do firmware não verificadas',
+                ),
                 icon: Icons.local_fire_department_outlined,
                 color: LibreRingTokens.accent,
                 onTap: () => context.push(_dateRoute('/activity', day)),
@@ -725,30 +770,46 @@ class _DashboardHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.only(top: 8, bottom: 16),
-    child: Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          child: Column(
+    child: LayoutBuilder(
+      builder: (context, constraints) {
+        final titleBlock = Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(subtitle, style: Theme.of(context).textTheme.bodySmall),
+            const SizedBox(height: 6),
+            Text(
+              title,
+              style: const TextStyle(
+                fontSize: 34,
+                fontWeight: FontWeight.w500,
+                letterSpacing: -1.2,
+                height: 1.1,
+              ),
+            ),
+          ],
+        );
+        if (constraints.maxWidth < 400 &&
+            MediaQuery.textScalerOf(context).scale(14) > 18) {
+          return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(subtitle, style: Theme.of(context).textTheme.bodySmall),
-              const SizedBox(height: 6),
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 34,
-                  fontWeight: FontWeight.w500,
-                  letterSpacing: -1.2,
-                  height: 1.1,
-                ),
-              ),
+              titleBlock,
+              if (trailing != null) ...[const SizedBox(height: 12), trailing!],
             ],
-          ),
-        ),
-        if (trailing != null)
-          Padding(padding: const EdgeInsets.only(left: 12), child: trailing!),
-      ],
+          );
+        }
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: titleBlock),
+            if (trailing != null)
+              Padding(
+                padding: const EdgeInsets.only(left: 12),
+                child: trailing!,
+              ),
+          ],
+        );
+      },
     ),
   );
 }
@@ -767,22 +828,26 @@ class _ExampleLabel extends StatelessWidget {
 
 class _SyncButton extends StatelessWidget {
   const _SyncButton({
-    required this.dataset,
     required this.syncing,
+    required this.stalled,
     required this.demo,
     required this.onTap,
   });
-  final RingSyncDataset? dataset;
   final bool syncing;
+  final bool stalled;
   final bool demo;
   final VoidCallback onTap;
   @override
   Widget build(BuildContext context) => Semantics(
     label: demo
-        ? 'Example battery, ${dataset?.batteryLevel ?? 78} percent'
+        ? copyFor(
+            context,
+            'Example mode, sync disabled',
+            'Modo de exemplo, sincronização desativada',
+          )
         : syncing
-        ? 'Syncing your ring'
-        : 'Sync ring${dataset?.batteryLevel == null ? '' : ', last reported battery ${dataset!.batteryLevel} percent'}',
+        ? copyFor(context, 'Syncing your ring', 'A sincronizar o anel')
+        : copyFor(context, 'Sync ring', 'Sincronizar anel'),
     button: true,
     enabled: !syncing && !demo,
     onTap: syncing || demo ? null : onTap,
@@ -795,18 +860,18 @@ class _SyncButton extends StatelessWidget {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
       ),
       onPressed: syncing || demo ? null : onTap,
-      icon: syncing
-          ? const SizedBox.square(
-              dimension: 16,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            )
-          : const Icon(Icons.sync_rounded, size: 18),
+      icon: Icon(
+        stalled && syncing ? Icons.sync_problem_rounded : Icons.sync_rounded,
+        size: 18,
+      ),
       label: Text(
         syncing
-            ? 'Syncing'
-            : dataset?.batteryLevel == null
-            ? 'Sync'
-            : '${dataset!.batteryLevel}%',
+            ? stalled
+                  ? copyFor(context, 'Waiting', 'A aguardar')
+                  : copyFor(context, 'Syncing', 'A sincronizar')
+            : demo
+            ? copyFor(context, 'Example', 'Exemplo')
+            : copyFor(context, 'Sync', 'Sincronizar'),
         style: const TextStyle(fontSize: 12),
       ),
     ),
@@ -824,21 +889,6 @@ class _ReadError extends StatelessWidget {
     icon: Icons.cloud_off_outlined,
     action: 'Try again',
     onAction: onRetry,
-  );
-}
-
-class _SyncNotice extends StatelessWidget {
-  const _SyncNotice({required this.onTap});
-  final VoidCallback onTap;
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(bottom: 14),
-    child: _ActionRow(
-      icon: Icons.sync_problem_rounded,
-      title: 'Couldn’t refresh your ring',
-      subtitle: 'Your saved readings are still available',
-      onTap: onTap,
-    ),
   );
 }
 
@@ -978,13 +1028,7 @@ class _SleepRibbonPainter extends CustomPainter {
       final width = span.durationMinutes / sleep.intervalMinutes * size.width;
       canvas.drawRect(
         Rect.fromLTWH(left, 0, math.max(0, width - 1), size.height),
-        Paint()
-          ..color = switch (span.stage) {
-            RingSleepStage.deep => LibreRingTokens.sage,
-            RingSleepStage.light => const Color(0xFFA0B69C),
-            RingSleepStage.rem => const Color(0xFFCDD8C5),
-            RingSleepStage.awake => LibreRingTokens.accent,
-          },
+        Paint()..color = sleepStageColor(span.stage),
       );
     }
   }
@@ -1196,9 +1240,13 @@ class _IndexRows extends StatelessWidget {
                 ? Icons.spa_outlined
                 : Icons.monitor_heart_outlined,
             title: kind == RingVendorIndexKind.stress
-                ? 'Stress index'
-                : 'HRV index',
-            subtitle: 'Firmware index · unvalidated',
+                ? copyFor(context, 'Stress index', 'Índice de stress')
+                : copyFor(context, 'HRV index', 'Índice de HRV'),
+            subtitle: copyFor(
+              context,
+              'Unverified · What does it mean?',
+              'Não verificado · O que significa?',
+            ),
             value: '${analytics.vendorIndexFor(day, kind).latest ?? '—'}',
             onTap: () => context.push(
               _dateRoute(

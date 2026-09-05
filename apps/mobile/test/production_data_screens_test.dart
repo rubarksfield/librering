@@ -150,7 +150,7 @@ void main() {
       (
         '/movement',
         'screen-movement',
-        <String>['Hour by hour', 'Active energy'],
+        <String>['Hour by hour', 'Ring energy value'],
       ),
       ('/sleep', 'screen-sleep', <String>['Sleep stages', 'Sleep continuity']),
       (
@@ -171,7 +171,10 @@ void main() {
       (
         '/signals/stress-index',
         'screen-stress-index',
-        <String>['unitless index', 'scale has not been independently verified'],
+        <String>[
+          'unitless index',
+          'formula and scale have not been independently verified',
+        ],
       ),
       (
         '/you/ring/capabilities',

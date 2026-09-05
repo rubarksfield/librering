@@ -193,7 +193,7 @@ class RingProductView {
             eyebrow: 'Today · Ring estimate',
             headline: '$todaySteps steps are recorded so far.',
             body:
-                '${distanceLabel(todayDistance)} and $todayFirmwareCalories firmware kcal are stored locally. Manual activity can add missing context.',
+                '${distanceLabel(todayDistance)} and a ring energy value of $todayFirmwareCalories (unverified units) are stored locally. Manual activity can add missing context.',
             actionLabel: 'View movement',
             actionRoute: '/movement',
             confidence: ProductConfidence.moderate,
@@ -243,7 +243,7 @@ class RingProductView {
         status: hasTodayActivity ? 'Steps today' : 'No buckets today',
         explanation: !hasTodayActivity
             ? 'No activity bucket has been retained for today.'
-            : '${distanceLabel(todayDistance)} · $todayFirmwareCalories firmware kcal',
+            : '${distanceLabel(todayDistance)} · Ring energy value $todayFirmwareCalories (unverified units)',
         source: 'Ring firmware',
         confidence: hasTodayActivity
             ? ProductConfidence.moderate

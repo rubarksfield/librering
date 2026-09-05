@@ -144,7 +144,11 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Good evening, Jo'), findsOneWidget);
     expect(find.text('of 8,000 daily goal'), findsOneWidget);
-    expect(find.textContaining(' mi'), findsOneWidget);
+    // Match the distance unit, not unrelated prose such as "a busy mind".
+    expect(
+      find.textContaining(RegExp(r'^\d+(?:[.,]\d+)? mi$')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('All signals carries the day even after browsing Vitals', (
@@ -273,6 +277,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('domain-movement')));
     await tester.tap(find.byKey(const Key('domain-movement')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('screen-movement')), findsOneWidget);

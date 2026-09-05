@@ -10,6 +10,7 @@ import 'ring_analytics.dart';
 import 'storage/journal_repository.dart';
 import 'storage/preferences_repository.dart';
 import 'ui/app_chrome.dart';
+import 'ui/sync_status_card.dart';
 
 String _copy(BuildContext context, String english, String portuguese) =>
     Localizations.localeOf(context).languageCode == 'pt' ? portuguese : english;
@@ -97,7 +98,7 @@ class _ProductDayTimelineScreenState
             title:
                 '${NumberFormat.decimalPattern().format(hour.steps)}${_copy(context, ' steps', ' passos')}',
             detail:
-                '${preferences.formatDistance(hour.distanceMeters)} · ${hour.firmwareCalories} kcal',
+                '${preferences.formatDistance(hour.distanceMeters)} · ${hour.firmwareCalories} ${_copy(context, 'ring energy value (unverified units)', 'valor de energia do anel (unidades não verificadas)')}',
             provenance: _copy(
               context,
               'Ring estimate · hourly',
@@ -1055,6 +1056,11 @@ class SyncIssueScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final pairing = ref.watch(ringPairingProvider);
+    final demo = ref.watch(isDemoModeProvider);
+    final canSync =
+        !demo &&
+        !ref.watch(isProtocolCaptureModeProvider) &&
+        ref.watch(ringPairingClientProvider) != null;
     return ProductSystemScaffold(
       screenKey: const Key('screen-sync-issue'),
       showBack: true,
@@ -1062,7 +1068,13 @@ class SyncIssueScreen extends ConsumerWidget {
       backPath: '/you/ring',
       contextLabel: _copy(context, 'Sync support', 'Ajuda com a sincronização'),
       eyebrow: _copy(context, 'Connection', 'Ligação'),
-      title: pairing.syncError == null
+      title: pairing.syncInProgress
+          ? _copy(
+              context,
+              'Your sync, step by step.',
+              'Sincronização passo a passo.',
+            )
+          : pairing.syncError == null
           ? _copy(
               context,
               'Ready for your next sync.',
@@ -1075,28 +1087,32 @@ class SyncIssueScreen extends ConsumerWidget {
         'Mantenha o anel perto do telemóvel, ative o Bluetooth e feche outras aplicações ligadas ao anel.',
       ),
       children: <Widget>[
-        _StatusPanel(
-          title: pairing.syncError == null
-              ? _copy(context, 'Local data safe', 'Dados locais seguros')
-              : _copy(
+        RingSyncStatusCard(pairing: pairing, demo: demo),
+        if (pairing.syncProgress == null &&
+            !pairing.syncInProgress &&
+            pairing.syncError == null)
+          _StatusPanel(
+            title: pairing.syncError == null
+                ? _copy(context, 'Local data safe', 'Dados locais seguros')
+                : _copy(
+                    context,
+                    'Latest attempt needs attention',
+                    'A última tentativa requer atenção',
+                  ),
+            body:
+                pairing.syncError ??
+                _copy(
                   context,
-                  'Latest attempt needs attention',
-                  'A última tentativa requer atenção',
+                  'No sync error has been reported in this session.',
+                  'Nenhum erro de sincronização foi registado nesta sessão.',
                 ),
-          body:
-              pairing.syncError ??
-              _copy(
-                context,
-                'No sync error has been reported in this session.',
-                'Nenhum erro de sincronização foi registado nesta sessão.',
-              ),
-        ),
+          ),
         const SizedBox(height: 18),
         LibreRingPrimaryButton(
           label: pairing.syncInProgress
               ? _copy(context, 'Syncing…', 'A sincronizar…')
               : _copy(context, 'Run a new sync', 'Executar nova sincronização'),
-          onPressed: pairing.syncInProgress
+          onPressed: pairing.syncInProgress || !canSync
               ? null
               : ref.read(ringPairingProvider.notifier).quickSync,
         ),
