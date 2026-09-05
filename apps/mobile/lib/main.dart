@@ -8,6 +8,7 @@ import 'src/ble/flutter_reactive_ble_transport.dart';
 import 'src/ble/r12_pairing_client.dart';
 import 'src/storage/data_export_service.dart';
 import 'src/storage/journal_repository.dart';
+import 'src/storage/preferences_repository.dart';
 import 'src/storage/ring_data_repository.dart';
 
 Future<void> main() async {
@@ -54,6 +55,9 @@ Future<void> main() async {
       ringDataRepository: ringDataRepository,
       journalRepository: journalRepository,
       dataExportService: dataExportService,
+      preferencesRepository: supportDirectory == null
+          ? null
+          : FilePreferencesRepository(supportDirectory),
     ),
   );
 }

@@ -169,42 +169,47 @@ void main() {
 
     expect(find.byKey(const Key('screen-today')), findsOneWidget);
     expect(find.byKey(const Key('screen-ring-scan')), findsNothing);
-    expect(find.text('Ring data refreshed locally.'), findsOneWidget);
+    expect(find.text('Your ring is up to date.'), findsOneWidget);
     expect(client.connectCount, 1);
     expect(client.syncCount, 1);
     expect(client.disconnectCount, 1);
     expect(client.scanTimeouts, const <Duration>[Duration(seconds: 12)]);
   });
 
-  testWidgets('stale returning history refreshes quietly on Today', (
-    tester,
-  ) async {
-    tester.view.physicalSize = const Size(390, 844);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-    final client = _FakePairingClient(
-      lastSyncedAtUtc: DateTime.utc(2020, 1, 1),
-    );
-    final repository = _MemoryRepository()..value = await client.sync();
-    client.syncCount = 0;
+  testWidgets(
+    'stale history never scans a nearby ring without an explicit action',
+    (tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final client = _FakePairingClient(
+        lastSyncedAtUtc: DateTime.utc(2020, 1, 1),
+      );
+      final repository = _MemoryRepository()..value = await client.sync();
+      client.syncCount = 0;
 
-    await tester.pumpWidget(
-      LibreRingApp(
-        initialLocation: '/today',
-        pairingClient: client,
-        ringDataRepository: repository,
-      ),
-    );
-    await tester.pumpAndSettle();
+      await tester.pumpWidget(
+        LibreRingApp(
+          initialLocation: '/today',
+          pairingClient: client,
+          ringDataRepository: repository,
+        ),
+      );
+      await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('screen-today')), findsOneWidget);
-    expect(find.byKey(const Key('screen-ring-scan')), findsNothing);
-    expect(client.connectCount, 1);
-    expect(client.syncCount, 1);
-    expect(client.disconnectCount, 1);
-    expect(client.scanTimeouts, const <Duration>[Duration(seconds: 12)]);
-  });
+      expect(find.byKey(const Key('screen-today')), findsOneWidget);
+      expect(find.byKey(const Key('screen-ring-scan')), findsNothing);
+      expect(client.connectCount, 0);
+      expect(client.syncCount, 0);
+      expect(client.disconnectCount, 0);
+      expect(client.scanTimeouts, isEmpty);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
+      expect(client.scanTimeouts, isEmpty);
+    },
+  );
 
   testWidgets('quick sync does not choose between multiple nearby R12s', (
     tester,
@@ -288,7 +293,22 @@ void main() {
     ]);
     expect(client.connectCount, 0);
     expect(client.syncCount, 0);
-    expect(client.disconnectCount, 1);
+    // One release prepares the bounded retry; the final release completes
+    // before quick sync unlocks, even when discovery finds no ring.
+    expect(client.disconnectCount, 2);
+    expect(client.operations, <String>[
+      'scan',
+      'disconnect',
+      'scan',
+      'disconnect',
+    ]);
+    expect(
+      tester
+          .widget<TextButton>(find.byKey(const Key('today-quick-sync')))
+          .onPressed,
+      isNotNull,
+    );
+    expect(tester.takeException(), isNull);
   });
 }
 
@@ -331,15 +351,18 @@ class _FakePairingClient implements RingPairingClient {
   int syncCount = 0;
   int disconnectCount = 0;
   final List<Duration> scanTimeouts = <Duration>[];
+  final List<String> operations = <String>[];
 
   @override
   Stream<RingPairingCandidate> scan({required Duration timeout}) {
+    operations.add('scan');
     scanTimeouts.add(timeout);
     return Stream<RingPairingCandidate>.fromIterable(candidates);
   }
 
   @override
   Future<RingPairingEvidence> connect(RingAdvertisement advertisement) async {
+    operations.add('connect');
     connectCount += 1;
     return RingPairingEvidence(
       name: advertisement.name,
@@ -383,6 +406,7 @@ class _FakePairingClient implements RingPairingClient {
 
   @override
   Future<RingSyncDataset> sync() async {
+    operations.add('sync');
     syncCount += 1;
     return RingSyncDataset(
       lastSyncedAtUtc: lastSyncedAtUtc ?? DateTime.now().toUtc(),
@@ -400,6 +424,7 @@ class _FakePairingClient implements RingPairingClient {
 
   @override
   Future<void> disconnect() async {
+    operations.add('disconnect');
     disconnectCount += 1;
   }
 }

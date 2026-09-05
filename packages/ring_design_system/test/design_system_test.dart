@@ -3,11 +3,25 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:ring_design_system/ring_design_system.dart';
 
 void main() {
-  test('frozen V1 tokens match the approved source', () {
-    expect(LibreRingTokens.background, const Color(0xFFF4F1EA));
-    expect(LibreRingTokens.surface, const Color(0xFFE4E2DE));
-    expect(LibreRingTokens.accent, const Color(0xFFC9573E));
+  test('refinement palette preserves warm neutrals and terracotta', () {
+    expect(LibreRingTokens.background, const Color(0xFFF6F5F2));
+    expect(LibreRingTokens.surface, const Color(0xFFFFFFFF));
+    expect(LibreRingTokens.accent, const Color(0xFFBF553D));
     expect(LibreRingTokens.minimumTarget, 48);
+  });
+
+  test('secondary text remains legible on cards and sage panels', () {
+    for (final surface in [
+      LibreRingTokens.background,
+      LibreRingTokens.surface,
+      LibreRingTokens.sageSoft,
+    ]) {
+      expect(
+        (surface.computeLuminance() + .05) /
+            (LibreRingTokens.muted.computeLuminance() + .05),
+        greaterThanOrEqualTo(4.5),
+      );
+    }
   });
 
   test('primary text contrast exceeds WCAG AA', () {

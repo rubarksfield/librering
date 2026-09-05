@@ -1,5 +1,7 @@
 import 'package:ring_core/ring_core.dart';
 
+import 'ring_analytics.dart';
+
 class RingDashboardView {
   RingDashboardView._({
     required this.metrics,
@@ -11,11 +13,12 @@ class RingDashboardView {
     RingSyncDataset dataset, {
     DateTime? localNow,
   }) {
-    final now = localNow ?? DateTime.now();
+    final now = (localNow ?? DateTime.now()).toLocal();
     final activity = dataset.activity
         .where((bucket) {
           final local = bucket.startedAtUtc.toLocal();
-          return local.year == now.year &&
+          return !bucket.startedAtUtc.isAfter(now) &&
+              local.year == now.year &&
               local.month == now.month &&
               local.day == now.day;
         })
@@ -30,18 +33,25 @@ class RingDashboardView {
       0,
       (sum, bucket) => sum + bucket.firmwareCalories,
     );
-    final heartRate = dataset.heartRate.toList()
-      ..sort(
-        (left, right) => left.measuredAtUtc.compareTo(right.measuredAtUtc),
-      );
-    final sleep = dataset.sleep.toList()
-      ..sort((left, right) => left.startedAtUtc.compareTo(right.startedAtUtc));
-    final oxygen = dataset.oxygen.toList()
-      ..sort(
-        (left, right) =>
-            left.hourStartedAtUtc.compareTo(right.hourStartedAtUtc),
-      );
-    final latestSleep = sleep.isEmpty ? null : sleep.last;
+    final heartRate =
+        dataset.heartRate
+            .where((value) => !value.measuredAtUtc.isAfter(now))
+            .toList()
+          ..sort(
+            (left, right) => left.measuredAtUtc.compareTo(right.measuredAtUtc),
+          );
+    final oxygen =
+        dataset.oxygen
+            .where((value) => !value.hourStartedAtUtc.isAfter(now))
+            .toList()
+          ..sort(
+            (left, right) =>
+                left.hourStartedAtUtc.compareTo(right.hourStartedAtUtc),
+          );
+    final latestSleep = RingAnalytics.fromDataset(
+      dataset,
+      localNow: now,
+    ).latestSleep?.session;
     final latestOxygen = oxygen.isEmpty ? null : oxygen.last;
 
     return RingDashboardView._(
@@ -79,11 +89,11 @@ class RingDashboardView {
           unit: heartRate.isEmpty ? '' : 'bpm',
           context: heartRate.isEmpty
               ? 'No measured pulse sample'
-              : 'Measured by ring · ${_clock(heartRate.last.measuredAtUtc)}',
+              : 'Measured by ring · ${_timestamp(heartRate.last.measuredAtUtc, now)}',
           origin: DataOrigin.ring,
         ),
         MetricSummary(
-          label: 'Sleep',
+          label: 'Sleep window',
           value: latestSleep == null
               ? '—'
               : _duration(
@@ -92,7 +102,7 @@ class RingDashboardView {
           unit: '',
           context: latestSleep == null
               ? 'No firmware sleep session'
-              : 'Firmware-derived · Last session',
+              : 'Firmware interval · ${_timestamp(latestSleep.endedAtUtc, now)}',
           origin: DataOrigin.ring,
         ),
         MetricSummary(
@@ -103,7 +113,7 @@ class RingDashboardView {
           unit: latestOxygen == null ? '' : '%',
           context: latestOxygen == null
               ? 'No hourly oxygen range'
-              : 'Ring history · Hourly range',
+              : 'Hourly range · ${_timestamp(latestOxygen.hourStartedAtUtc, now)}',
           origin: DataOrigin.ring,
         ),
       ],
@@ -144,5 +154,12 @@ class RingDashboardView {
     final value = utc.toLocal();
     return '${value.hour.toString().padLeft(2, '0')}:'
         '${value.minute.toString().padLeft(2, '0')}';
+  }
+
+  static String _timestamp(DateTime utc, DateTime now) {
+    final local = utc.toLocal();
+    return RingCalendar.sameDay(utc, now)
+        ? 'Today ${_clock(utc)}'
+        : '${local.day}/${local.month}/${local.year} ${_clock(utc)}';
   }
 }

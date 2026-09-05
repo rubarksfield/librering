@@ -22,12 +22,16 @@
 <p align="center">
   <a href="#quick-start">Quick start</a> ·
   <a href="#what-the-r12-can-supply">Supported data</a> ·
-  <a href="#every-current-screen">Screens</a> ·
+  <a href="#screen-gallery">Screens</a> ·
   <a href="docs/ROADMAP.md">Roadmap</a> ·
   <a href="CONTRIBUTING.md">Contribute</a>
 </p>
 
-![LibreRing product overview](docs/media/librering-hero.png)
+<p align="center">
+  <img src="apps/mobile/test/goldens/analytics_today.png" width="240" alt="Refined LibreRing Today with sleep, steps, pulse and oxygen" />
+  <img src="apps/mobile/test/goldens/analytics_sleep.png" width="240" alt="Interactive sleep-stage history" />
+  <img src="apps/mobile/test/goldens/trends.png" width="240" alt="Daily history and period comparisons" />
+</p>
 
 ## Why LibreRing
 
@@ -52,7 +56,19 @@ Store or Play Store yet.
 
 [![A short animated tour of the LibreRing Today, Vitals, Sleep, Activity, Heart, Oxygen, Trends, Data and You screens](docs/media/librering-tour.gif)](docs/media/librering-tour.mp4)
 
-<p align="center"><sub>11.6-second tour · click for MP4 · rendered from current Flutter golden tests using deterministic demo data</sub></p>
+<p align="center"><sub>Earlier preview: 11.6-second tour of the previous layout · click for MP4 · deterministic fictional data. Current refinement screenshots are above and below.</sub></p>
+
+## Refinement preview
+
+Today brings sleep and key readings forward. Vitals keeps the full supported
+signal set one tap away. Trends offers inspectable daily points and 7/30/90-day
+comparisons with missing days left empty. Root tabs preserve your place, and
+detail screens use native navigation and accessible chart controls.
+
+Name, distance units, and personal step/sleep goals now persist locally. Saves
+and deletion report failures without discarding your records, and sync remains
+bounded to the verified R12 path. See the [refinement QA record](docs/testing/refinement-2026-09-05.md)
+for scope and outstanding hardware verification.
 
 ## What the R12 can supply
 
@@ -77,9 +93,9 @@ See the [R12 evidence record](docs/protocol/colmi-r12-evidence.md) and
 [protocol matrix](docs/protocol/colmi-qring.md) for commands, confidence levels,
 fixtures, and remaining physical-device work.
 
-## Every current screen
+## Screen gallery
 
-These are deterministic 390 × 844 renders from the app's widget tests. The
+These are representative deterministic 390 × 844 renders from the app's widget tests. The
 first group is the R12-backed product path. Screens marked **concept/demo** test
 UX states and do not claim that the ring supplies a score or unsupported metric.
 
@@ -106,7 +122,7 @@ UX states and do not claim that the ring supplies a score or unsupported metric.
     <td align="center"><img src="apps/mobile/test/goldens/cycle_privacy.png" width="210" alt="LibreRing cycle-context privacy screen" /><br /><sub>Cycle privacy</sub></td>
     <td align="center"><img src="apps/mobile/test/goldens/welcome.png" width="210" alt="LibreRing onboarding screen" /><br /><sub>Welcome</sub></td>
     <td align="center"><img src="apps/mobile/test/goldens/you.png" width="210" alt="LibreRing You screen" /><br /><sub>You</sub></td>
-    <td align="center"><img src="apps/mobile/test/goldens/product_profile.png" width="210" alt="LibreRing profile preferences screen" /><br /><sub>Profile · concept/demo</sub></td>
+    <td align="center"><img src="apps/mobile/test/goldens/product_profile.png" width="210" alt="LibreRing durable profile preferences screen" /><br /><sub>Profile and personal goals</sub></td>
   </tr>
   <tr>
     <td align="center"><img src="apps/mobile/test/goldens/metrics.png" width="210" alt="LibreRing compact vitals overview" /><br /><sub>Vitals overview · concept/demo</sub></td>
@@ -136,7 +152,7 @@ flowchart LR
 - Raw BLE captures and stable device identifiers cannot enter the repository API.
 - Sync is duplicate-safe, bounded, and fail-closed for unknown firmware.
 - Manual entries remain separate from ring measurements.
-- Export has an explicit confirmation step and a SHA-256 manifest.
+- Export is an explicit user action and includes a SHA-256 manifest; sharing uses the native share sheet.
 
 ## Quick start
 

@@ -3,232 +3,352 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:intl/intl.dart';
+import 'package:intl/intl.dart' hide TextDirection;
 import 'package:ring_core/ring_core.dart';
 import 'package:ring_design_system/ring_design_system.dart';
 
 import 'app_state.dart';
+import 'presentation_data.dart';
 import 'ring_analytics.dart';
 import 'storage/journal_repository.dart';
+import 'storage/preferences_repository.dart';
+import 'ui/app_chrome.dart';
+
+const _sage = Color(0xFF62806A);
+
+/// All detail pages browse explicit calendar dates, including empty days.
+/// They never silently substitute an older reading for today's reading.
+mixin _CalendarDetail<T extends ConsumerStatefulWidget> on ConsumerState<T> {
+  DateTime? selectedDate;
+  int days = 1;
+
+  RingAnalytics? get analytics {
+    final dataset = ref.watch(displayRingDataProvider).value;
+    if (dataset == null) return null;
+    return RingAnalytics.fromDataset(
+      dataset,
+      localNow: ref.watch(currentLocalTimeProvider),
+      selectedDay: selectedDay,
+    );
+  }
+
+  DateTime get selectedDay {
+    final today = RingCalendar.day(ref.watch(currentLocalTimeProvider));
+    final query = GoRouterState.of(context).uri.queryParameters['date'];
+    DateTime? requested;
+    if (query != null && RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(query)) {
+      final parsed = DateTime.tryParse(query);
+      if (parsed != null && DateFormat('yyyy-MM-dd').format(parsed) == query) {
+        requested = parsed;
+      }
+    }
+    final selected = RingCalendar.day(selectedDate ?? requested ?? today);
+    return selected.isAfter(today) ? today : selected;
+  }
+
+  Widget calendar(RingAnalytics? data, {bool ranges = true}) => Column(
+    children: <Widget>[
+      RingDaySelector(
+        selectedDay: selectedDay,
+        earliestDay: data?.earliestDay ?? selectedDay,
+        latestDay: RingCalendar.day(ref.watch(currentLocalTimeProvider)),
+        onChanged: (value) => setState(() => selectedDate = value),
+      ),
+      if (ranges) ...<Widget>[
+        const SizedBox(height: 12),
+        SizedBox(
+          width: double.infinity,
+          child: SegmentedButton<int>(
+            key: const Key('analytics-range-selector'),
+            showSelectedIcon: false,
+            segments: const <ButtonSegment<int>>[
+              ButtonSegment(value: 1, label: Text('Day')),
+              ButtonSegment(value: 7, label: Text('Week')),
+              ButtonSegment(value: 30, label: Text('Month')),
+            ],
+            selected: <int>{days},
+            onSelectionChanged: (value) => setState(() => days = value.first),
+          ),
+        ),
+      ],
+      const SizedBox(height: 24),
+    ],
+  );
+
+  DateTime get start => RingCalendar.shift(selectedDay, -(days - 1));
+  DateTime get end => RingCalendar.shift(selectedDay, 1);
+  String get periodLabel => days == 1
+      ? DateFormat('EEEE, d MMM').format(selectedDay)
+      : '${DateFormat('d MMM').format(start)} – ${DateFormat('d MMM').format(selectedDay)}';
+}
 
 class ActivityLabScreen extends ConsumerStatefulWidget {
   const ActivityLabScreen({super.key});
-
   @override
   ConsumerState<ActivityLabScreen> createState() => _ActivityLabScreenState();
 }
 
-class _ActivityLabScreenState extends ConsumerState<ActivityLabScreen> {
-  int _days = 1;
-
+class _ActivityLabScreenState extends ConsumerState<ActivityLabScreen>
+    with _CalendarDetail<ActivityLabScreen> {
   @override
   Widget build(BuildContext context) {
-    final dataset = ref.watch(isDemoModeProvider)
-        ? null
-        : ref.watch(ringDataProvider).value;
-    final analytics = dataset == null
-        ? null
-        : RingAnalytics.fromDataset(
-            dataset,
-            localNow: ref.watch(currentLocalTimeProvider),
-          );
-    final day = analytics?.activityFor(analytics.selectedDay);
-    final history = analytics?.activityHistory(days: _days == 1 ? 7 : _days);
-    final summaryDays = _days == 1
-        ? <ActivityDay>[?day]
-        : history ?? const <ActivityDay>[];
-    final summarySteps = summaryDays.fold<int>(
-      0,
-      (sum, value) => sum + value.steps,
-    );
-    final summaryDistance = summaryDays.fold<int>(
-      0,
-      (sum, value) => sum + value.distanceMeters,
-    );
-    final summaryCalories = summaryDays.fold<int>(
-      0,
-      (sum, value) => sum + value.firmwareCalories,
-    );
-    final daysWithData = summaryDays
-        .where((value) => value.buckets.isNotEmpty)
-        .length;
-    final hasActivityRecords = daysWithData > 0;
-    final values = _days == 1
-        ? day?.hourly.map((value) => value.steps.toDouble()).toList()
-        : history?.map((value) => value.steps.toDouble()).toList();
-    final distanceValues = _days == 1
-        ? day?.hourly.map((value) => value.distanceMeters.toDouble()).toList()
-        : history?.map((value) => value.distanceMeters.toDouble()).toList();
-    final calorieValues = _days == 1
-        ? day?.hourly.map((value) => value.firmwareCalories.toDouble()).toList()
-        : history?.map((value) => value.firmwareCalories.toDouble()).toList();
+    final data = analytics;
+    final history = data?.activityHistory(days: days) ?? <ActivityDay>[];
+    final preferences =
+        ref.watch(appPreferencesProvider).value ?? const AppPreferences();
+    final distanceDivisor = preferences.unitSystem == UnitSystem.imperial
+        ? 1609.344
+        : 1000;
+    final distanceUnit = preferences.unitSystem == UnitSystem.imperial
+        ? 'mi'
+        : 'km';
+    final present = history.where((value) => value.buckets.isNotEmpty).toList();
+    final steps = present.fold(0, (sum, value) => sum + value.steps);
+    final meters = present.fold(0, (sum, value) => sum + value.distanceMeters);
+    final kcal = present.fold(0, (sum, value) => sum + value.firmwareCalories);
+    List<RingChartPoint> points(
+      int Function(HourlyActivityValue) hourly,
+      int Function(ActivityDay) daily,
+    ) => days == 1
+        ? <RingChartPoint>[
+            for (final hour
+                in history.firstOrNull?.hourly ?? <HourlyActivityValue>[])
+              if (hour.hasRecord)
+                RingChartPoint(
+                  at: hour.startedAt,
+                  value: hourly(hour).toDouble(),
+                ),
+          ]
+        : <RingChartPoint>[
+            for (final day in present)
+              RingChartPoint(
+                at: _midday(day.day),
+                value: daily(day).toDouble(),
+                label: '${DateFormat('d MMM').format(day.day)} · Daily total',
+              ),
+          ];
     return _AnalyticsScreen(
       key: const Key('screen-movement'),
-      activePath: '/today',
+      activePath: '/vitals',
       children: <Widget>[
-        const _AnalyticsTopBar(title: 'Activity', fallbackPath: '/today'),
-        const SizedBox(height: 26),
-        _RangeSelector(
-          selected: _days,
-          onChanged: (value) => setState(() => _days = value),
+        const _AnalyticsTopBar(title: 'Activity', fallbackPath: '/vitals'),
+        calendar(data),
+        _MetricHeader(
+          label: days == 1 ? 'Steps' : 'Total steps',
+          value: present.isEmpty
+              ? '—'
+              : NumberFormat.decimalPattern().format(steps),
+          note: present.isEmpty
+              ? 'No activity recorded for this period'
+              : periodLabel,
+          icon: Icons.directions_walk_rounded,
+          color: _sage,
         ),
-        const SizedBox(height: 24),
-        _Eyebrow(
-          analytics == null
-              ? 'Ring estimates'
-              : _days == 1
-              ? '${DateFormat('EEE, d MMM').format(analytics.selectedDay)} · ${day?.coveredHours ?? 0} recorded hours'
-              : 'Last $_days days · $daysWithData days with records',
-        ),
-        const SizedBox(height: 8),
-        _Display(
-          hasActivityRecords ? '$summarySteps steps' : 'No activity records',
-        ),
-        const SizedBox(height: 14),
-        Text(
-          !hasActivityRecords
-              ? 'Sync the ring to load decoded hourly activity buckets.'
-              : 'Distance and calories below are retained firmware estimates. Missing hours stay visible as gaps.',
-          style: Theme.of(context).textTheme.bodySmall,
-        ),
-        const SizedBox(height: 28),
-        if (!hasActivityRecords)
+        const SizedBox(height: 20),
+        if (present.isEmpty)
           const _EmptyCard(
-            'No decoded activity buckets are available in this range.',
+            'No activity has been received for this period. Try another date or sync your ring.',
           )
         else ...<Widget>[
+          if (days == 1) ...<Widget>[
+            _GoalProgress(
+              value: steps,
+              target: preferences.dailyStepGoal,
+              label: 'Your daily step goal',
+              targetLabel:
+                  '${NumberFormat.decimalPattern().format(preferences.dailyStepGoal)} steps',
+              color: _sage,
+            ),
+            const SizedBox(height: 20),
+          ],
           _HeroMetricCard(
-            title: _days == 1
-                ? 'Today, hour by hour'
-                : 'Activity across $_days days',
-            child: Column(
-              children: <Widget>[
-                _ThreeStats(
-                  values: <_StatValue>[
-                    _StatValue('$summarySteps', 'Steps'),
-                    _StatValue(_distance(summaryDistance), 'Distance'),
-                    _StatValue('$summaryCalories', 'Firmware kcal'),
-                  ],
-                ),
-                const SizedBox(height: 28),
-                _BarChart(
-                  values: values ?? const <double>[],
-                  color: LibreRingTokens.foreground,
-                ),
-                const SizedBox(height: 10),
-                _AxisLabels(
-                  left: _days == 1 ? '00' : 'Earlier',
-                  right: _days == 1 ? '23' : 'Latest',
+            title: days == 1 ? 'Hour by hour' : 'Daily activity',
+            child: RingHistoryChart(
+              key: const Key('activity-steps-chart'),
+              points: points((h) => h.steps, (d) => d.steps),
+              start: start,
+              end: end,
+              unit: 'steps',
+              kind: RingChartKind.bars,
+              color: _sage,
+            ),
+          ),
+          const SizedBox(height: 14),
+          _HeroMetricCard(
+            title: 'Movement summary',
+            child: _ThreeStats(
+              values: <_StatValue>[
+                _StatValue(preferences.formatDistance(meters), 'Distance'),
+                _StatValue('$kcal kcal', 'Active energy'),
+                _StatValue(
+                  days == 1
+                      ? '${present.first.coveredHours}'
+                      : '${present.length}',
+                  days == 1 ? 'Hours recorded' : 'Days recorded',
                 ),
               ],
             ),
           ),
           const SizedBox(height: 14),
-          _MetricTimelineCard(
+          _HeroMetricCard(
             title: 'Distance',
-            value: _distance(summaryDistance),
-            note: 'Firmware estimate',
-            values: distanceValues ?? const <double>[],
-            color: const Color(0xFF727A65),
+            child: RingHistoryChart(
+              points: points((h) => h.distanceMeters, (d) => d.distanceMeters)
+                  .map(
+                    (p) => RingChartPoint(
+                      at: p.at,
+                      value: p.value / distanceDivisor,
+                      label: p.label,
+                    ),
+                  )
+                  .toList(),
+              start: start,
+              end: end,
+              unit: distanceUnit,
+              kind: RingChartKind.bars,
+              color: _sage,
+            ),
           ),
           const SizedBox(height: 14),
-          _MetricTimelineCard(
-            title: 'Energy',
-            value: '$summaryCalories kcal',
-            note: 'Firmware estimate · not independently validated',
-            values: calorieValues ?? const <double>[],
-            color: LibreRingTokens.accent,
+          _HeroMetricCard(
+            title: 'Active energy',
+            child: RingHistoryChart(
+              points: points(
+                (h) => h.firmwareCalories,
+                (d) => d.firmwareCalories,
+              ),
+              start: start,
+              end: end,
+              unit: 'kcal',
+              kind: RingChartKind.bars,
+              color: LibreRingTokens.accent,
+            ),
           ),
         ],
-        const SizedBox(height: 18),
-        _Callout(
-          icon: Icons.pool_outlined,
-          title: 'Sport record',
-          body: 'Ring buckets and manual activities remain separate, so a swim is never turned into invented steps.',
-          action: 'Open journal',
-          onTap: () => context.go('/sport'),
+        const SizedBox(height: 16),
+        _ActionRow(
+          icon: Icons.add_rounded,
+          title: 'Add an activity',
+          subtitle: 'Keep a personal record of your workout',
+          onTap: () => context.push('/activity/sports'),
+        ),
+        const _SourceDisclosure(
+          'Steps, distance and active energy are estimates from your ring. '
+          'The chart shows recorded hours only; a gap means no record was received. '
+          'Active energy is not food intake or total daily energy expenditure.',
         ),
       ],
     );
   }
 }
 
-class SleepLabScreen extends ConsumerWidget {
+class SleepLabScreen extends ConsumerStatefulWidget {
   const SleepLabScreen({super.key});
-
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final dataset = ref.watch(isDemoModeProvider)
-        ? null
-        : ref.watch(ringDataProvider).value;
-    final analytics = dataset == null
-        ? null
-        : RingAnalytics.fromDataset(
-            dataset,
-            localNow: ref.watch(currentLocalTimeProvider),
-          );
-    final sleep = analytics?.latestSleep;
+  ConsumerState<SleepLabScreen> createState() => _SleepLabScreenState();
+}
+
+class _SleepLabScreenState extends ConsumerState<SleepLabScreen>
+    with _CalendarDetail<SleepLabScreen> {
+  DateTime? _sessionEnd;
+  @override
+  Widget build(BuildContext context) {
+    final data = analytics;
+    final sessions = data?.sleepOn(selectedDay) ?? <SleepAnalytics>[];
+    final preferences =
+        ref.watch(appPreferencesProvider).value ?? const AppPreferences();
+    final sleep =
+        sessions
+            .where((s) => s.session.endedAtUtc == _sessionEnd)
+            .firstOrNull ??
+        data?.sleepFor(selectedDay);
     final session = sleep?.session;
     return _AnalyticsScreen(
       key: const Key('screen-sleep'),
-      activePath: '/today',
+      activePath: '/vitals',
       children: <Widget>[
-        _AnalyticsTopBar(
-          title: 'Sleep',
-          fallbackPath: '/metrics',
-          trailing: IconButton(
-            tooltip: 'View sleep evidence',
-            onPressed: () => context.go('/sleep/evidence'),
-            icon: const Icon(Icons.description_outlined, size: 20),
+        const _AnalyticsTopBar(title: 'Sleep', fallbackPath: '/vitals'),
+        calendar(data, ranges: false),
+        _MetricHeader(
+          label: sleep?.stages.isEmpty == true
+              ? 'Recorded sleep window'
+              : 'Estimated time asleep',
+          value: sleep == null
+              ? '—'
+              : _minutes(
+                  sleep.stages.isEmpty
+                      ? sleep.intervalMinutes
+                      : sleep.asleepStageMinutes,
+                ),
+          note: session == null
+              ? 'No sleep recorded for this date'
+              : '${_clock(session.startedAtUtc)} – ${_clock(session.endedAtUtc)} · Sleep window ${_minutes(sleep!.intervalMinutes)}',
+          icon: Icons.bedtime_outlined,
+          color: const Color(0xFF776C91),
+        ),
+        if (sessions.length > 1) ...<Widget>[
+          const SizedBox(height: 16),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: <Widget>[
+              for (final item in sessions)
+                ChoiceChip(
+                  label: Text(
+                    '${_clock(item.session.startedAtUtc)} – ${_clock(item.session.endedAtUtc)}',
+                  ),
+                  selected: item.session.endedAtUtc == session?.endedAtUtc,
+                  onSelected: (_) =>
+                      setState(() => _sessionEnd = item.session.endedAtUtc),
+                ),
+            ],
           ),
-        ),
-        const SizedBox(height: 26),
-        _Eyebrow(
-          session == null
-              ? 'Latest firmware session'
-              : '${DateFormat('EEE, d MMM').format(session.endedAtUtc.toLocal())} · firmware estimate',
-        ),
-        const SizedBox(height: 8),
-        _Display(
-          sleep == null ? 'No sleep session' : _minutes(sleep.intervalMinutes),
-        ),
-        const SizedBox(height: 10),
-        Text(
-          sleep == null
-              ? 'Sync the ring to load supported sleep history.'
-              : '${_clock(session!.startedAtUtc)}–${_clock(session.endedAtUtc)} · No sleep score is invented.',
-          style: Theme.of(context).textTheme.bodySmall,
-        ),
-        const SizedBox(height: 28),
+        ],
+        const SizedBox(height: 20),
         if (sleep == null)
-          const _EmptyCard('No retained sleep stage runs are available.')
+          _EmptyCard(
+            RingCalendar.sameDay(
+                  selectedDay,
+                  ref.watch(currentLocalTimeProvider),
+                )
+                ? 'Wear your ring tonight. Your sleep will be here after you sync in the morning.'
+                : 'There is no saved sleep session for this date. Choose another night to explore your history.',
+          )
         else ...<Widget>[
+          if (sleep.stages.isNotEmpty) ...<Widget>[
+            _GoalProgress(
+              value: sleep.asleepStageMinutes,
+              target: preferences.sleepTargetMinutes,
+              label: 'Your sleep target',
+              targetLabel: _minutes(preferences.sleepTargetMinutes),
+              color: const Color(0xFF776C91),
+            ),
+            const SizedBox(height: 20),
+          ],
           _HeroMetricCard(
-            title: 'Night architecture',
+            title: 'Sleep stages',
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                _SleepRibbon(session!.stages),
-                const SizedBox(height: 12),
-                _AxisLabels(
-                  left: _clock(session.startedAtUtc),
-                  right: _clock(session.endedAtUtc),
-                ),
-                const SizedBox(height: 28),
+                _SleepTimeline(session: session!, stages: sleep.stages),
+                const SizedBox(height: 20),
                 for (final stage in RingSleepStage.values)
                   _StageRow(
-                    stage: stage,
+                    label: _stageName(stage),
                     minutes: sleep.stageMinutes[stage] ?? 0,
                     percent: sleep.percentFor(stage),
+                    color: _stageColor(stage),
                   ),
                 if (sleep.unclassifiedMinutes > 0)
                   _StageRow(
-                    label: 'Unclassified interval',
+                    label: 'Unclassified',
                     minutes: sleep.unclassifiedMinutes,
-                    percent:
-                        ((sleep.unclassifiedMinutes / sleep.intervalMinutes) *
-                                100)
-                            .round(),
+                    percent: sleep.intervalMinutes == 0
+                        ? 0
+                        : (sleep.unclassifiedMinutes *
+                                  100 /
+                                  sleep.intervalMinutes)
+                              .round(),
                     color: LibreRingTokens.border,
                   ),
               ],
@@ -236,55 +356,79 @@ class SleepLabScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 14),
           _HeroMetricCard(
-            title: 'Continuity, without a score',
+            title: 'Sleep continuity',
             child: _ThreeStats(
               values: <_StatValue>[
-                _StatValue('${sleep.awakeSpans}', 'Awake runs'),
                 _StatValue(
-                  _minutes(sleep.longestSleepRunMinutes),
-                  'Longest run',
+                  sleep.stages.isEmpty ? '—' : '${sleep.awakeSpans}',
+                  'Awake periods',
                 ),
-                _StatValue('${sleep.recordedStageMinutes}', 'Stage min'),
+                _StatValue(
+                  sleep.stages.isEmpty
+                      ? '—'
+                      : _minutes(sleep.longestSleepRunMinutes),
+                  'Longest sleep stretch',
+                ),
+                _StatValue(
+                  sleep.stages.isEmpty
+                      ? '—'
+                      : _minutes(sleep.stageMinutes[RingSleepStage.awake] ?? 0),
+                  'Awake time',
+                ),
               ],
             ),
           ),
           const SizedBox(height: 14),
           _HeroMetricCard(
-            title: 'Signals captured during the interval',
+            title: 'Overnight vitals',
             child: Column(
               children: <Widget>[
                 _EvidenceRow(
                   icon: Icons.favorite_outline,
-                  title: 'Pulse',
+                  title: 'Median pulse',
                   value: sleep.sleepPulseMedian == null
                       ? '—'
                       : '${sleep.sleepPulseMedian} bpm',
                   detail: sleep.sleepPulse.isEmpty
-                      ? 'No measured pulse sample landed inside this interval'
-                      : '${sleep.sleepPulse.length} samples · median shown',
+                      ? 'No readings during this sleep window'
+                      : '${sleep.sleepPulse.length} readings during this sleep window',
                 ),
                 _EvidenceRow(
                   icon: Icons.water_drop_outlined,
-                  title: 'Oxygen',
+                  title: 'Blood oxygen range',
                   value: sleep.oxygenMinimum == null
                       ? '—'
                       : '${sleep.oxygenMinimum}–${sleep.oxygenMaximum}%',
-                  detail:
-                      '${sleep.oxygenRanges.length} hourly ranges · no invented average',
+                  detail: sleep.oxygenRanges.isEmpty
+                      ? 'No complete hourly ranges in this window'
+                      : '${sleep.oxygenRanges.length} complete hours within this sleep window',
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 14),
-          _RecentSleepCard(sessions: analytics!.sleepHistory()),
         ],
-        const SizedBox(height: 18),
-        _Callout(
-          icon: Icons.fact_check_outlined,
-          title: 'How this was calculated',
-          body: 'Stage labels come from ring firmware. They are not EEG measurements or a medical sleep assessment.',
-          action: 'View evidence',
-          onTap: () => context.go('/sleep/evidence'),
+        if (data != null && data.availableSleepDays.isNotEmpty) ...<Widget>[
+          const SizedBox(height: 20),
+          const RingSectionHeader(title: 'Recent nights'),
+          const SizedBox(height: 8),
+          for (final day in data.availableSleepDays.take(7))
+            _ActionRow(
+              icon: Icons.bedtime_outlined,
+              title: DateFormat('EEE, d MMM').format(day),
+              subtitle: data.sleepFor(day)!.stages.isEmpty
+                  ? '${_minutes(data.sleepFor(day)!.intervalMinutes)} sleep window'
+                  : '${_minutes(data.sleepFor(day)!.asleepStageMinutes)} estimated asleep',
+              selected: RingCalendar.sameDay(day, selectedDay),
+              onTap: () => setState(() {
+                selectedDate = day;
+                _sessionEnd = null;
+              }),
+            ),
+        ],
+        const _SourceDisclosure(
+          'Sleep stages are estimated by your ring. Time asleep adds light, deep and REM stages; '
+          'the sleep window also includes awake and unclassified time. Overnight pulse uses readings inside this '
+          'session, and oxygen includes only whole recorded hours inside it. These estimates are not a medical sleep assessment.',
         ),
       ],
     );
@@ -293,93 +437,62 @@ class SleepLabScreen extends ConsumerWidget {
 
 class HeartLabScreen extends ConsumerStatefulWidget {
   const HeartLabScreen({super.key});
-
   @override
   ConsumerState<HeartLabScreen> createState() => _HeartLabScreenState();
 }
 
-class _HeartLabScreenState extends ConsumerState<HeartLabScreen> {
-  int _days = 1;
-
+class _HeartLabScreenState extends ConsumerState<HeartLabScreen>
+    with _CalendarDetail<HeartLabScreen> {
   @override
   Widget build(BuildContext context) {
-    final dataset = ref.watch(isDemoModeProvider)
-        ? null
-        : ref.watch(ringDataProvider).value;
-    final analytics = dataset == null
-        ? null
-        : RingAnalytics.fromDataset(
-            dataset,
-            localNow: ref.watch(currentLocalTimeProvider),
-          );
-    final series = analytics?.pulseFor(analytics.selectedDay);
-    final periodStart = analytics?.selectedDay.subtract(
-      Duration(days: math.max(0, _days - 1)),
-    );
-    final periodSamples =
-        dataset == null
-              ? <TimedValue>[]
-              : dataset.heartRate
-                    .where(
-                      (value) =>
-                          !value.measuredAtUtc.toLocal().isBefore(periodStart!),
-                    )
-                    .map((value) => TimedValue(value.measuredAtUtc, value.bpm))
-                    .toList()
-          ..sort((left, right) => left.at.compareTo(right.at));
-    final periodSeries = _days == 1 || analytics == null
-        ? series
-        : SampleSeries(day: analytics.selectedDay, samples: periodSamples);
-    final history = analytics?.pulseHistory(days: _days == 1 ? 7 : _days);
-    final chartValues = _days == 1
-        ? series?.samples
-              .map((value) => _TimedPlotValue(value.at, value.value.toDouble()))
-              .toList()
-        : history
-              ?.where((value) => value.value != null)
-              .map((value) => _TimedPlotValue(value.day, value.value!))
-              .toList();
+    final data = analytics;
+    final series = data?.pulsePeriod(days: days);
+    final points = days == 1
+        ? <RingChartPoint>[
+            for (final p in series?.samples ?? <TimedValue>[])
+              RingChartPoint(at: p.at, value: p.value.toDouble()),
+          ]
+        : <RingChartPoint>[
+            for (final p in data?.pulseHistory(days: days) ?? <DailyValue>[])
+              if (p.value != null)
+                RingChartPoint(
+                  at: _midday(p.day),
+                  value: p.value!,
+                  label: '${DateFormat('d MMM').format(p.day)} · Daily median',
+                ),
+          ];
     return _AnalyticsScreen(
       key: const Key('screen-heart'),
-      activePath: '/today',
+      activePath: '/vitals',
       children: <Widget>[
-        const _AnalyticsTopBar(title: 'Heart', fallbackPath: '/today'),
-        const SizedBox(height: 26),
-        _RangeSelector(
-          selected: _days,
-          onChanged: (value) => setState(() => _days = value),
+        const _AnalyticsTopBar(title: 'Heart rate', fallbackPath: '/vitals'),
+        calendar(data),
+        _MetricHeader(
+          label: days == 1 ? 'Latest heart rate' : 'Median heart rate',
+          value:
+              (days == 1 ? series?.latest : series?.median)?.toString() ?? '—',
+          unit: 'bpm',
+          note: series?.samples.isNotEmpty == true
+              ? days == 1
+                    ? 'Recorded at ${_clock(series!.samples.last.at)}'
+                    : periodLabel
+              : 'No heart rate readings in this period',
+          icon: Icons.favorite_outline,
+          color: LibreRingTokens.accent,
         ),
-        const SizedBox(height: 24),
-        const _Eyebrow('Measured spot samples'),
-        const SizedBox(height: 8),
-        _Display(
-          periodSeries?.latest == null
-              ? 'No pulse yet'
-              : '${periodSeries!.latest} bpm',
-        ),
-        const SizedBox(height: 12),
-        Text(
-          periodSeries == null
-              ? 'Sync the ring to load measured pulse history.'
-              : _days == 1
-              ? '${periodSeries.samples.length} samples across ${periodSeries.coveredHours} hours on the latest recorded day.'
-              : '${periodSeries.samples.length} samples retained across the last $_days days.',
-          style: Theme.of(context).textTheme.bodySmall,
-        ),
-        const SizedBox(height: 28),
+        const SizedBox(height: 20),
         _HeroMetricCard(
-          title: _days == 1
-              ? 'Daily pulse timeline'
-              : 'Median pulse across $_days days',
-          child: Column(
-            children: <Widget>[
-              _TimedLineChart(values: chartValues ?? const <_TimedPlotValue>[]),
-              const SizedBox(height: 10),
-              _AxisLabels(
-                left: _days == 1 ? '00:00' : 'Earlier',
-                right: _days == 1 ? '23:59' : 'Latest',
-              ),
-            ],
+          title: days == 1 ? 'Daily pulse timeline' : 'Daily median pulse',
+          child: RingHistoryChart(
+            key: const Key('heart-history-chart'),
+            points: points,
+            start: start,
+            end: end,
+            unit: 'bpm',
+            maximumLineGap: days == 1
+                ? const Duration(minutes: 90)
+                : const Duration(hours: 26),
+            color: LibreRingTokens.accent,
           ),
         ),
         const SizedBox(height: 14),
@@ -387,23 +500,22 @@ class _HeartLabScreenState extends ConsumerState<HeartLabScreen> {
           title: 'Observed range',
           child: _ThreeStats(
             values: <_StatValue>[
-              _StatValue('${periodSeries?.mean ?? '—'}', 'Mean bpm'),
-              _StatValue('${periodSeries?.minimum ?? '—'}', 'Minimum'),
-              _StatValue('${periodSeries?.maximum ?? '—'}', 'Maximum'),
+              _StatValue('${series?.mean ?? '—'}', 'Average bpm'),
+              _StatValue('${series?.minimum ?? '—'}', 'Lowest bpm'),
+              _StatValue('${series?.maximum ?? '—'}', 'Highest bpm'),
             ],
           ),
         ),
         const SizedBox(height: 14),
         _RecentValuesCard(
           title: 'Recent measurements',
-          values:
-              periodSeries?.samples.reversed.take(7).toList() ??
-              const <TimedValue>[],
+          values: series?.samples.reversed.take(12).toList() ?? <TimedValue>[],
           unit: 'bpm',
         ),
-        const SizedBox(height: 18),
-        const _Disclosure(
-          'These are retained spot measurements—not continuous ECG, a rhythm diagnosis, or a statement that a value is healthy.',
+        const _SourceDisclosure(
+          'These are occasional readings captured by your ring, not a continuous heart rhythm recording. '
+          'Daily and period summaries use only the readings shown. Gaps remain where readings are missing. '
+          'A reading alone cannot diagnose a condition.',
         ),
       ],
     );
@@ -412,83 +524,79 @@ class _HeartLabScreenState extends ConsumerState<HeartLabScreen> {
 
 class OxygenLabScreen extends ConsumerStatefulWidget {
   const OxygenLabScreen({super.key});
-
   @override
   ConsumerState<OxygenLabScreen> createState() => _OxygenLabScreenState();
 }
 
-class _OxygenLabScreenState extends ConsumerState<OxygenLabScreen> {
-  int _days = 1;
-
+class _OxygenLabScreenState extends ConsumerState<OxygenLabScreen>
+    with _CalendarDetail<OxygenLabScreen> {
   @override
   Widget build(BuildContext context) {
-    final dataset = ref.watch(isDemoModeProvider)
-        ? null
-        : ref.watch(ringDataProvider).value;
-    final analytics = dataset == null
-        ? null
-        : RingAnalytics.fromDataset(
-            dataset,
-            localNow: ref.watch(currentLocalTimeProvider),
-          );
-    final series = analytics?.oxygenFor(analytics.selectedDay);
-    final allRanges = dataset?.oxygen.toList(growable: false)
-      ?..sort((a, b) => a.hourStartedAtUtc.compareTo(b.hourStartedAtUtc));
-    final periodStart = analytics?.selectedDay.subtract(
-      Duration(days: math.max(0, _days - 1)),
-    );
-    final visible = _days == 1
-        ? series?.ranges ?? const <RingOxygenRange>[]
-        : allRanges
-                  ?.where(
-                    (value) => !value.hourStartedAtUtc.toLocal().isBefore(
-                      periodStart!,
-                    ),
-                  )
-                  .toList(growable: false) ??
-              const <RingOxygenRange>[];
-    final periodSeries = analytics == null
-        ? null
-        : OxygenSeries(day: analytics.selectedDay, ranges: visible);
+    final data = analytics;
+    final series = data?.oxygenPeriod(days: days);
+    final ranges = series?.ranges ?? <RingOxygenRange>[];
+    final grouped = <DateTime, List<RingOxygenRange>>{};
+    for (final range in ranges) {
+      grouped
+          .putIfAbsent(
+            RingCalendar.day(range.hourStartedAtUtc.toLocal()),
+            () => <RingOxygenRange>[],
+          )
+          .add(range);
+    }
+    final points = days == 1
+        ? <RingChartPoint>[
+            for (final range in ranges)
+              RingChartPoint(
+                at: range.hourStartedAtUtc,
+                value: range.minimumPercent.toDouble(),
+                upper: range.maximumPercent.toDouble(),
+              ),
+          ]
+        : <RingChartPoint>[
+            for (final day in grouped.entries)
+              RingChartPoint(
+                at: _midday(day.key),
+                value: day.value
+                    .map((r) => r.minimumPercent)
+                    .reduce(math.min)
+                    .toDouble(),
+                upper: day.value
+                    .map((r) => r.maximumPercent)
+                    .reduce(math.max)
+                    .toDouble(),
+                label: '${DateFormat('d MMM').format(day.key)} · Daily range',
+              ),
+          ];
     return _AnalyticsScreen(
       key: const Key('screen-oxygen'),
-      activePath: '/today',
+      activePath: '/vitals',
       children: <Widget>[
-        const _AnalyticsTopBar(title: 'Oxygen', fallbackPath: '/today'),
-        const SizedBox(height: 26),
-        _RangeSelector(
-          selected: _days,
-          onChanged: (value) => setState(() => _days = value),
+        const _AnalyticsTopBar(title: 'Blood oxygen', fallbackPath: '/vitals'),
+        calendar(data),
+        _MetricHeader(
+          label: 'Recorded oxygen range',
+          value: series?.minimum == null
+              ? '—'
+              : '${series!.minimum}–${series.maximum}',
+          unit: '%',
+          note: ranges.isEmpty
+              ? 'No oxygen readings in this period'
+              : '${series!.coveredHours} hours recorded · $periodLabel',
+          icon: Icons.water_drop_outlined,
+          color: const Color(0xFF527E9B),
         ),
-        const SizedBox(height: 24),
-        const _Eyebrow('Hourly firmware ranges'),
-        const SizedBox(height: 8),
-        _Display(
-          periodSeries?.minimum == null
-              ? 'No ranges yet'
-              : '${periodSeries!.minimum}–${periodSeries.maximum}%',
-        ),
-        const SizedBox(height: 12),
-        Text(
-          periodSeries == null
-              ? 'Sync the ring to load supported oxygen history.'
-              : _days == 1
-              ? '${periodSeries.ranges.length} ranges across ${periodSeries.coveredHours} hours. LibreRing keeps their shape intact.'
-              : '${periodSeries.ranges.length} hourly ranges retained across the last $_days days.',
-          style: Theme.of(context).textTheme.bodySmall,
-        ),
-        const SizedBox(height: 28),
+        const SizedBox(height: 20),
         _HeroMetricCard(
-          title: _days == 1 ? 'Daily range map' : 'Range map · $_days days',
-          child: Column(
-            children: <Widget>[
-              SizedBox(height: 190, child: _OxygenBandChart(ranges: visible)),
-              const SizedBox(height: 10),
-              _AxisLabels(
-                left: _days == 1 ? '00:00' : 'Earlier',
-                right: _days == 1 ? '23:59' : 'Latest',
-              ),
-            ],
+          title: days == 1 ? 'Daily range map' : 'Daily oxygen ranges',
+          child: RingHistoryChart(
+            key: const Key('oxygen-history-chart'),
+            points: points,
+            start: start,
+            end: end,
+            unit: '%',
+            kind: RingChartKind.ranges,
+            color: const Color(0xFF527E9B),
           ),
         ),
         const SizedBox(height: 14),
@@ -496,21 +604,43 @@ class _OxygenLabScreenState extends ConsumerState<OxygenLabScreen> {
           title: 'Captured range',
           child: _ThreeStats(
             values: <_StatValue>[
-              _StatValue('${periodSeries?.minimum ?? '—'}%', 'Lowest bound'),
-              _StatValue('${periodSeries?.maximum ?? '—'}%', 'Highest bound'),
-              _StatValue('${periodSeries?.coveredHours ?? 0}', 'Covered hours'),
+              _StatValue(
+                series?.minimum == null ? '—' : '${series!.minimum}%',
+                'Lowest bound',
+              ),
+              _StatValue(
+                series?.maximum == null ? '—' : '${series!.maximum}%',
+                'Highest bound',
+              ),
+              _StatValue('${series?.coveredHours ?? 0}', 'Hours recorded'),
             ],
           ),
         ),
         const SizedBox(height: 14),
-        _RangeListCard(
-          ranges:
-              periodSeries?.ranges.reversed.take(7).toList() ??
-              const <RingOxygenRange>[],
+        _HeroMetricCard(
+          title: 'Recent readings',
+          child: Column(
+            children: <Widget>[
+              if (ranges.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.all(12),
+                  child: Text('No readings yet'),
+                ),
+              for (final value in ranges.reversed.take(12))
+                _EvidenceRow(
+                  icon: Icons.water_drop_outlined,
+                  title: '${value.minimumPercent}–${value.maximumPercent}%',
+                  value: _clock(value.hourStartedAtUtc),
+                  detail: DateFormat('EEE, d MMM')
+                      .format(value.hourStartedAtUtc.toLocal()),
+                ),
+            ],
+          ),
         ),
-        const SizedBox(height: 18),
-        const _Disclosure(
-          'The decoder supplies minimum–maximum ranges, not exact hourly averages. This is stored history, not a live medical reading.',
+        const _SourceDisclosure(
+          'Your ring stores the lowest and highest oxygen values within each recorded hour. '
+          'The day chart preserves those hourly ranges; week and month combine them into each day’s lowest and highest bounds. '
+          'No hourly averages are inferred. These are historical wellness readings, not live medical measurements.',
         ),
       ],
     );
@@ -519,109 +649,69 @@ class _OxygenLabScreenState extends ConsumerState<OxygenLabScreen> {
 
 class VendorSignalScreen extends ConsumerStatefulWidget {
   const VendorSignalScreen({required this.kind, super.key});
-
   final RingVendorIndexKind kind;
-
   @override
   ConsumerState<VendorSignalScreen> createState() => _VendorSignalScreenState();
 }
 
-class _VendorSignalScreenState extends ConsumerState<VendorSignalScreen> {
-  int _days = 1;
-
+class _VendorSignalScreenState extends ConsumerState<VendorSignalScreen>
+    with _CalendarDetail<VendorSignalScreen> {
   @override
   Widget build(BuildContext context) {
-    final dataset = ref.watch(isDemoModeProvider)
-        ? null
-        : ref.watch(ringDataProvider).value;
-    final analytics = dataset == null
-        ? null
-        : RingAnalytics.fromDataset(
-            dataset,
-            localNow: ref.watch(currentLocalTimeProvider),
-          );
-    final series = analytics?.vendorIndexFor(
-      analytics.selectedDay,
-      widget.kind,
-    );
-    final periodStart = analytics?.selectedDay.subtract(
-      Duration(days: math.max(0, _days - 1)),
-    );
-    final periodSamples =
-        dataset == null
-              ? <TimedValue>[]
-              : dataset.vendorIndexes
-                    .where(
-                      (value) =>
-                          value.kind == widget.kind &&
-                          !value.measuredAtUtc.toLocal().isBefore(periodStart!),
-                    )
-                    .map(
-                      (value) => TimedValue(value.measuredAtUtc, value.value),
-                    )
-                    .toList()
-          ..sort((left, right) => left.at.compareTo(right.at));
-    final periodSeries = _days == 1 || analytics == null
-        ? series
-        : SampleSeries(day: analytics.selectedDay, samples: periodSamples);
-    final history = analytics?.vendorHistory(
-      widget.kind,
-      days: _days == 1 ? 7 : _days,
-    );
-    final chartValues = _days == 1
-        ? series?.samples
-              .map((value) => _TimedPlotValue(value.at, value.value.toDouble()))
-              .toList()
-        : history
-              ?.where((value) => value.value != null)
-              .map((value) => _TimedPlotValue(value.day, value.value!))
-              .toList();
-    final isStress = widget.kind == RingVendorIndexKind.stress;
-    final label = isStress ? 'Firmware stress index' : 'Firmware HRV index';
+    final data = analytics;
+    final series = data?.vendorPeriod(widget.kind, days: days);
+    final stress = widget.kind == RingVendorIndexKind.stress;
+    final label = stress ? 'Stress index' : 'HRV index';
+    final points = days == 1
+        ? <RingChartPoint>[
+            for (final p in series?.samples ?? <TimedValue>[])
+              RingChartPoint(at: p.at, value: p.value.toDouble()),
+          ]
+        : <RingChartPoint>[
+            for (final p
+                in data?.vendorHistory(widget.kind, days: days) ??
+                    <DailyValue>[])
+              if (p.value != null)
+                RingChartPoint(
+                  at: _midday(p.day),
+                  value: p.value!,
+                  label: '${DateFormat('d MMM').format(p.day)} · Daily median',
+                ),
+          ];
     return _AnalyticsScreen(
-      key: Key(isStress ? 'screen-stress-index' : 'screen-hrv-index'),
-      activePath: '/today',
+      key: Key(stress ? 'screen-stress-index' : 'screen-hrv-index'),
+      activePath: '/vitals',
       children: <Widget>[
-        _AnalyticsTopBar(title: label, fallbackPath: '/metrics'),
-        const SizedBox(height: 26),
-        _RangeSelector(
-          selected: _days,
-          onChanged: (value) => setState(() => _days = value),
-        ),
-        const SizedBox(height: 24),
-        const _Eyebrow('Opaque vendor field · exploratory'),
-        const SizedBox(height: 8),
-        _Display(
-          periodSeries?.latest == null
-              ? 'No index yet'
-              : '${periodSeries!.latest} index',
+        _AnalyticsTopBar(title: label, fallbackPath: '/vitals'),
+        calendar(data),
+        _MetricHeader(
+          label: days == 1 ? 'Latest ring index' : 'Median ring index',
+          value:
+              (days == 1 ? series?.latest : series?.median)?.toString() ?? '—',
+          note: 'Ring estimate · unitless index',
+          icon: stress ? Icons.spa_outlined : Icons.monitor_heart_outlined,
+          color: _sage,
         ),
         const SizedBox(height: 12),
         Text(
-          periodSeries == null
-              ? 'No decoded vendor index is stored.'
-              : _days == 1
-              ? '${periodSeries.samples.length} values across ${periodSeries.coveredHours} hours. The value is shown only in its original unitless form.'
-              : '${periodSeries.samples.length} unitless values retained across the last $_days days.',
+          stress
+              ? 'An estimate calculated by your ring. Its scale has not been independently verified.'
+              : 'The ring reports this as an HRV index. The unit is unverified, so it is not shown in milliseconds.',
           style: Theme.of(context).textTheme.bodySmall,
         ),
-        const SizedBox(height: 28),
+        const SizedBox(height: 20),
         _HeroMetricCard(
-          title: _days == 1
-              ? 'Captured index timeline'
-              : 'Median index across $_days days',
-          child: Column(
-            children: <Widget>[
-              _TimedLineChart(
-                values: chartValues ?? const <_TimedPlotValue>[],
-                accent: true,
-              ),
-              const SizedBox(height: 10),
-              _AxisLabels(
-                left: _days == 1 ? '00:00' : 'Earlier',
-                right: _days == 1 ? '23:59' : 'Latest',
-              ),
-            ],
+          title: days == 1 ? 'Captured index timeline' : 'Daily median index',
+          child: RingHistoryChart(
+            key: const Key('vendor-history-chart'),
+            points: points,
+            start: start,
+            end: end,
+            unit: 'index',
+            color: _sage,
+            maximumLineGap: days == 1
+                ? const Duration(minutes: 90)
+                : const Duration(hours: 26),
           ),
         ),
         const SizedBox(height: 14),
@@ -629,25 +719,22 @@ class _VendorSignalScreenState extends ConsumerState<VendorSignalScreen> {
           title: 'Observed values',
           child: _ThreeStats(
             values: <_StatValue>[
-              _StatValue('${periodSeries?.median ?? '—'}', 'Median index'),
-              _StatValue('${periodSeries?.minimum ?? '—'}', 'Minimum'),
-              _StatValue('${periodSeries?.maximum ?? '—'}', 'Maximum'),
+              _StatValue('${series?.median ?? '—'}', 'Median index'),
+              _StatValue('${series?.minimum ?? '—'}', 'Lowest index'),
+              _StatValue('${series?.maximum ?? '—'}', 'Highest index'),
             ],
           ),
         ),
         const SizedBox(height: 14),
         _RecentValuesCard(
           title: 'Recent captured values',
-          values:
-              periodSeries?.samples.reversed.take(7).toList() ??
-              const <TimedValue>[],
+          values: series?.samples.reversed.take(12).toList() ?? <TimedValue>[],
           unit: 'index',
         ),
-        const SizedBox(height: 18),
-        _Disclosure(
-          isStress
-              ? 'The protocol exposes this as a stress index, but its formula and thresholds are unverified. LibreRing does not call it relaxed, normal, or high.'
-              : 'The protocol exposes this as an HRV index, but its unit and calculation are unverified. LibreRing does not label it milliseconds or use it for Recovery.',
+        _SourceDisclosure(
+          stress
+              ? 'This field comes from the ring firmware. Its formula and thresholds are unverified, so LibreRing does not classify these values as relaxed, normal or high.'
+              : 'The firmware exposes an HRV index, but its unit and calculation are unverified. LibreRing preserves the index and does not use it to calculate a recovery score.',
         ),
       ],
     );
@@ -656,63 +743,53 @@ class _VendorSignalScreenState extends ConsumerState<VendorSignalScreen> {
 
 class SportRecordScreen extends ConsumerWidget {
   const SportRecordScreen({super.key});
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final entries = ref.watch(journalProvider).value ?? const <JournalEntry>[];
-    final sports = entries
-        .where((value) => value.kind == JournalEntryKind.swim)
-        .toList(growable: false);
-    final minutes = sports.fold<int>(
-      0,
-      (sum, value) => sum + (value.durationMinutes ?? 0),
-    );
+    final entries = ref.watch(journalProvider).value ?? <JournalEntry>[];
+    final sports =
+        entries
+            .where(
+              (e) =>
+                  e.kind == JournalEntryKind.swim || e.durationMinutes != null,
+            )
+            .toList()
+          ..sort((a, b) => b.occurredAtUtc.compareTo(a.occurredAtUtc));
+    final minutes = sports.fold(0, (sum, e) => sum + (e.durationMinutes ?? 0));
     return _AnalyticsScreen(
       key: const Key('screen-sport-record'),
       activePath: '/trends',
       children: <Widget>[
-        const _AnalyticsTopBar(
-          title: 'Sport record',
-          fallbackPath: '/movement',
+        const _AnalyticsTopBar(title: 'Activities', fallbackPath: '/movement'),
+        const SizedBox(height: 20),
+        _MetricHeader(
+          label: 'Your activity log',
+          value: '${sports.length}',
+          unit: sports.length == 1 ? 'activity' : 'activities',
+          note: '${_minutes(minutes)} logged · Added by you',
+          icon: Icons.directions_run_rounded,
+          color: _sage,
         ),
-        const SizedBox(height: 26),
-        const _Eyebrow('Manual context · local only'),
-        const SizedBox(height: 8),
-        _Display(
-          sports.isEmpty ? 'No activities yet' : '${sports.length} activities',
-        ),
-        const SizedBox(height: 12),
-        Text(
-          sports.isEmpty
-              ? 'Add an activity when the ring cannot identify the context.'
-              : '${_minutes(minutes)} recorded manually. These entries never alter ring measurements.',
-          style: Theme.of(context).textTheme.bodySmall,
-        ),
-        const SizedBox(height: 28),
-        if (sports.isEmpty)
-          const _EmptyCard('Your first manual sport record will appear here.')
-        else
-          _HeroMetricCard(
-            title: 'Recent activities',
-            child: Column(
-              children: sports
-                  .map(
-                    (entry) => _EvidenceRow(
-                      icon: Icons.pool_outlined,
-                      title: entry.title,
-                      value: _minutes(entry.durationMinutes ?? 0),
-                      detail:
-                          '${DateFormat('d MMM · HH:mm').format(entry.occurredAtUtc.toLocal())} · ${entry.effort ?? 'Manual'}',
-                    ),
-                  )
-                  .toList(growable: false),
-            ),
-          ),
-        const SizedBox(height: 18),
+        const SizedBox(height: 20),
         LibreRingPrimaryButton(
-          label: 'Add a swim',
+          label: 'Add an activity',
           icon: Icons.add,
-          onPressed: () => context.go('/journal/swim'),
+          onPressed: () => context.push('/activity/sports'),
+        ),
+        const SizedBox(height: 20),
+        if (sports.isEmpty)
+          const _EmptyCard(
+            'Your workouts have a place here. Add your first activity to get started.',
+          ),
+        for (final entry in sports)
+          _ActionRow(
+            icon: Icons.directions_run_outlined,
+            title: entry.title,
+            subtitle:
+                '${DateFormat('EEE, d MMM · HH:mm').format(entry.occurredAtUtc.toLocal())} · ${_minutes(entry.durationMinutes ?? 0)}',
+            onTap: () => context.push('/journal'),
+          ),
+        const _SourceDisclosure(
+          'These are activities you have logged. They add context to your day and remain separate from ring measurements.',
         ),
       ],
     );
@@ -721,323 +798,260 @@ class SportRecordScreen extends ConsumerWidget {
 
 class CapabilitiesScreen extends ConsumerWidget {
   const CapabilitiesScreen({super.key});
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final dataset = ref.watch(isDemoModeProvider)
-        ? null
-        : ref.watch(ringDataProvider).value;
+    final data = ref.watch(displayRingDataProvider).value;
     return _AnalyticsScreen(
       key: const Key('screen-capabilities'),
       activePath: '/you',
       children: <Widget>[
         const _AnalyticsTopBar(
-          title: 'Ring capabilities',
+          title: 'Ring features',
           fallbackPath: '/you/ring',
         ),
-        const SizedBox(height: 26),
-        const _Eyebrow('Read-only safety boundary'),
-        const SizedBox(height: 8),
-        const _Display('What works now'),
-        const SizedBox(height: 12),
-        Text(
-          'A capability only appears as available when the R12 protocol and this firmware have been verified. Device identifiers stay transient.',
-          style: Theme.of(context).textTheme.bodySmall,
+        const SizedBox(height: 20),
+        const _MetricHeader(
+          label: 'COLMI R12',
+          value: 'What works now',
+          note: 'Features supported by this version of LibreRing',
+          icon: Icons.radio_button_checked,
+          color: _sage,
         ),
-        const SizedBox(height: 28),
-        _CapabilityGroup(
-          title: 'Available locally',
-          values: <_CapabilityValue>[
-            _CapabilityValue(
-              'Battery',
-              dataset?.batteryLevel == null
-                  ? 'No recent value'
-                  : '${dataset!.batteryLevel}% at last sync',
-            ),
-            _CapabilityValue(
-              'Activity history',
-              '${dataset?.activity.length ?? 0} decoded buckets',
-            ),
-            _CapabilityValue(
-              'Pulse history',
-              '${dataset?.heartRate.length ?? 0} measured samples',
-            ),
-            _CapabilityValue(
-              'Sleep and stages',
-              '${dataset?.sleep.length ?? 0} firmware sessions',
-            ),
-            _CapabilityValue(
-              'Oxygen history',
-              '${dataset?.oxygen.length ?? 0} hourly ranges',
-            ),
-            _CapabilityValue(
-              'Firmware indexes',
-              '${dataset?.vendorIndexes.length ?? 0} opaque values',
-            ),
-            const _CapabilityValue('Device time', 'Time synchronisation only'),
-          ],
+        const SizedBox(height: 20),
+        _HeroMetricCard(
+          title: 'Supported readings',
+          child: Column(
+            children: <Widget>[
+              _EvidenceRow(
+                icon: Icons.battery_5_bar_outlined,
+                title: 'Battery',
+                value: data?.batteryLevel == null
+                    ? '—'
+                    : '${data!.batteryLevel}%',
+                detail: 'At last sync',
+              ),
+              _EvidenceRow(
+                icon: Icons.directions_walk_rounded,
+                title: 'Activity',
+                value: '${data?.activity.length ?? 0}',
+                detail: 'Steps, distance and active energy records',
+              ),
+              _EvidenceRow(
+                icon: Icons.favorite_outline,
+                title: 'Heart rate',
+                value: '${data?.heartRate.length ?? 0}',
+                detail: 'Historical readings',
+              ),
+              _EvidenceRow(
+                icon: Icons.bedtime_outlined,
+                title: 'Sleep',
+                value: '${data?.sleep.length ?? 0}',
+                detail: 'Sleep sessions and estimated stages',
+              ),
+              _EvidenceRow(
+                icon: Icons.water_drop_outlined,
+                title: 'Blood oxygen',
+                value: '${data?.oxygen.length ?? 0}',
+                detail: 'Hourly minimum–maximum ranges',
+              ),
+              _EvidenceRow(
+                icon: Icons.monitor_heart_outlined,
+                title: 'HRV and stress indexes',
+                value: '${data?.vendorIndexes.length ?? 0}',
+                detail: 'Ring estimates · unitless values',
+              ),
+            ],
+          ),
         ),
         const SizedBox(height: 14),
-        const _CapabilityGroup(
-          title: 'Not yet available',
-          available: false,
-          values: <_CapabilityValue>[
-            _CapabilityValue(
-              'Gesture and display controls',
-              'Write protocol not enabled',
-            ),
-            _CapabilityValue(
-              'Find ring and camera shutter',
-              'Command path not safely validated',
-            ),
-            _CapabilityValue(
-              'Monitoring schedules',
-              'Read/write preference semantics incomplete',
-            ),
-            _CapabilityValue(
-              'Live pulse or oxygen',
-              'Stable user-facing flow not validated',
-            ),
-            _CapabilityValue('Apple Health', 'HealthKit integration not built'),
-            _CapabilityValue(
-              'Firmware update',
-              'No signed update path is available',
-            ),
-          ],
+        const _HeroMetricCard(
+          title: 'Not available in LibreRing yet',
+          child: Column(
+            children: <Widget>[
+              _EvidenceRow(
+                icon: Icons.touch_app_outlined,
+                title: 'Ring controls',
+                value: '',
+                detail: 'Gestures, display, find ring and camera shutter',
+              ),
+              _EvidenceRow(
+                icon: Icons.schedule,
+                title: 'Monitoring schedules',
+                value: '',
+                detail: 'Configuring when the ring takes readings',
+              ),
+              _EvidenceRow(
+                icon: Icons.sensors,
+                title: 'Live measurements',
+                value: '',
+                detail: 'Starting pulse and oxygen readings on demand',
+              ),
+              _EvidenceRow(
+                icon: Icons.favorite_border,
+                title: 'Apple Health',
+                value: '',
+                detail: 'HealthKit integration',
+              ),
+              _EvidenceRow(
+                icon: Icons.system_update_alt,
+                title: 'Firmware updates',
+                value: '',
+                detail: 'Updating the software on the ring',
+              ),
+            ],
+          ),
         ),
-        const SizedBox(height: 18),
-        const _Disclosure(
-          'Unavailable does not mean the ring has no capability. It means LibreRing will not expose a control until the exact behavior is understood and reversible.',
+        const _SourceDisclosure(
+          'Availability describes what this version of LibreRing supports. Different rings and firmware may behave differently. '
+          'Features appear when their behavior has been verified for the supported R12 protocol.',
         ),
       ],
     );
   }
 }
 
-class _AnalyticsScreen extends StatelessWidget {
+class _AnalyticsScreen extends ConsumerWidget {
   const _AnalyticsScreen({
     required this.children,
     required this.activePath,
     super.key,
   });
-
   final List<Widget> children;
   final String activePath;
-
   @override
-  Widget build(BuildContext context) => Scaffold(
-    body: SafeArea(
-      bottom: false,
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(24, 20, 24, 40),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: children,
-        ),
-      ),
-    ),
-    bottomNavigationBar: _AnalyticsBottomNav(activePath: activePath),
-  );
-}
-
-class _AnalyticsBottomNav extends StatelessWidget {
-  const _AnalyticsBottomNav({required this.activePath});
-
-  final String activePath;
-
-  @override
-  Widget build(BuildContext context) {
-    const items = <(String, String)>[
-      ('/today', 'Today'),
-      ('/vitals', 'Vitals'),
-      ('/trends', 'Trends'),
-      ('/you', 'You'),
-    ];
-    return SafeArea(
-      top: false,
-      minimum: const EdgeInsets.only(bottom: 14),
-      child: Center(
-        heightFactor: 1,
-        child: Container(
-          width: MediaQuery.sizeOf(context).width - 32,
-          constraints: const BoxConstraints(maxWidth: 430),
-          height: 64,
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-          decoration: BoxDecoration(
-            color: LibreRingTokens.foreground,
-            borderRadius: BorderRadius.circular(18),
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(displayRingDataProvider);
+    return RingPageScaffold(
+      activePath: activePath,
+      scrollKey: key.toString(),
+      children: <Widget>[
+        if (ref.watch(isDemoModeProvider))
+          const Padding(
+            padding: EdgeInsets.only(bottom: 8),
+            child: Text(
+              'Example data',
+              style: TextStyle(fontSize: 12, color: LibreRingTokens.muted),
+            ),
           ),
-          child: Row(
-            children: items
-                .map((item) {
-                  final selected =
-                      item.$1 == activePath ||
-                      (item.$1 == '/vitals' && activePath == '/metrics');
-                  return Expanded(
-                    child: Semantics(
-                      label: item.$2,
-                      selected: selected,
-                      button: true,
-                      child: ExcludeSemantics(
-                        child: TextButton(
-                          onPressed: () => context.go(item.$1),
-                          style: TextButton.styleFrom(
-                            foregroundColor: selected
-                                ? Colors.white
-                                : const Color(0xFFC5C2BC),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            minimumSize: const Size(64, 48),
-                            padding: EdgeInsets.zero,
-                          ),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            mainAxisSize: MainAxisSize.min,
-                            children: <Widget>[
-                              Text(
-                                item.$2,
-                                maxLines: 1,
-                                textScaler: TextScaler.noScaling,
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              const SizedBox(height: 6),
-                              AnimatedContainer(
-                                duration:
-                                    MediaQuery.disableAnimationsOf(context)
-                                    ? Duration.zero
-                                    : LibreRingTokens.fast,
-                                curve: LibreRingTokens.curve,
-                                width: selected ? 18 : 0,
-                                height: 2,
-                                decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  borderRadius: BorderRadius.circular(2),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  );
-                })
-                .toList(growable: false),
-          ),
-        ),
-      ),
+        if (state.isLoading && !state.hasValue)
+          const RingLoadingState()
+        else if (state.hasError && !state.hasValue)
+          RingEmptyState(
+            title: 'Your saved data could not be opened',
+            body: 'Try loading it again. Your ring readings have not been changed.',
+            icon: Icons.refresh_rounded,
+            action: 'Try again',
+            onAction: () => ref.invalidate(ringDataProvider),
+          )
+        else
+          ...children,
+      ],
     );
   }
 }
 
 class _AnalyticsTopBar extends StatelessWidget {
-  const _AnalyticsTopBar({
-    required this.title,
-    required this.fallbackPath,
-    this.trailing,
-  });
-
+  const _AnalyticsTopBar({required this.title, required this.fallbackPath});
   final String title;
   final String fallbackPath;
-  final Widget? trailing;
-
   @override
-  Widget build(BuildContext context) => SizedBox(
-    height: 48,
-    child: Row(
-      children: <Widget>[
-        IconButton(
-          tooltip: 'Back',
-          onPressed: () =>
-              context.canPop() ? context.pop() : context.go(fallbackPath),
-          icon: const Icon(Icons.arrow_back, size: 20),
+  Widget build(BuildContext context) => Row(
+    children: <Widget>[
+      IconButton(
+        tooltip: 'Back',
+        onPressed: () =>
+            context.canPop() ? context.pop() : context.go(fallbackPath),
+        icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
+      ),
+      Expanded(
+        child: Text(
+          title,
+          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
         ),
-        Expanded(
-          child: Text(
-            title.toUpperCase(),
-            textAlign: TextAlign.center,
-            maxLines: 1,
-            style: const TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 1,
+      ),
+      const SizedBox(width: 12),
+    ],
+  );
+}
+
+class _MetricHeader extends StatelessWidget {
+  const _MetricHeader({
+    required this.label,
+    required this.value,
+    required this.note,
+    required this.icon,
+    required this.color,
+    this.unit,
+  });
+  final String label, value, note;
+  final String? unit;
+  final IconData icon;
+  final Color color;
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: <Widget>[
+      Row(
+        children: <Widget>[
+          Icon(icon, size: 18, color: color),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: LibreRingTokens.muted,
+              ),
             ),
           ),
-        ),
-        SizedBox(width: 48, child: trailing),
-      ],
-    ),
-  );
-}
-
-class _RangeSelector extends StatelessWidget {
-  const _RangeSelector({required this.selected, required this.onChanged});
-
-  final int selected;
-  final ValueChanged<int> onChanged;
-
-  @override
-  Widget build(BuildContext context) => SegmentedButton<int>(
-    key: const Key('analytics-range-selector'),
-    showSelectedIcon: false,
-    segments: const <ButtonSegment<int>>[
-      ButtonSegment(value: 1, label: Text('Day')),
-      ButtonSegment(value: 7, label: Text('Week')),
-      ButtonSegment(value: 30, label: Text('Month')),
-    ],
-    selected: <int>{selected},
-    onSelectionChanged: (value) => onChanged(value.first),
-  );
-}
-
-class _Eyebrow extends StatelessWidget {
-  const _Eyebrow(this.value);
-
-  final String value;
-
-  @override
-  Widget build(BuildContext context) => Text(
-    value.toUpperCase(),
-    style: const TextStyle(
-      fontSize: 10,
-      fontWeight: FontWeight.w600,
-      letterSpacing: 1,
-      color: LibreRingTokens.muted,
-    ),
-  );
-}
-
-class _Display extends StatelessWidget {
-  const _Display(this.value);
-
-  final String value;
-
-  @override
-  Widget build(BuildContext context) => FittedBox(
-    fit: BoxFit.scaleDown,
-    alignment: Alignment.centerLeft,
-    child: Text(
-      value,
-      maxLines: 1,
-      style: const TextStyle(
-        fontSize: 58,
-        height: .94,
-        fontWeight: FontWeight.w200,
-        letterSpacing: -3.2,
+        ],
       ),
-    ),
+      const SizedBox(height: 10),
+      Wrap(
+        crossAxisAlignment: WrapCrossAlignment.end,
+        spacing: 8,
+        children: <Widget>[
+          Text(
+            value,
+            key: const Key('analytics-primary-value'),
+            style: TextStyle(
+              fontSize: value.length > 16 ? 34 : 48,
+              fontWeight: FontWeight.w400,
+              letterSpacing: -1.8,
+              height: 1.08,
+            ),
+          ),
+          if (unit != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Text(
+                unit!,
+                style: const TextStyle(
+                  fontSize: 20,
+                  color: LibreRingTokens.muted,
+                ),
+              ),
+            ),
+        ],
+      ),
+      const SizedBox(height: 10),
+      Text(
+        note,
+        style: const TextStyle(
+          fontSize: 13,
+          color: LibreRingTokens.muted,
+          height: 1.45,
+        ),
+      ),
+    ],
   );
 }
 
 class _HeroMetricCard extends StatelessWidget {
   const _HeroMetricCard({required this.title, required this.child});
-
   final String title;
   final Widget child;
-
   @override
   Widget build(BuildContext context) => LibreRingCard(
     padding: const EdgeInsets.all(20),
@@ -1046,10 +1060,60 @@ class _HeroMetricCard extends StatelessWidget {
       children: <Widget>[
         Text(
           title,
-          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
         ),
-        const SizedBox(height: 22),
+        const SizedBox(height: 20),
         child,
+      ],
+    ),
+  );
+}
+
+class _GoalProgress extends StatelessWidget {
+  const _GoalProgress({
+    required this.value,
+    required this.target,
+    required this.label,
+    required this.targetLabel,
+    required this.color,
+  });
+  final int value, target;
+  final String label, targetLabel;
+  final Color color;
+  @override
+  Widget build(BuildContext context) => Semantics(
+    label:
+        '$label, $targetLabel. ${(value / target * 100).round()} percent reached.',
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Wrap(
+          spacing: 8,
+          runSpacing: 4,
+          children: <Widget>[
+            Text(
+              label,
+              style: const TextStyle(
+                fontSize: 12,
+                color: LibreRingTokens.muted,
+              ),
+            ),
+            Text(
+              targetLabel,
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+            ),
+          ],
+        ),
+        const SizedBox(height: 9),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(4),
+          child: LinearProgressIndicator(
+            value: (value / target).clamp(0, 1),
+            minHeight: 5,
+            color: color,
+            backgroundColor: LibreRingTokens.border.withValues(alpha: .4),
+          ),
+        ),
       ],
     ),
   );
@@ -1057,444 +1121,622 @@ class _HeroMetricCard extends StatelessWidget {
 
 class _StatValue {
   const _StatValue(this.value, this.label);
-  final String value;
-  final String label;
+  final String value, label;
 }
 
 class _ThreeStats extends StatelessWidget {
   const _ThreeStats({required this.values});
-
   final List<_StatValue> values;
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final stack =
+          MediaQuery.textScalerOf(context).scale(1) > 1.35 ||
+          constraints.maxWidth < 260;
+      Widget stat(_StatValue item) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            item.value,
+            style: const TextStyle(
+              fontSize: 23,
+              fontWeight: FontWeight.w500,
+              letterSpacing: -.7,
+            ),
+          ),
+          const SizedBox(height: 5),
+          Text(
+            item.label,
+            style: const TextStyle(fontSize: 12, color: LibreRingTokens.muted),
+          ),
+        ],
+      );
+      return stack
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                for (final item in values)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 16),
+                    child: stat(item),
+                  ),
+              ],
+            )
+          : Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                for (final item in values)
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: stat(item),
+                    ),
+                  ),
+              ],
+            );
+    },
+  );
+}
+
+enum RingChartKind { line, bars, ranges }
+
+@immutable
+class RingChartPoint {
+  const RingChartPoint({
+    required this.at,
+    required this.value,
+    this.upper,
+    this.label,
+  });
+  final DateTime at;
+  final double value;
+  final double? upper;
+  final String? label;
+}
+
+/// The domain is explicit and includes missing intervals. Sample coordinates
+/// must not expand to fill the domain when the ring has only sparse history.
+class RingHistoryChart extends StatefulWidget {
+  const RingHistoryChart({
+    required this.points,
+    required this.start,
+    required this.end,
+    required this.unit,
+    this.kind = RingChartKind.line,
+    this.color = _sage,
+    this.maximumLineGap = const Duration(minutes: 90),
+    super.key,
+  });
+  final List<RingChartPoint> points;
+  final DateTime start, end;
+  final String unit;
+  final RingChartKind kind;
+  final Color color;
+  final Duration maximumLineGap;
+  @override
+  State<RingHistoryChart> createState() => _RingHistoryChartState();
+}
+
+class _RingHistoryChartState extends State<RingHistoryChart> {
+  int? _selected;
+  List<RingChartPoint> get points =>
+      widget.points
+          .where(
+            (p) => !p.at.isBefore(widget.start) && p.at.isBefore(widget.end),
+          )
+          .toList()
+        ..sort((a, b) => a.at.compareTo(b.at));
+  @override
+  void didUpdateWidget(covariant RingHistoryChart oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.start != oldWidget.start ||
+        widget.end != oldWidget.end ||
+        widget.points.length != oldWidget.points.length) {
+      _selected = null;
+    }
+  }
+
+  String describe(RingChartPoint p) =>
+      '${p.label ?? DateFormat('d MMM, HH:mm').format(p.at.toLocal())} · '
+      '${_number(p.value)}${p.upper == null ? '' : '–${_number(p.upper!)}'} ${widget.unit}';
 
   @override
-  Widget build(BuildContext context) => Row(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: List<Widget>.generate(values.length, (index) {
-      final item = values[index];
-      return Expanded(
-        child: Container(
-          padding: EdgeInsets.only(
-            left: index == 0 ? 0 : 12,
-            right: index == values.length - 1 ? 0 : 12,
+  Widget build(BuildContext context) {
+    final data = points;
+    if (data.isEmpty) return const _EmptyChart();
+    final selected = _selected == null
+        ? null
+        : data[_selected!.clamp(0, data.length - 1)];
+    final maxValue = data.map((p) => p.upper ?? p.value).reduce(math.max);
+    final minValue = data.map((p) => p.value).reduce(math.min);
+    final bottom = widget.kind == RingChartKind.bars
+        ? 0.0
+        : math.max(
+            0.0,
+            (minValue - math.max(2, (maxValue - minValue) * .2))
+                .floorToDouble(),
+          );
+    final top = widget.kind == RingChartKind.ranges
+        ? math.min(100.0, (maxValue + 1).ceilToDouble())
+        : math.max(
+            bottom + 1,
+            (maxValue + math.max(1, (maxValue - bottom) * .12)).ceilToDouble(),
+          );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Semantics(
+          liveRegion: true,
+          child: Text(
+            selected == null ? 'Tap a reading to explore' : describe(selected),
+            key: const Key('chart-selection'),
+            style: TextStyle(
+              fontSize: 12,
+              color: selected == null ? LibreRingTokens.muted : widget.color,
+              fontWeight: FontWeight.w500,
+            ),
           ),
-          decoration: index == values.length - 1
-              ? null
-              : const BoxDecoration(
-                  border: Border(
-                    right: BorderSide(color: LibreRingTokens.border),
-                  ),
+        ),
+        const SizedBox(height: 14),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            void pick(double dx) {
+              final fraction =
+                  ((dx - RingHistoryPainter.leftInset) /
+                          math.max(
+                            1,
+                            constraints.maxWidth -
+                                RingHistoryPainter.leftInset -
+                                6,
+                          ))
+                      .clamp(0.0, 1.0);
+              final timestamp =
+                  widget.start.millisecondsSinceEpoch +
+                  (widget.end.millisecondsSinceEpoch -
+                          widget.start.millisecondsSinceEpoch) *
+                      fraction;
+              var nearest = 0;
+              for (var i = 1; i < data.length; i++) {
+                if ((data[i].at.millisecondsSinceEpoch - timestamp).abs() <
+                    (data[nearest].at.millisecondsSinceEpoch - timestamp)
+                        .abs()) {
+                  nearest = i;
+                }
+              }
+              setState(() => _selected = nearest);
+            }
+
+            return Semantics(
+              label:
+                  '${widget.unit} history. ${data.length} recorded readings. Swipe up or down to inspect readings.',
+              value: selected == null
+                  ? 'No reading selected'
+                  : describe(selected),
+              increasedValue: describe(
+                data[((_selected ?? -1) + 1).clamp(0, data.length - 1)],
+              ),
+              decreasedValue: describe(
+                data[((_selected ?? data.length) - 1).clamp(
+                  0,
+                  data.length - 1,
+                )],
+              ),
+              onIncrease: () => setState(
+                () => _selected = ((_selected ?? -1) + 1).clamp(
+                  0,
+                  data.length - 1,
                 ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              FittedBox(
-                fit: BoxFit.scaleDown,
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  item.value,
-                  maxLines: 1,
-                  style: const TextStyle(
-                    fontSize: 25,
-                    fontWeight: FontWeight.w300,
-                    letterSpacing: -1,
+              ),
+              onDecrease: () => setState(
+                () => _selected = ((_selected ?? data.length) - 1).clamp(
+                  0,
+                  data.length - 1,
+                ),
+              ),
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTapDown: (e) => pick(e.localPosition.dx),
+                onHorizontalDragUpdate: (e) => pick(e.localPosition.dx),
+                child: SizedBox(
+                  height: 180,
+                  width: double.infinity,
+                  child: CustomPaint(
+                    painter: RingHistoryPainter(
+                      points: data,
+                      start: widget.start,
+                      end: widget.end,
+                      minimum: bottom,
+                      maximum: top,
+                      kind: widget.kind,
+                      color: widget.color,
+                      selectedIndex: _selected,
+                      maximumLineGap: widget.maximumLineGap,
+                    ),
                   ),
                 ),
               ),
-              const SizedBox(height: 5),
-              Text(
-                item.label,
-                style: const TextStyle(
-                  fontSize: 9.5,
-                  color: LibreRingTokens.muted,
+            );
+          },
+        ),
+        const SizedBox(height: 10),
+        Padding(
+          padding: const EdgeInsets.only(left: RingHistoryPainter.leftInset),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: <Widget>[
+              Expanded(
+                child: _AxisText(
+                  widget.end.difference(widget.start).inHours <= 25
+                      ? '00:00'
+                      : DateFormat('d MMM').format(widget.start),
+                ),
+              ),
+              if (MediaQuery.textScalerOf(context).scale(1) <= 1.3 &&
+                  !const <int>[
+                    23,
+                    25,
+                  ].contains(widget.end.difference(widget.start).inHours))
+                Expanded(
+                  child: _AxisText(
+                    widget.end.difference(widget.start).inHours <= 25
+                        ? '12:00'
+                        : DateFormat('d MMM').format(
+                            widget.start.add(
+                              widget.end.difference(widget.start) ~/ 2,
+                            ),
+                          ),
+                    align: TextAlign.center,
+                  ),
+                ),
+              Expanded(
+                child: _AxisText(
+                  widget.end.difference(widget.start).inHours <= 25
+                      ? '24:00'
+                      : DateFormat('d MMM').format(
+                          widget.end.subtract(const Duration(minutes: 1)),
+                        ),
+                  align: TextAlign.right,
                 ),
               ),
             ],
           ),
         ),
-      );
-    }),
-  );
+        const SizedBox(height: 12),
+        const Text(
+          'Gaps mean no reading was recorded.',
+          style: TextStyle(fontSize: 12, color: LibreRingTokens.muted),
+        ),
+      ],
+    );
+  }
 }
 
-class _MetricTimelineCard extends StatelessWidget {
-  const _MetricTimelineCard({
-    required this.title,
-    required this.value,
-    required this.note,
-    required this.values,
+class RingHistoryPainter extends CustomPainter {
+  RingHistoryPainter({
+    required this.points,
+    required this.start,
+    required this.end,
+    required this.minimum,
+    required this.maximum,
+    required this.kind,
     required this.color,
+    this.selectedIndex,
+    this.maximumLineGap = const Duration(minutes: 90),
   });
-  final String title;
-  final String value;
-  final String note;
-  final List<double> values;
+  static const leftInset = 32.0;
+  final List<RingChartPoint> points;
+  final DateTime start, end;
+  final double minimum, maximum;
+  final RingChartKind kind;
   final Color color;
+  final int? selectedIndex;
+  final Duration maximumLineGap;
 
+  double xFor(DateTime at, Size size) =>
+      leftInset +
+      (at.millisecondsSinceEpoch - start.millisecondsSinceEpoch) /
+          math.max(
+            1,
+            end.millisecondsSinceEpoch - start.millisecondsSinceEpoch,
+          ) *
+          (size.width - leftInset - 6);
+  double yFor(double value, Size size) =>
+      8 +
+      (maximum - value) / math.max(.01, maximum - minimum) * (size.height - 20);
+
+  bool connectsPrevious(int index) =>
+      index > 0 &&
+      points[index].at.difference(points[index - 1].at) <= maximumLineGap;
   @override
-  Widget build(BuildContext context) => _HeroMetricCard(
-    title: title,
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        Text(
-          value,
+  void paint(Canvas canvas, Size size) {
+    final baseline = size.height - 12;
+    for (var i = 0; i < 3; i++) {
+      final v = minimum + (maximum - minimum) * i / 2;
+      final y = yFor(v, size);
+      canvas.drawLine(
+        Offset(leftInset, y),
+        Offset(size.width, y),
+        Paint()..color = LibreRingTokens.border.withValues(alpha: .55),
+      );
+      final label = TextPainter(
+        text: TextSpan(
+          text: _number(v),
           style: const TextStyle(
-            fontSize: 38,
-            fontWeight: FontWeight.w200,
-            letterSpacing: -1.8,
+            fontFamily: 'Helvetica Neue',
+            fontFamilyFallback: <String>['Arial', 'sans-serif'],
+            fontSize: 10,
+            color: LibreRingTokens.muted,
           ),
         ),
-        const SizedBox(height: 5),
-        Text(
-          note,
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 10),
-        ),
-        const SizedBox(height: 22),
-        _BarChart(values: values, color: color),
-      ],
-    ),
-  );
-}
-
-class _BarChart extends StatelessWidget {
-  const _BarChart({required this.values, required this.color});
-  final List<double> values;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) => TweenAnimationBuilder<double>(
-    duration: MediaQuery.disableAnimationsOf(context)
-        ? Duration.zero
-        : const Duration(milliseconds: 620),
-    curve: LibreRingTokens.curve,
-    tween: Tween<double>(begin: 0, end: 1),
-    builder: (context, progress, child) => SizedBox(
-      height: 132,
-      width: double.infinity,
-      child: CustomPaint(painter: _BarChartPainter(values, color, progress)),
-    ),
-  );
-}
-
-class _BarChartPainter extends CustomPainter {
-  _BarChartPainter(this.values, this.color, this.progress);
-  final List<double> values;
-  final Color color;
-  final double progress;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final grid = Paint()..color = LibreRingTokens.border;
-    for (final y in <double>[.25, .55, .85]) {
-      canvas.drawLine(
-        Offset(0, size.height * y),
-        Offset(size.width, size.height * y),
-        grid,
-      );
+        textDirection: TextDirection.ltr,
+      )..layout(maxWidth: leftInset - 4);
+      label.paint(canvas, Offset(0, y - label.height / 2));
     }
-    if (values.isEmpty) return;
-    final maximum = math.max(1.0, values.reduce(math.max));
-    final slot = size.width / values.length;
-    final paint = Paint()..color = color;
-    for (var i = 0; i < values.length; i++) {
-      final height = (size.height * .78 * values[i] / maximum) * progress;
-      final width = math.max(2.0, math.min(9.0, slot * .48));
-      final rect = RRect.fromRectAndRadius(
-        Rect.fromLTWH(
-          slot * i + (slot - width) / 2,
-          size.height * .88 - height,
-          width,
-          height,
-        ),
-        const Radius.circular(5),
-      );
-      canvas.drawRRect(rect, paint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(_BarChartPainter oldDelegate) =>
-      oldDelegate.values != values ||
-      oldDelegate.progress != progress ||
-      oldDelegate.color != color;
-}
-
-class _TimedPlotValue {
-  const _TimedPlotValue(this.at, this.value);
-  final DateTime at;
-  final double value;
-}
-
-class _TimedLineChart extends StatelessWidget {
-  const _TimedLineChart({required this.values, this.accent = false});
-  final List<_TimedPlotValue> values;
-  final bool accent;
-
-  @override
-  Widget build(BuildContext context) => TweenAnimationBuilder<double>(
-    duration: MediaQuery.disableAnimationsOf(context)
-        ? Duration.zero
-        : const Duration(milliseconds: 680),
-    curve: LibreRingTokens.curve,
-    tween: Tween<double>(begin: 0, end: 1),
-    builder: (context, progress, child) => SizedBox(
-      height: 190,
-      width: double.infinity,
-      child: CustomPaint(painter: _TimedLinePainter(values, progress, accent)),
-    ),
-  );
-}
-
-class _TimedLinePainter extends CustomPainter {
-  _TimedLinePainter(this.values, this.progress, this.accent);
-  final List<_TimedPlotValue> values;
-  final double progress;
-  final bool accent;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final grid = Paint()..color = LibreRingTokens.border;
-    for (final y in <double>[.2, .5, .8]) {
-      canvas.drawLine(
-        Offset(0, size.height * y),
-        Offset(size.width, size.height * y),
-        grid,
-      );
-    }
-    if (values.isEmpty) return;
-    final sorted = values.toList(growable: false)
-      ..sort((a, b) => a.at.compareTo(b.at));
-    final min = sorted.map((value) => value.value).reduce(math.min);
-    final max = sorted.map((value) => value.value).reduce(math.max);
-    final range = math.max(1.0, max - min);
-    final first = sorted.first.at.millisecondsSinceEpoch;
-    final last = sorted.last.at.millisecondsSinceEpoch;
-    final timeRange = math.max(1, last - first);
-    final path = Path();
-    for (var index = 0; index < sorted.length; index++) {
-      final value = sorted[index];
-      final x = sorted.length == 1
-          ? size.width / 2
-          : size.width * (value.at.millisecondsSinceEpoch - first) / timeRange;
-      if (x > size.width * progress) break;
-      final y = size.height * (.82 - ((value.value - min) / range) * .64);
-      if (index == 0) {
-        path.moveTo(x, y);
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 2
+      ..strokeCap = StrokeCap.round;
+    for (var i = 0; i < points.length; i++) {
+      final p = points[i];
+      final x = xFor(p.at, size);
+      final y = yFor(p.value, size);
+      if (kind == RingChartKind.bars) {
+        final width = math.min(
+          10.0,
+          math.max(
+            3.0,
+            (size.width - leftInset) /
+                math.max(24, end.difference(start).inHours) *
+                .65,
+          ),
+        );
+        if (p.value == 0) {
+          canvas.drawCircle(Offset(x, baseline), 2.5, paint);
+        } else {
+          canvas.drawRRect(
+            RRect.fromRectAndRadius(
+              Rect.fromLTRB(x - width / 2, y, x + width / 2, baseline),
+              const Radius.circular(3),
+            ),
+            paint,
+          );
+        }
+      } else if (kind == RingChartKind.ranges) {
+        canvas.drawLine(
+          Offset(x, y),
+          Offset(x, yFor(p.upper ?? p.value, size)),
+          Paint()
+            ..color = color
+            ..strokeWidth = 6
+            ..strokeCap = StrokeCap.round,
+        );
       } else {
-        path.lineTo(x, y);
+        if (connectsPrevious(i)) {
+          canvas.drawLine(
+            Offset(
+              xFor(points[i - 1].at, size),
+              yFor(points[i - 1].value, size),
+            ),
+            Offset(x, y),
+            paint,
+          );
+        }
+        canvas.drawCircle(Offset(x, y), 3, paint);
+      }
+      if (i == selectedIndex) {
+        canvas.drawLine(
+          Offset(x, 2),
+          Offset(x, size.height),
+          Paint()
+            ..color = color.withValues(alpha: .35)
+            ..strokeWidth = 1,
+        );
+        canvas.drawCircle(Offset(x, y), 6, Paint()..color = Colors.white);
+        canvas.drawCircle(Offset(x, y), 4, paint);
       }
     }
-    final color = accent ? LibreRingTokens.accent : LibreRingTokens.foreground;
-    canvas.drawPath(
-      path,
-      Paint()
-        ..color = color
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2.4
-        ..strokeCap = StrokeCap.round
-        ..strokeJoin = StrokeJoin.round,
-    );
-    for (final value in sorted) {
-      final x = sorted.length == 1
-          ? size.width / 2
-          : size.width * (value.at.millisecondsSinceEpoch - first) / timeRange;
-      if (x > size.width * progress) break;
-      final y = size.height * (.82 - ((value.value - min) / range) * .64);
-      canvas.drawCircle(
-        Offset(x, y),
-        2.8,
-        Paint()..color = LibreRingTokens.accent,
-      );
-    }
   }
 
   @override
-  bool shouldRepaint(_TimedLinePainter oldDelegate) =>
-      oldDelegate.values != values ||
-      oldDelegate.progress != progress ||
-      oldDelegate.accent != accent;
+  bool shouldRepaint(covariant RingHistoryPainter oldDelegate) => true;
 }
 
-class _OxygenBandChart extends StatelessWidget {
-  const _OxygenBandChart({required this.ranges});
-  final List<RingOxygenRange> ranges;
-
+class _AxisText extends StatelessWidget {
+  const _AxisText(this.value, {this.align = TextAlign.left});
+  final String value;
+  final TextAlign align;
   @override
-  Widget build(BuildContext context) => TweenAnimationBuilder<double>(
-    duration: MediaQuery.disableAnimationsOf(context)
-        ? Duration.zero
-        : const Duration(milliseconds: 620),
-    curve: LibreRingTokens.curve,
-    tween: Tween<double>(begin: 0, end: 1),
-    builder: (context, progress, child) => SizedBox.expand(
-      child: CustomPaint(painter: _OxygenBandPainter(ranges, progress)),
+  Widget build(BuildContext context) => Text(
+    value,
+    textAlign: align,
+    style: const TextStyle(fontSize: 11, color: LibreRingTokens.muted),
+  );
+}
+
+class _EmptyChart extends StatelessWidget {
+  const _EmptyChart();
+  @override
+  Widget build(BuildContext context) => const Padding(
+    padding: EdgeInsets.symmetric(vertical: 36),
+    child: Center(
+      child: Column(
+        children: <Widget>[
+          Icon(Icons.show_chart_rounded, color: LibreRingTokens.muted),
+          SizedBox(height: 12),
+          Text(
+            'No readings in this period',
+            style: TextStyle(color: LibreRingTokens.muted),
+          ),
+        ],
+      ),
     ),
   );
 }
 
-class _OxygenBandPainter extends CustomPainter {
-  _OxygenBandPainter(this.ranges, this.progress);
-  final List<RingOxygenRange> ranges;
-  final double progress;
-
+class _SleepTimeline extends StatefulWidget {
+  const _SleepTimeline({required this.session, required this.stages});
+  final RingSleepSession session;
+  final List<RingSleepStageSpan> stages;
   @override
-  void paint(Canvas canvas, Size size) {
-    final grid = Paint()..color = LibreRingTokens.border;
-    for (final y in <double>[.2, .5, .8]) {
-      canvas.drawLine(
-        Offset(0, size.height * y),
-        Offset(size.width, size.height * y),
-        grid,
-      );
-    }
-    if (ranges.isEmpty) return;
-    final width = size.width / ranges.length;
-    final paint = Paint()
-      ..color = LibreRingTokens.accent
-      ..strokeWidth = math.min(8, width * .55)
-      ..strokeCap = StrokeCap.round;
-    double yFor(int value) =>
-        size.height * (.88 - ((value.clamp(80, 100) - 80) / 20) * .72);
-    for (var index = 0; index < ranges.length; index++) {
-      if ((index + 1) / ranges.length > progress) break;
-      final value = ranges[index];
-      final x = width * index + width / 2;
-      canvas.drawLine(
-        Offset(x, yFor(value.minimumPercent)),
-        Offset(x, yFor(value.maximumPercent)),
-        paint,
-      );
-    }
-  }
-
-  @override
-  bool shouldRepaint(_OxygenBandPainter oldDelegate) =>
-      oldDelegate.ranges != ranges || oldDelegate.progress != progress;
+  State<_SleepTimeline> createState() => _SleepTimelineState();
 }
 
-class _SleepRibbon extends StatelessWidget {
-  const _SleepRibbon(this.stages);
-  final List<RingSleepStageSpan> stages;
+class _SleepTimelineState extends State<_SleepTimeline> {
+  RingSleepStageSpan? selected;
+  @override
+  void didUpdateWidget(covariant _SleepTimeline oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.session != widget.session) selected = null;
+  }
 
   @override
   Widget build(BuildContext context) {
-    if (stages.isEmpty) {
-      return const SizedBox(
-        height: 80,
-        child: Center(child: Text('No stage runs retained')),
-      );
-    }
-    return SizedBox(
-      height: 108,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: stages
-            .map((span) {
-              final level = switch (span.stage) {
-                RingSleepStage.awake => 1.0,
-                RingSleepStage.rem => .82,
-                RingSleepStage.light => .62,
-                RingSleepStage.deep => .38,
-              };
-              return Expanded(
-                flex: math.max(1, span.durationMinutes),
-                child: Align(
-                  alignment: Alignment.bottomCenter,
-                  child: FractionallySizedBox(
-                    heightFactor: level,
-                    widthFactor: .94,
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        color: _stageColor(span.stage),
-                        borderRadius: const BorderRadius.vertical(
-                          top: Radius.circular(5),
+    final stages = widget.stages;
+    final length = widget.session.endedAtUtc
+        .difference(widget.session.startedAtUtc)
+        .inMilliseconds;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Text(
+          selected == null
+              ? 'Tap a stage to explore'
+              : '${_stageName(selected!.stage)} · ${_minutes(selected!.durationMinutes)} · ${_clock(selected!.startedAtUtc)}',
+          style: const TextStyle(fontSize: 12, color: LibreRingTokens.muted),
+        ),
+        const SizedBox(height: 16),
+        LayoutBuilder(
+          builder: (context, constraints) => SizedBox(
+            height: 112,
+            child: Stack(
+              children: <Widget>[
+                for (final stage in stages)
+                  Positioned(
+                    left:
+                        stage.startedAtUtc
+                            .difference(widget.session.startedAtUtc)
+                            .inMilliseconds /
+                        math.max(1, length) *
+                        constraints.maxWidth,
+                    width:
+                        stage.durationMinutes *
+                        60000 /
+                        math.max(1, length) *
+                        constraints.maxWidth,
+                    top: 0,
+                    bottom: 0,
+                    child: Semantics(
+                      button: true,
+                      label:
+                          '${_stageName(stage.stage)}, ${_minutes(stage.durationMinutes)}, ${_clock(stage.startedAtUtc)}',
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () => setState(() => selected = stage),
+                        child: Align(
+                          alignment: Alignment.bottomCenter,
+                          child: FractionallySizedBox(
+                            widthFactor: .97,
+                            heightFactor: switch (stage.stage) {
+                              RingSleepStage.awake => 1,
+                              RingSleepStage.rem => .8,
+                              RingSleepStage.light => .6,
+                              RingSleepStage.deep => .35,
+                            },
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                color: _stageColor(stage.stage),
+                                borderRadius: BorderRadius.circular(4),
+                                border: selected == stage
+                                    ? Border.all(
+                                        color: LibreRingTokens.foreground,
+                                        width: 2,
+                                      )
+                                    : null,
+                              ),
+                            ),
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ),
-              );
-            })
-            .toList(growable: false),
-      ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 10),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: <Widget>[
+            _AxisText(_clock(widget.session.startedAtUtc)),
+            _AxisText(_clock(widget.session.endedAtUtc)),
+          ],
+        ),
+      ],
     );
   }
 }
 
 class _StageRow extends StatelessWidget {
   const _StageRow({
-    this.stage,
-    this.label,
+    required this.label,
     required this.minutes,
     required this.percent,
-    this.color,
+    required this.color,
   });
-  final RingSleepStage? stage;
-  final String? label;
-  final int minutes;
-  final int percent;
-  final Color? color;
-
+  final String label;
+  final int minutes, percent;
+  final Color color;
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(bottom: 13),
+    padding: const EdgeInsets.only(bottom: 14),
     child: Column(
       children: <Widget>[
-        Row(
-          children: <Widget>[
-            Expanded(
-              child: Text(
-                label ?? _stageName(stage!),
+        if (MediaQuery.textScalerOf(context).scale(1) > 1.3)
+          SizedBox(
+            width: double.infinity,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(label, style: const TextStyle(fontSize: 13)),
+                Text(
+                  '${_minutes(minutes)} · $percent%',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: LibreRingTokens.muted,
+                  ),
+                ),
+              ],
+            ),
+          )
+        else
+          Row(
+            children: <Widget>[
+              Expanded(
+                child: Text(label, style: const TextStyle(fontSize: 13)),
+              ),
+              Text(
+                '${_minutes(minutes)} · $percent%',
                 style: const TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
+                  fontSize: 12,
+                  color: LibreRingTokens.muted,
                 ),
               ),
+            ],
+          ),
+        const SizedBox(height: 7),
+        Semantics(
+          label: '$label, $percent percent',
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(5),
+            child: LinearProgressIndicator(
+              value: percent.clamp(0, 100) / 100,
+              minHeight: 6,
+              color: color,
+              backgroundColor: LibreRingTokens.background,
             ),
-            Text(
-              '${_minutes(minutes)} · $percent%',
-              style: const TextStyle(
-                fontSize: 10.5,
-                color: LibreRingTokens.muted,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 6),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(5),
-          child: LinearProgressIndicator(
-            minHeight: 8,
-            value: (percent / 100).clamp(0, 1),
-            color: color ?? _stageColor(stage!),
-            backgroundColor: LibreRingTokens.soft,
           ),
         ),
       ],
-    ),
-  );
-}
-
-class _RecentSleepCard extends StatelessWidget {
-  const _RecentSleepCard({required this.sessions});
-  final List<SleepAnalytics> sessions;
-
-  @override
-  Widget build(BuildContext context) => _HeroMetricCard(
-    title: 'Recent sleep sessions',
-    child: Column(
-      children: sessions
-          .map(
-            (value) => _EvidenceRow(
-              icon: Icons.bedtime_outlined,
-              title: DateFormat('EEE, d MMM')
-                  .format(value.session.endedAtUtc.toLocal()),
-              value: _minutes(value.intervalMinutes),
-              detail:
-                  '${value.recordedStageMinutes} stage minutes · firmware estimate',
-            ),
-          )
-          .toList(growable: false),
     ),
   );
 }
@@ -1505,57 +1747,27 @@ class _RecentValuesCard extends StatelessWidget {
     required this.values,
     required this.unit,
   });
-  final String title;
+  final String title, unit;
   final List<TimedValue> values;
-  final String unit;
-
   @override
   Widget build(BuildContext context) => _HeroMetricCard(
     title: title,
-    child: values.isEmpty
-        ? const Padding(
-            padding: EdgeInsets.symmetric(vertical: 20),
-            child: Center(child: Text('No captured values')),
-          )
-        : Column(
-            children: values
-                .map(
-                  (value) => _EvidenceRow(
-                    icon: Icons.circle,
-                    title: '${value.value} $unit',
-                    value: _clock(value.at),
-                    detail: DateFormat('EEE, d MMM').format(value.at.toLocal()),
-                  ),
-                )
-                .toList(growable: false),
+    child: Column(
+      children: <Widget>[
+        if (values.isEmpty)
+          const Text(
+            'No readings yet',
+            style: TextStyle(color: LibreRingTokens.muted),
           ),
-  );
-}
-
-class _RangeListCard extends StatelessWidget {
-  const _RangeListCard({required this.ranges});
-  final List<RingOxygenRange> ranges;
-
-  @override
-  Widget build(BuildContext context) => _HeroMetricCard(
-    title: 'Recent hourly ranges',
-    child: ranges.isEmpty
-        ? const Padding(
-            padding: EdgeInsets.symmetric(vertical: 20),
-            child: Center(child: Text('No captured ranges')),
-          )
-        : Column(
-            children: ranges
-                .map(
-                  (value) => _EvidenceRow(
-                    icon: Icons.water_drop_outlined,
-                    title: '${value.minimumPercent}–${value.maximumPercent}%',
-                    value: _clock(value.hourStartedAtUtc),
-                    detail: 'Minimum–maximum · ring history',
-                  ),
-                )
-                .toList(growable: false),
+        for (final value in values)
+          _EvidenceRow(
+            icon: Icons.circle_outlined,
+            title: '${value.value} $unit',
+            value: _clock(value.at),
+            detail: DateFormat('EEE, d MMM').format(value.at.toLocal()),
           ),
+      ],
+    ),
   );
 }
 
@@ -1567,240 +1779,177 @@ class _EvidenceRow extends StatelessWidget {
     required this.detail,
   });
   final IconData icon;
-  final String title;
-  final String value;
-  final String detail;
-
+  final String title, value, detail;
   @override
-  Widget build(BuildContext context) => Container(
-    constraints: const BoxConstraints(minHeight: 66),
-    decoration: const BoxDecoration(
-      border: Border(bottom: BorderSide(color: LibreRingTokens.border)),
-    ),
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 12),
     child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        Icon(icon, size: 18, color: LibreRingTokens.accent),
+        Icon(icon, size: 19, color: _sage),
         const SizedBox(width: 12),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.center,
             children: <Widget>[
               Text(
                 title,
                 style: const TextStyle(
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
                 ),
               ),
-              const SizedBox(height: 2),
+              const SizedBox(height: 4),
               Text(
                 detail,
                 style: const TextStyle(
-                  fontSize: 9.5,
+                  fontSize: 12,
                   color: LibreRingTokens.muted,
                 ),
               ),
+              if (MediaQuery.textScalerOf(context).scale(1) > 1.3 &&
+                  value.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Text(
+                    value,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
             ],
           ),
         ),
-        const SizedBox(width: 8),
-        Text(
-          value,
-          style: const TextStyle(fontSize: 11, color: LibreRingTokens.muted),
-        ),
+        if (MediaQuery.textScalerOf(context).scale(1) <= 1.3 &&
+            value.isNotEmpty) ...<Widget>[
+          const SizedBox(width: 10),
+          Text(
+            value,
+            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+          ),
+        ],
       ],
     ),
   );
 }
 
-class _CapabilityValue {
-  const _CapabilityValue(this.label, this.detail);
-  final String label;
-  final String detail;
-}
-
-class _CapabilityGroup extends StatelessWidget {
-  const _CapabilityGroup({
-    required this.title,
-    required this.values,
-    this.available = true,
-  });
-  final String title;
-  final List<_CapabilityValue> values;
-  final bool available;
-
-  @override
-  Widget build(BuildContext context) => _HeroMetricCard(
-    title: title,
-    child: Column(
-      children: values
-          .map(
-            (value) => _EvidenceRow(
-              icon: available ? Icons.check_circle_outline : Icons.lock_outline,
-              title: value.label,
-              value: available ? 'Available' : 'Unavailable',
-              detail: value.detail,
-            ),
-          )
-          .toList(growable: false),
-    ),
-  );
-}
-
-class _Callout extends StatelessWidget {
-  const _Callout({
+class _ActionRow extends StatelessWidget {
+  const _ActionRow({
     required this.icon,
     required this.title,
-    required this.body,
-    required this.action,
+    required this.subtitle,
     required this.onTap,
+    this.selected = false,
   });
   final IconData icon;
-  final String title;
-  final String body;
-  final String action;
+  final String title, subtitle;
   final VoidCallback onTap;
-
+  final bool selected;
   @override
-  Widget build(BuildContext context) => Semantics(
-    label: '$title. $body. $action',
-    button: true,
-    child: ExcludeSemantics(
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(LibreRingTokens.cardRadius),
-        child: Container(
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: LibreRingTokens.foreground,
-            borderRadius: BorderRadius.circular(LibreRingTokens.cardRadius),
-          ),
-          child: Row(
-            children: <Widget>[
-              Icon(icon, size: 26, color: Colors.white),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Text(
-                      title,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      body,
-                      style: const TextStyle(
-                        color: Color(0xFFCBC8C1),
-                        fontSize: 10.5,
-                        height: 1.35,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 12),
-              const Icon(Icons.arrow_forward, color: Colors.white, size: 20),
-            ],
-          ),
-        ),
+  Widget build(BuildContext context) => Material(
+    color: selected ? _sage.withValues(alpha: .09) : Colors.transparent,
+    borderRadius: BorderRadius.circular(14),
+    child: ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      leading: Icon(icon, color: _sage),
+      title: Text(
+        title,
+        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
       ),
+      subtitle: Text(
+        subtitle,
+        style: const TextStyle(fontSize: 12, color: LibreRingTokens.muted),
+      ),
+      trailing: Icon(
+        selected ? Icons.check_rounded : Icons.chevron_right_rounded,
+        size: 20,
+      ),
+      onTap: onTap,
     ),
   );
 }
 
-class _Disclosure extends StatelessWidget {
-  const _Disclosure(this.value);
+class _SourceDisclosure extends StatelessWidget {
+  const _SourceDisclosure(this.value);
   final String value;
-
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.only(left: 14),
-    decoration: const BoxDecoration(
-      border: Border(left: BorderSide(color: LibreRingTokens.accent, width: 2)),
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(top: 18),
+    child: Theme(
+      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+      child: ExpansionTile(
+        key: const Key('analytics-source-disclosure'),
+        tilePadding: EdgeInsets.zero,
+        childrenPadding: const EdgeInsets.fromLTRB(0, 0, 0, 12),
+        leading: const Icon(
+          Icons.info_outline_rounded,
+          size: 20,
+          color: LibreRingTokens.muted,
+        ),
+        title: const Text(
+          'About this data',
+          style: TextStyle(fontSize: 14, color: LibreRingTokens.muted),
+        ),
+        children: <Widget>[
+          Text(
+            value,
+            style: const TextStyle(
+              fontSize: 13,
+              color: LibreRingTokens.muted,
+              height: 1.5,
+            ),
+          ),
+        ],
+      ),
     ),
-    child: Text(value, style: Theme.of(context).textTheme.bodySmall),
   );
 }
 
 class _EmptyCard extends StatelessWidget {
   const _EmptyCard(this.value);
   final String value;
-
   @override
   Widget build(BuildContext context) => LibreRingCard(
-    child: ConstrainedBox(
-      constraints: const BoxConstraints(minHeight: 180),
-      child: SizedBox(
-        width: double.infinity,
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            const Icon(
-              Icons.hourglass_empty,
-              size: 28,
+    child: Padding(
+      padding: const EdgeInsets.symmetric(vertical: 20),
+      child: Column(
+        children: <Widget>[
+          const Icon(Icons.nights_stay_outlined, size: 28, color: _sage),
+          const SizedBox(height: 16),
+          Text(
+            value,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 14,
               color: LibreRingTokens.muted,
+              height: 1.5,
             ),
-            const SizedBox(height: 12),
-            Text(
-              value,
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     ),
   );
 }
 
-class _AxisLabels extends StatelessWidget {
-  const _AxisLabels({required this.left, required this.right});
-  final String left;
-  final String right;
-
-  @override
-  Widget build(BuildContext context) => Row(
-    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-    children: <Widget>[
-      Text(
-        left,
-        style: const TextStyle(fontSize: 9, color: LibreRingTokens.muted),
-      ),
-      Text(
-        right,
-        style: const TextStyle(fontSize: 9, color: LibreRingTokens.muted),
-      ),
-    ],
-  );
-}
-
 Color _stageColor(RingSleepStage stage) => switch (stage) {
-  RingSleepStage.awake => const Color(0xFFF0C989),
-  RingSleepStage.rem => const Color(0xFFD5B7A8),
-  RingSleepStage.light => const Color(0xFFB77E69),
-  RingSleepStage.deep => LibreRingTokens.accent,
+  RingSleepStage.awake => const Color(0xFFD4AA66),
+  RingSleepStage.rem => const Color(0xFFB3A8C8),
+  RingSleepStage.light => const Color(0xFF8D7DA6),
+  RingSleepStage.deep => const Color(0xFF5C4D76),
 };
-
 String _stageName(RingSleepStage stage) => switch (stage) {
   RingSleepStage.awake => 'Awake',
   RingSleepStage.rem => 'REM',
   RingSleepStage.light => 'Light',
   RingSleepStage.deep => 'Deep',
 };
-
-String _minutes(int value) {
-  final hours = value ~/ 60;
-  final minutes = value.remainder(60);
-  if (hours == 0) return '$minutes min';
-  return '$hours h ${minutes.toString().padLeft(2, '0')} min';
-}
-
+DateTime _midday(DateTime day) => DateTime(day.year, day.month, day.day, 12);
 String _clock(DateTime value) => DateFormat('HH:mm').format(value.toLocal());
-
-String _distance(int meters) =>
-    meters < 1000 ? '$meters m' : '${(meters / 1000).toStringAsFixed(2)} km';
+String _minutes(int value) =>
+    value < 60 ? '$value min' : '${value ~/ 60} h ${value % 60} min';
+String _number(double value) => NumberFormat(
+  value.abs() < 10 && value != value.roundToDouble() ? '0.#' : '#,##0',
+).format(value);

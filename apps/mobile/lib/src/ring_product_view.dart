@@ -2,6 +2,8 @@ import 'dart:math' as math;
 
 import 'package:ring_core/ring_core.dart';
 
+import 'ring_analytics.dart';
+
 enum ProductConfidence { high, moderate, limited, unavailable }
 
 enum ProductDomain { sleep, recovery, movement, heart, oxygen }
@@ -99,12 +101,19 @@ class RingProductView {
     RingSyncDataset dataset, {
     DateTime? localNow,
   }) {
-    final now = localNow ?? DateTime.now();
-    final sleep = dataset.sleep.toList(growable: false)
-      ..sort((left, right) => left.endedAtUtc.compareTo(right.endedAtUtc));
-    final latestSleep = sleep.isEmpty ? null : sleep.last;
+    final now = (localNow ?? DateTime.now()).toLocal();
+    final sleepAnalytics = RingAnalytics.fromDataset(
+      dataset,
+      localNow: now,
+    ).latestSleep;
+    final latestSleep = sleepAnalytics?.session;
+    final hasSleepStages = sleepAnalytics?.stages.isNotEmpty ?? false;
     final todayActivity = dataset.activity
-        .where((bucket) => _isSameLocalDay(bucket.startedAtUtc, now))
+        .where(
+          (bucket) =>
+              !bucket.startedAtUtc.isAfter(now) &&
+              _isSameLocalDay(bucket.startedAtUtc, now),
+        )
         .toList(growable: false);
     final hasTodayActivity = todayActivity.isNotEmpty;
     final todaySteps = todayActivity.fold<int>(
@@ -119,20 +128,27 @@ class RingProductView {
       0,
       (total, bucket) => total + bucket.firmwareCalories,
     );
-    final recentPulse = dataset.heartRate.toList(
-      growable: false,
-    )..sort((left, right) => left.measuredAtUtc.compareTo(right.measuredAtUtc));
+    final recentPulse =
+        dataset.heartRate
+            .where((value) => !value.measuredAtUtc.isAfter(now))
+            .toList(growable: false)
+          ..sort(
+            (left, right) => left.measuredAtUtc.compareTo(right.measuredAtUtc),
+          );
     final latestPulse = recentPulse.isEmpty ? null : recentPulse.last;
-    final oxygen = dataset.oxygen.toList(growable: false)
-      ..sort(
-        (left, right) =>
-            left.hourStartedAtUtc.compareTo(right.hourStartedAtUtc),
-      );
+    final oxygen =
+        dataset.oxygen
+            .where((value) => !value.hourStartedAtUtc.isAfter(now))
+            .toList(growable: false)
+          ..sort(
+            (left, right) =>
+                left.hourStartedAtUtc.compareTo(right.hourStartedAtUtc),
+          );
     final latestOxygen = oxygen.isEmpty ? null : oxygen.last;
     final stageMinutes = <RingSleepStage, int>{
       for (final stage in RingSleepStage.values) stage: 0,
     };
-    for (final span in latestSleep?.stages ?? const <RingSleepStageSpan>[]) {
+    for (final span in sleepAnalytics?.stages ?? const <RingSleepStageSpan>[]) {
       stageMinutes[span.stage] =
           (stageMinutes[span.stage] ?? 0) + span.durationMinutes;
     }
@@ -143,9 +159,11 @@ class RingProductView {
     );
     final sleepFresh =
         latestSleep != null &&
-        now.difference(latestSleep.endedAtUtc.toLocal()).inHours <= 30;
+        now.difference(latestSleep.endedAtUtc.toLocal()) <=
+            const Duration(hours: 30);
     final stale =
-        now.difference(dataset.lastSyncedAtUtc.toLocal()).inHours > 36;
+        now.difference(dataset.lastSyncedAtUtc.toLocal()) >
+        const Duration(hours: 36);
 
     final dailySignal = stale
         ? const DailySignalView(
@@ -158,14 +176,15 @@ class RingProductView {
           )
         : sleepFresh
         ? DailySignalView(
-            eyebrow: 'Last night · Firmware estimate',
-            headline: '${durationWords(sleepDuration!)} of sleep was recorded.',
-            body: latestSleep.stages.isEmpty
+            eyebrow: 'Latest sleep window · Firmware estimate',
+            headline:
+                'A ${durationWords(sleepDuration!)} sleep window was recorded.',
+            body: !hasSleepStages
                 ? 'The ring retained a sleep interval but no stage runs. Pulse and oxygen remain separate measurements.'
-                : 'The ring retained ${latestSleep.stages.length} sleep-stage runs. They are firmware estimates, not EEG measurements.',
+                : 'The ring retained ${sleepAnalytics!.stages.length} sleep-stage runs. They are firmware estimates, not EEG measurements.',
             actionLabel: 'Understand last night',
             actionRoute: '/sleep',
-            confidence: latestSleep.stages.isEmpty
+            confidence: !hasSleepStages
                 ? ProductConfidence.limited
                 : ProductConfidence.moderate,
           )
@@ -193,16 +212,16 @@ class RingProductView {
         domain: ProductDomain.sleep,
         label: 'Sleep',
         value: sleepDuration == null ? '—' : durationLabel(sleepDuration),
-        status: sleepDuration == null ? 'No retained session' : 'Recorded',
+        status: sleepDuration == null ? 'No retained session' : 'Sleep window',
         explanation: sleepDuration == null
             ? 'The ring has not supplied a supported sleep interval.'
-            : latestSleep!.stages.isEmpty
+            : !hasSleepStages
             ? 'Firmware interval · no retained stage runs'
-            : '${latestSleep.stages.length} firmware-estimated stage runs',
+            : '${durationWords(Duration(minutes: sleepAnalytics!.asleepMinutes))} classified asleep · ${sleepAnalytics.unclassifiedMinutes} min unclassified',
         source: 'Ring firmware',
         confidence: sleepDuration == null
             ? ProductConfidence.unavailable
-            : latestSleep!.stages.isEmpty
+            : !hasSleepStages
             ? ProductConfidence.limited
             : ProductConfidence.moderate,
         route: '/sleep',
@@ -288,6 +307,7 @@ class RingProductView {
       domains.firstWhere((summary) => summary.domain == domain);
 
   List<RingTrendDay> range(int days) {
+    if (days < 1) throw ArgumentError.value(days, 'days', 'Must be positive');
     if (days >= trendDays.length) return trendDays;
     return trendDays.sublist(trendDays.length - days);
   }
@@ -299,23 +319,30 @@ class RingProductView {
   }) {
     final activity = <String, int>{};
     final pulse = <String, List<int>>{};
-    final sleep = <String, int>{};
+    final sleep = <String, List<RingSleepSession>>{};
     final oxygen = <String, List<RingOxygenRange>>{};
     for (final bucket in dataset.activity) {
+      if (bucket.startedAtUtc.isAfter(now)) continue;
       final key = _dayKey(bucket.startedAtUtc);
       activity[key] = (activity[key] ?? 0) + bucket.steps;
     }
     for (final sample in dataset.heartRate) {
+      if (sample.measuredAtUtc.isAfter(now)) continue;
       pulse
           .putIfAbsent(_dayKey(sample.measuredAtUtc), () => <int>[])
           .add(sample.bpm);
     }
     for (final session in dataset.sleep) {
-      sleep[_dayKey(session.endedAtUtc)] = session.endedAtUtc
-          .difference(session.startedAtUtc)
-          .inMinutes;
+      if (session.endedAtUtc.isAfter(now) ||
+          !session.endedAtUtc.isAfter(session.startedAtUtc)) {
+        continue;
+      }
+      sleep
+          .putIfAbsent(_dayKey(session.endedAtUtc), () => <RingSleepSession>[])
+          .add(session);
     }
     for (final range in dataset.oxygen) {
+      if (range.hourStartedAtUtc.isAfter(now)) continue;
       oxygen
           .putIfAbsent(
             _dayKey(range.hourStartedAtUtc),
@@ -325,19 +352,41 @@ class RingProductView {
     }
     final today = DateTime(now.year, now.month, now.day);
     return List<RingTrendDay>.generate(count, (index) {
-      final day = today.subtract(Duration(days: count - index - 1));
+      final day = RingCalendar.shift(today, index + 1 - count);
       final key = _localDayKey(day);
       return RingTrendDay(
         day: day,
         steps: activity[key] ?? 0,
         hasActivityRecord: activity.containsKey(key),
         pulseSamples: List<int>.unmodifiable(pulse[key] ?? const <int>[]),
-        sleepMinutes: sleep[key],
+        sleepMinutes: sleep[key] == null
+            ? null
+            : _sleepWindowMinutes(sleep[key]!),
         oxygenRanges: List<RingOxygenRange>.unmodifiable(
           oxygen[key] ?? const <RingOxygenRange>[],
         ),
       );
     }, growable: false);
+  }
+
+  /// Counts all retained windows ending on a day, without double-counting
+  /// overlapping sessions. This is an interval total, not time asleep.
+  static int _sleepWindowMinutes(List<RingSleepSession> sessions) {
+    final sorted = sessions.toList(growable: false)
+      ..sort((left, right) => left.startedAtUtc.compareTo(right.startedAtUtc));
+    var start = sorted.first.startedAtUtc;
+    var end = sorted.first.endedAtUtc;
+    var minutes = 0;
+    for (final session in sorted.skip(1)) {
+      if (session.startedAtUtc.isAfter(end)) {
+        minutes += end.difference(start).inMinutes;
+        start = session.startedAtUtc;
+        end = session.endedAtUtc;
+      } else if (session.endedAtUtc.isAfter(end)) {
+        end = session.endedAtUtc;
+      }
+    }
+    return minutes + end.difference(start).inMinutes;
   }
 
   static bool _isSameLocalDay(DateTime utc, DateTime local) {

@@ -14,6 +14,8 @@ import 'src/screens.dart';
 import 'src/storage/data_export_service.dart';
 import 'src/storage/journal_repository.dart';
 import 'src/storage/ring_data_repository.dart';
+import 'src/storage/preferences_repository.dart';
+import 'src/dashboard_screens.dart';
 
 Future<String> resolveInitialLocation({
   required bool demoMode,
@@ -42,6 +44,7 @@ class LibreRingApp extends StatelessWidget {
     this.journalRepository,
     this.dataExportService,
     this.currentLocalTime,
+    this.preferencesRepository,
     super.key,
   });
 
@@ -54,6 +57,7 @@ class LibreRingApp extends StatelessWidget {
   final JournalRepository? journalRepository;
   final DataExportService? dataExportService;
   final DateTime? currentLocalTime;
+  final PreferencesRepository? preferencesRepository;
 
   @override
   Widget build(BuildContext context) {
@@ -73,6 +77,10 @@ class LibreRingApp extends StatelessWidget {
           journalRepositoryProvider.overrideWithValue(journalRepository),
         if (dataExportService != null)
           dataExportServiceProvider.overrideWithValue(dataExportService),
+        if (preferencesRepository != null)
+          preferencesRepositoryProvider.overrideWithValue(
+            preferencesRepository,
+          ),
       ],
       child: _LibreRingShell(initialLocation: initialLocation, locale: locale),
     );
@@ -98,9 +106,22 @@ class _LibreRingShellState extends State<_LibreRingShell> {
       _route('/pairing/scan', const RingScanScreen()),
       _route('/pairing/found', const RingFoundScreen()),
       _route('/onboarding', const ProductOnboardingScreen()),
-      _route('/today', const TodayScreen()),
-      _route('/metrics', const MetricsScreen()),
-      _route('/vitals', const MetricsScreen()),
+      StatefulShellRoute.indexedStack(
+        builder: (context, state, shell) => shell,
+        branches: [
+          StatefulShellBranch(
+            routes: [_route('/today', const RefinedTodayScreen())],
+          ),
+          StatefulShellBranch(
+            routes: [_route('/vitals', const RefinedVitalsScreen())],
+          ),
+          StatefulShellBranch(
+            routes: [_route('/trends', const RefinedTrendsScreen())],
+          ),
+          StatefulShellBranch(routes: [_route('/you', const YouScreen())]),
+        ],
+      ),
+      GoRoute(path: '/metrics', redirect: (context, state) => '/vitals'),
       _route('/sleep', const SleepLabScreen()),
       _route('/recovery', const RecoveryScreen()),
       _route('/movement', const ActivityLabScreen()),
@@ -137,11 +158,9 @@ class _LibreRingShellState extends State<_LibreRingShell> {
       _route('/sport', const SportRecordScreen()),
       _route('/sleep/evidence', const EvidenceScreen()),
       _route('/no-result', const NoResultScreen()),
-      _route('/trends', const TrendsScreen()),
       _route('/journal', const JournalScreen()),
       _route('/journal/check-in', const CheckInScreen()),
       _route('/journal/swim', const SwimEntryScreen()),
-      _route('/you', const YouScreen()),
       _route('/you/profile', const ProfilePreferencesScreen()),
       _route('/you/ring', const RingDeviceScreen()),
       _route('/you/ring/sync-issue', const SyncIssueScreen()),
@@ -169,8 +188,21 @@ class _LibreRingShellState extends State<_LibreRingShell> {
   );
 
   Page<void> _page(BuildContext context, GoRouterState state, Widget child) {
+    // Root destinations retain independent navigation/scroll state. Detail
+    // pages use platform transitions, including the native iOS back gesture.
+    if (const [
+      '/today',
+      '/vitals',
+      '/trends',
+      '/you',
+    ].contains(state.uri.path)) {
+      return NoTransitionPage<void>(key: state.pageKey, child: child);
+    }
     final reduceMotion =
         MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    if (!reduceMotion) {
+      return MaterialPage<void>(key: state.pageKey, child: child);
+    }
     return CustomTransitionPage<void>(
       key: state.pageKey,
       child: child,

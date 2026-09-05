@@ -9,11 +9,18 @@ possible dashboard metrics.
 - [x] Duplicate-safe local sync for activity, pulse, sleep, oxygen, and opaque
   firmware indexes on `RT11CR_1.00.09_260424`.
 - [x] Local journal, export, separate deletion, and no-demo-data production gate.
+- [x] Refined Today, Vitals, Trends, and You; persistent root-tab state and native detail transitions.
+- [x] Historical calendar browsing, interactive time-aligned charts, and 7/30/90-day comparisons.
+- [x] Durable name, metric/imperial distance, and personal step/sleep targets.
+- [x] Missing-versus-zero handling, future-record filtering, and overlap-safe sleep summaries.
+- [x] Journal save/delete error recovery, duplicate-submit guards, and sync-safe deletion.
 - [x] Physical iPhone release build, install, independent launch, and version
   readback for `1.2.0 (10)`.
 - [ ] Complete foreground sync, relaunch, daylight-saving/timezone, low-battery,
   and competing-app tests with the owned R12.
 - [ ] Run VoiceOver and larger accessibility-size passes on physical iPhone.
+- [ ] Retain historical timezone/offset provenance in protocol decoding before claiming travel/DST reconstruction is solved.
+- [ ] Complete translation of refined views beyond the existing first-run and settings coverage.
 - [ ] Run the production path on a physical Android phone.
 
 ## Next — widen evidence carefully

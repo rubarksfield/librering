@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart' show DateFormat;
 import 'package:ring_core/ring_core.dart';
 import 'package:ring_design_system/ring_design_system.dart';
 import 'package:share_plus/share_plus.dart';
@@ -14,6 +15,9 @@ import 'ring_analytics.dart';
 import 'ring_data_view.dart';
 import 'ring_product_view.dart';
 import 'storage/journal_repository.dart';
+import 'storage/data_export_service.dart';
+import 'storage/preferences_repository.dart';
+import 'ui/app_chrome.dart';
 
 class WelcomeScreen extends StatelessWidget {
   const WelcomeScreen({super.key});
@@ -2094,6 +2098,59 @@ class _SwimEntryScreenState extends ConsumerState<SwimEntryScreen> {
   final _duration = TextEditingController(text: '42');
   String _pool = '25 metres';
   String _effort = 'steady';
+  bool _saving = false;
+  bool _saved = false;
+  String? _error;
+  String? _durationError;
+
+  void _changed() {
+    _saved = false;
+    _error = null;
+    _durationError = null;
+  }
+
+  Future<void> _save() async {
+    if (_saving || _saved) return;
+    final duration = int.tryParse(_duration.text.trim());
+    if (duration == null || duration < 1 || duration > 300) {
+      setState(
+        () => _durationError = copyFor(
+          context,
+          'Enter 1–300 minutes.',
+          'Introduza 1–300 minutos.',
+        ),
+      );
+      return;
+    }
+    FocusScope.of(context).unfocus();
+    setState(() {
+      _saving = true;
+      _error = null;
+      _durationError = null;
+    });
+    try {
+      await ref
+          .read(journalProvider.notifier)
+          .saveSwim(
+            durationMinutes: duration,
+            environment: _pool,
+            effort: _effort,
+          );
+      if (mounted) setState(() => _saved = true);
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () => _error = copyFor(
+            context,
+            'Could not save your swim. Your details are still here. Try again.',
+            'Não foi possível guardar a natação. Os dados continuam aqui. Tente novamente.',
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
 
   @override
   void dispose() {
@@ -2104,9 +2161,6 @@ class _SwimEntryScreenState extends ConsumerState<SwimEntryScreen> {
   @override
   Widget build(BuildContext context) {
     final journal = ref.watch(journalProvider);
-    final saved = journal.value
-        ?.where((entry) => entry.kind == JournalEntryKind.swim)
-        .firstOrNull;
     return _AppScreen(
       key: const Key('screen-swim'),
       activePath: '/trends',
@@ -2139,8 +2193,11 @@ class _SwimEntryScreenState extends ConsumerState<SwimEntryScreen> {
         TextField(
           key: const Key('swim-duration'),
           controller: _duration,
+          enabled: !_saving,
+          onChanged: (_) => setState(_changed),
           keyboardType: TextInputType.number,
           decoration: InputDecoration(
+            errorText: _durationError,
             suffixText: copyFor(context, 'minutes', 'minutos'),
             filled: true,
             fillColor: LibreRingTokens.soft,
@@ -2172,7 +2229,12 @@ class _SwimEntryScreenState extends ConsumerState<SwimEntryScreen> {
             DropdownMenuItem(value: '50 metres', child: Text('50 metres')),
             DropdownMenuItem(value: 'Open water', child: Text('Open water')),
           ],
-          onChanged: (String? value) => setState(() => _pool = value ?? _pool),
+          onChanged: _saving
+              ? null
+              : (String? value) => setState(() {
+                  _changed();
+                  _pool = value ?? _pool;
+                }),
         ),
         const SizedBox(height: 18),
         _FieldLabel(copyFor(context, 'Effort', 'Esforço')),
@@ -2194,51 +2256,35 @@ class _SwimEntryScreenState extends ConsumerState<SwimEntryScreen> {
             ),
           ],
           selected: <String>{_effort},
-          onSelectionChanged: (Set<String> value) =>
-              setState(() => _effort = value.first),
+          onSelectionChanged: _saving
+              ? null
+              : (Set<String> value) => setState(() {
+                  _changed();
+                  _effort = value.first;
+                }),
         ),
         const SizedBox(height: 24),
         LibreRingPrimaryButton(
           key: const Key('save-swim'),
-          label: copyFor(context, 'Save locally', 'Guardar localmente'),
+          label: _saving
+              ? copyFor(context, 'Saving…', 'A guardar…')
+              : _saved
+              ? copyFor(context, 'Saved', 'Guardado')
+              : copyFor(context, 'Save locally', 'Guardar localmente'),
           icon: Icons.check,
-          onPressed: journal.isLoading
-              ? null
-              : () async {
-                  final duration = int.tryParse(_duration.text);
-                  if (duration == null || duration < 1 || duration > 300) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          copyFor(
-                            context,
-                            'Enter 1–300 minutes.',
-                            'Introduza 1–300 minutos.',
-                          ),
-                        ),
-                      ),
-                    );
-                    return;
-                  }
-                  await ref
-                      .read(journalProvider.notifier)
-                      .saveSwim(
-                        durationMinutes: duration,
-                        environment: _pool,
-                        effort: _effort,
-                      );
-                },
+          onPressed: journal.isLoading || _saving || _saved ? null : _save,
         ),
         const SizedBox(height: 10),
         Center(
           child: Text(
-            saved == null
-                ? copyFor(context, 'Not yet saved', 'Ainda não guardado')
-                : copyFor(
-                    context,
-                    'Saved locally · Manual source',
-                    'Guardado localmente · Origem manual',
-                  ),
+            _error ??
+                (_saved
+                    ? copyFor(
+                        context,
+                        'Saved locally · Manual source',
+                        'Guardado localmente · Origem manual',
+                      )
+                    : copyFor(context, 'Not yet saved', 'Ainda não guardado')),
             key: const Key('swim-save-status'),
             style: Theme.of(context).textTheme.bodySmall,
           ),
@@ -2248,11 +2294,41 @@ class _SwimEntryScreenState extends ConsumerState<SwimEntryScreen> {
   }
 }
 
-class JournalScreen extends ConsumerWidget {
+class JournalScreen extends ConsumerStatefulWidget {
   const JournalScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<JournalScreen> createState() => _JournalScreenState();
+}
+
+class _JournalScreenState extends ConsumerState<JournalScreen> {
+  String? _deletingId;
+
+  Future<void> _delete(JournalEntry entry) async {
+    if (_deletingId != null) return;
+    setState(() => _deletingId = entry.id);
+    try {
+      await ref.read(journalProvider.notifier).delete(entry.id);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            copyFor(
+              context,
+              'Could not delete this entry. It is still in your journal.',
+              'Não foi possível eliminar este registo. Continua no diário.',
+            ),
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _deletingId = null);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final journal = ref.watch(journalProvider);
     final entries = journal.value ?? const <JournalEntry>[];
     return _AppScreen(
@@ -2277,19 +2353,15 @@ class JournalScreen extends ConsumerWidget {
         ),
         const SizedBox(height: 6),
         _Heading(
-          copyFor(
-            context,
-            'Add what the ring cannot see.',
-            'Adicione o que o anel não consegue ver.',
-          ),
-          fontSize: 44,
+          copyFor(context, 'Your journal', 'O seu diário'),
+          fontSize: 34,
         ),
         const SizedBox(height: 12),
         Text(
           copyFor(
             context,
-            'Manual context never changes a ring measurement. It stays clearly labelled, editable, exportable, and separately deletable.',
-            'O contexto manual nunca altera uma medição do anel. Fica claramente identificado, editável, exportável e pode ser eliminado separadamente.',
+            'Your notes and activities stay on this phone. Export or delete them separately from ring measurements.',
+            'As notas e atividades ficam neste telemóvel. Exporte-as ou elimine-as separadamente das medições do anel.',
           ),
           style: Theme.of(context).textTheme.bodySmall,
         ),
@@ -2347,8 +2419,8 @@ class JournalScreen extends ConsumerWidget {
           for (final entry in entries)
             _JournalRow(
               entry: entry,
-              onDelete: () =>
-                  ref.read(journalProvider.notifier).delete(entry.id),
+              deleting: _deletingId == entry.id,
+              onDelete: _deletingId != null ? null : () => _delete(entry),
             ),
       ],
     );
@@ -2374,6 +2446,37 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen> {
   final _note = TextEditingController();
   final _selected = <String>{};
   bool _saved = false;
+  bool _saving = false;
+  String? _error;
+
+  Future<void> _save() async {
+    if (_saving || _saved || (_selected.isEmpty && _note.text.trim().isEmpty)) {
+      return;
+    }
+    FocusScope.of(context).unfocus();
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    try {
+      await ref
+          .read(journalProvider.notifier)
+          .saveCheckIn(tags: _selected.toList(), note: _note.text);
+      if (mounted) setState(() => _saved = true);
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () => _error = copyFor(
+            context,
+            'Could not save your check-in. Your note is still here. Try again.',
+            'Não foi possível guardar o registo. A nota continua aqui. Tente novamente.',
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
 
   @override
   void dispose() {
@@ -2427,10 +2530,13 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen> {
                   label: Text(_checkInTagLabel(context, tag)),
                   selected: selected,
                   showCheckmark: false,
-                  onSelected: (value) => setState(() {
-                    _saved = false;
-                    value ? _selected.add(tag) : _selected.remove(tag);
-                  }),
+                  onSelected: _saving
+                      ? null
+                      : (value) => setState(() {
+                          _saved = false;
+                          _error = null;
+                          value ? _selected.add(tag) : _selected.remove(tag);
+                        }),
                 );
               })
               .toList(growable: false),
@@ -2440,11 +2546,15 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen> {
         TextField(
           key: const Key('check-in-note'),
           controller: _note,
+          enabled: !_saving,
           minLines: 3,
           maxLines: 5,
           maxLength: 280,
           onTapOutside: (_) => FocusScope.of(context).unfocus(),
-          onChanged: (_) => setState(() => _saved = false),
+          onChanged: (_) => setState(() {
+            _saved = false;
+            _error = null;
+          }),
           decoration: InputDecoration(
             hintText: copyFor(
               context,
@@ -2464,31 +2574,35 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen> {
         const SizedBox(height: 22),
         LibreRingPrimaryButton(
           key: const Key('save-check-in'),
-          label: journal.isLoading
+          label: _saving
               ? copyFor(context, 'Saving…', 'A guardar…')
+              : _saved
+              ? copyFor(context, 'Saved', 'Guardado')
               : copyFor(context, 'Save check-in', 'Guardar registo'),
           icon: Icons.check,
           onPressed:
               journal.isLoading ||
+                  _saving ||
+                  _saved ||
                   (_selected.isEmpty && _note.text.trim().isEmpty)
               ? null
-              : () async {
-                  await ref
-                      .read(journalProvider.notifier)
-                      .saveCheckIn(tags: _selected.toList(), note: _note.text);
-                  if (mounted) setState(() => _saved = true);
-                },
+              : _save,
         ),
         const SizedBox(height: 10),
         Center(
           child: Text(
-            _saved
-                ? copyFor(
-                    context,
-                    'Saved locally · Manual source',
-                    'Guardado localmente · Origem manual',
-                  )
-                : copyFor(context, 'Nothing saved yet', 'Ainda nada guardado'),
+            _error ??
+                (_saved
+                    ? copyFor(
+                        context,
+                        'Saved locally · Manual source',
+                        'Guardado localmente · Origem manual',
+                      )
+                    : copyFor(
+                        context,
+                        'Nothing saved yet',
+                        'Ainda nada guardado',
+                      )),
             key: const Key('check-in-save-status'),
             style: Theme.of(context).textTheme.bodySmall,
           ),
@@ -2507,26 +2621,71 @@ class YouScreen extends ConsumerWidget {
         ? null
         : ref.watch(ringDataProvider).value;
     final journalCount = ref.watch(journalProvider).value?.length ?? 0;
+    final preferences = ref.watch(appPreferencesProvider);
+    final profile = preferences.value ?? const AppPreferences();
     return _AppScreen(
       key: const Key('screen-you'),
       activePath: '/you',
       children: <Widget>[
-        _TopBar(
-          leading: const LibreRingWordmark(),
-          trailing: _Confidence(copyFor(context, 'Local only', 'Apenas local')),
-        ),
-        const SizedBox(height: 24),
-        _DateLabel(copyFor(context, 'You', 'Perfil')),
+        const SizedBox(height: 8),
+        _Heading(copyFor(context, 'You', 'Perfil'), fontSize: 34),
         const SizedBox(height: 6),
-        _Heading(
+        Text(
           copyFor(
             context,
-            'Your ring, your data,\nyour choices.',
-            'O seu anel, os seus dados,\nas suas escolhas.',
+            'Make LibreRing yours.',
+            'O LibreRing, à sua medida.',
           ),
-          fontSize: 44,
+          style: Theme.of(context).textTheme.bodyMedium
+              ?.copyWith(color: LibreRingTokens.muted),
         ),
-        const SizedBox(height: 28),
+        const SizedBox(height: 24),
+        LibreRingCard(
+          backgroundColor: LibreRingTokens.sageSoft,
+          child: Row(
+            children: [
+              CircleAvatar(
+                radius: 25,
+                backgroundColor: LibreRingTokens.sage,
+                foregroundColor: Colors.white,
+                child: profile.displayName.isEmpty
+                    ? const Icon(Icons.person_outline_rounded)
+                    : Text(profile.displayName.characters.first.toUpperCase()),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      profile.displayName.isEmpty
+                          ? copyFor(
+                              context,
+                              'Your personal space',
+                              'O seu espaço pessoal',
+                            )
+                          : profile.displayName,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      copyFor(
+                        context,
+                        'No account. No subscription.',
+                        'Sem conta. Sem subscrição.',
+                      ),
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 20),
         _ActionTile(
           key: const Key('you-profile'),
           icon: Icons.tune,
@@ -2537,10 +2696,10 @@ class YouScreen extends ConsumerWidget {
           ),
           body: copyFor(
             context,
-            'Name, units, emphasis, and notifications',
-            'Nome, unidades, ênfase e notificações',
+            'Name, distance units, and personal goals',
+            'Nome, unidades de distância e objetivos pessoais',
           ),
-          onTap: () => context.go('/you/profile'),
+          onTap: () => context.push('/you/profile'),
         ),
         _ActionTile(
           key: const Key('you-ring'),
@@ -2554,10 +2713,10 @@ class YouScreen extends ConsumerWidget {
                 )
               : copyFor(
                   context,
-                  'Battery ${dataset.batteryLevel == null ? 'unavailable' : '${dataset.batteryLevel}%'} · ${dataset.recordCount} records',
-                  'Bateria ${dataset.batteryLevel == null ? 'indisponível' : '${dataset.batteryLevel}%'} · ${dataset.recordCount} registos',
+                  'COLMI R12 · last reported battery ${dataset.batteryLevel == null ? 'unavailable' : '${dataset.batteryLevel}%'}',
+                  'COLMI R12 · última bateria ${dataset.batteryLevel == null ? 'indisponível' : '${dataset.batteryLevel}%'}',
                 ),
-          onTap: () => context.go('/you/ring'),
+          onTap: () => context.push('/you/ring'),
         ),
         _ActionTile(
           key: const Key('you-setup'),
@@ -2568,7 +2727,7 @@ class YouScreen extends ConsumerWidget {
             'Pairing, privacy, and first sync',
             'Emparelhamento, privacidade e primeira sincronização',
           ),
-          onTap: () => context.go('/onboarding'),
+          onTap: () => context.push('/onboarding'),
         ),
         _ActionTile(
           key: const Key('you-journal'),
@@ -2579,7 +2738,7 @@ class YouScreen extends ConsumerWidget {
             '$journalCount manual entries · kept separate from ring data',
             '$journalCount registos manuais · separados dos dados do anel',
           ),
-          onTap: () => context.go('/journal'),
+          onTap: () => context.push('/journal'),
         ),
         _ActionTile(
           key: const Key('you-data'),
@@ -2590,18 +2749,7 @@ class YouScreen extends ConsumerWidget {
             '${dataset?.recordCount ?? 0} ring records · $journalCount manual entries',
             '${dataset?.recordCount ?? 0} registos do anel · $journalCount registos manuais',
           ),
-          onTap: () => context.go('/you/data'),
-        ),
-        _ActionTile(
-          key: const Key('you-cycle'),
-          icon: Icons.lock_outline,
-          title: copyFor(context, 'Cycle Context', 'Contexto do ciclo'),
-          body: copyFor(
-            context,
-            'Optional · separate privacy boundary',
-            'Opcional · limite de privacidade separado',
-          ),
-          onTap: () => context.go('/privacy/cycle'),
+          onTap: () => context.push('/you/data'),
         ),
         _ActionTile(
           key: const Key('you-about'),
@@ -2609,24 +2757,98 @@ class YouScreen extends ConsumerWidget {
           title: copyFor(context, 'About LibreRing', 'Sobre o LibreRing'),
           body: copyFor(
             context,
-            'Evidence model · licences · open source',
-            'Modelo de evidência · licenças · código aberto',
+            'Supported features, privacy, and open source',
+            'Funcionalidades, privacidade e código aberto',
           ),
-          onTap: () => context.go('/you/about'),
+          onTap: () => context.push('/you/about'),
         ),
       ],
     );
   }
 }
 
-class RingDeviceScreen extends ConsumerWidget {
+class RingDeviceScreen extends ConsumerStatefulWidget {
   const RingDeviceScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<RingDeviceScreen> createState() => _RingDeviceScreenState();
+}
+
+class _RingDeviceScreenState extends ConsumerState<RingDeviceScreen> {
+  bool _refreshing = false;
+
+  Future<void> _refresh() async {
+    if (_refreshing ||
+        ref.read(ringPairingProvider).syncInProgress ||
+        ref.read(ringPairingClientProvider) == null) {
+      return;
+    }
+    setState(() => _refreshing = true);
+    String? message;
+    try {
+      await ref.read(ringPairingProvider.notifier).quickSync();
+      if (!mounted) return;
+      final result = ref.read(ringPairingProvider);
+      message =
+          result.syncError ??
+          (result.lastSyncedAtUtc != null
+              ? copyFor(
+                  context,
+                  'Ring history updated.',
+                  'Histórico do anel atualizado.',
+                )
+              : copyFor(
+                  context,
+                  'The ring has not synced yet. Try again or open setup.',
+                  'O anel ainda não foi sincronizado. Tente novamente ou abra a configuração.',
+                ));
+    } catch (_) {
+      if (!mounted) return;
+      message = copyFor(
+        context,
+        'Could not sync right now. Keep the ring nearby and try again.',
+        'Não foi possível sincronizar agora. Mantenha o anel por perto e tente novamente.',
+      );
+    } finally {
+      if (mounted) setState(() => _refreshing = false);
+    }
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final demo = ref.watch(isDemoModeProvider);
-    final dataset = demo ? null : ref.watch(ringDataProvider).value;
+    final ring = ref.watch(ringDataProvider);
+    final dataset = demo ? null : ring.value;
     final pairing = ref.watch(ringPairingProvider);
+    final canRefresh =
+        !demo &&
+        !ref.watch(isProtocolCaptureModeProvider) &&
+        ref.watch(ringPairingClientProvider) != null;
+    final busy = _refreshing || pairing.syncInProgress;
+    final status = demo
+        ? copyFor(context, 'Preview', 'Pré-visualização')
+        : busy
+        ? copyFor(context, 'Syncing', 'A sincronizar')
+        : pairing.phase == RingPairingPhase.connected
+        ? copyFor(context, 'Connected', 'Ligado')
+        : ring.hasError
+        ? copyFor(
+            context,
+            'Storage needs attention',
+            'O armazenamento precisa de atenção',
+          )
+        : ring.isLoading
+        ? copyFor(context, 'Loading history', 'A carregar histórico')
+        : dataset == null
+        ? copyFor(context, 'Not synced yet', 'Ainda não sincronizado')
+        : copyFor(
+            context,
+            'History saved on this phone',
+            'Histórico guardado neste telemóvel',
+          );
     return _AppScreen(
       key: const Key('screen-ring-device'),
       activePath: '/you',
@@ -2636,20 +2858,29 @@ class RingDeviceScreen extends ConsumerWidget {
             label: copyFor(context, 'Back to You', 'Voltar ao perfil'),
             fallbackPath: '/you',
           ),
-          center: LibreRingEyebrow(copyFor(context, 'Ring', 'Anel')),
-          trailing: _Confidence(
-            dataset == null
-                ? copyFor(context, 'Not synced', 'Não sincronizado')
-                : copyFor(context, 'Local link', 'Ligação local'),
+          center: LibreRingEyebrow(copyFor(context, 'Your ring', 'O seu anel')),
+          trailing: const SizedBox(width: 48),
+        ),
+        const SizedBox(height: 20),
+        const Center(
+          child: LibreRingArtwork(kind: LibreRingArtworkKind.ring, size: 144),
+        ),
+        const SizedBox(height: 20),
+        const _Heading('COLMI R12', fontSize: 34),
+        const SizedBox(height: 8),
+        Semantics(
+          liveRegion: true,
+          child: Text(
+            status,
+            key: const Key('ring-connection-status'),
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: ring.hasError
+                  ? Theme.of(context).colorScheme.error
+                  : LibreRingTokens.sage,
+            ),
           ),
         ),
-        const SizedBox(height: 28),
-        const Center(
-          child: LibreRingArtwork(kind: LibreRingArtworkKind.ring, size: 196),
-        ),
-        const SizedBox(height: 28),
-        const _Heading('COLMI R12', fontSize: 48),
-        const SizedBox(height: 24),
+        const SizedBox(height: 22),
         LibreRingCard(
           child: Column(
             children: <Widget>[
@@ -2659,140 +2890,380 @@ class RingDeviceScreen extends ConsumerWidget {
                     ? '—'
                     : '${dataset!.batteryLevel}%',
                 detail: dataset?.charging == true
-                    ? copyFor(context, 'Charging', 'A carregar')
+                    ? copyFor(
+                        context,
+                        'Charging at the last sync',
+                        'A carregar na última sincronização',
+                      )
                     : copyFor(
                         context,
-                        'Last sync value',
-                        'Valor da última sincronização',
+                        'Last reported level',
+                        'Último nível registado',
                       ),
+              ),
+              _CompactEvidenceRow(
+                title: copyFor(context, 'Last sync', 'Última sincronização'),
+                value: dataset == null
+                    ? '—'
+                    : DateFormat('d MMM, HH:mm')
+                          .format(dataset.lastSyncedAtUtc.toLocal()),
+                detail: copyFor(
+                  context,
+                  'A new sync refreshes your history',
+                  'Uma nova sincronização atualiza o histórico',
+                ),
               ),
               _CompactEvidenceRow(
                 title: copyFor(context, 'Firmware', 'Firmware'),
                 value: dataset?.source.firmwareVersion ?? '—',
                 detail: copyFor(
                   context,
-                  'Exact verified production gate',
-                  'Limite de produção exato verificado',
-                ),
-              ),
-              _CompactEvidenceRow(
-                title: copyFor(context, 'Driver', 'Controlador'),
-                value: dataset?.source.driverId ?? 'colmi-qring-v1',
-                detail: copyFor(
-                  context,
-                  'Open protocol adapter',
-                  'Adaptador de protocolo aberto',
-                ),
-              ),
-              _CompactEvidenceRow(
-                title: copyFor(context, 'Identifier', 'Identificador'),
-                value: copyFor(context, 'Not stored', 'Não guardado'),
-                detail: copyFor(
-                  context,
-                  'Rediscovered transiently when you refresh',
-                  'Redescoberto temporariamente ao atualizar',
+                  'Version reported by your ring',
+                  'Versão indicada pelo anel',
                 ),
               ),
             ],
           ),
         ),
-        const SizedBox(height: 14),
-        LibreRingCard(
-          padding: const EdgeInsets.symmetric(horizontal: 18),
-          child: Column(
-            children: <Widget>[
-              _DataRow(
-                icon: Icons.health_and_safety_outlined,
-                title: copyFor(
-                  context,
-                  'Health and history capabilities',
-                  'Capacidades de saúde e histórico',
-                ),
-                meta: copyFor(
-                  context,
-                  'What is available, partial, or locked',
-                  'O que está disponível, parcial ou bloqueado',
-                ),
-                onTap: () => context.go('/you/ring/capabilities'),
-              ),
-              _DataRow(
-                icon: Icons.lock_outline,
-                title: copyFor(
-                  context,
-                  'Device controls',
-                  'Controlos do dispositivo',
-                ),
-                meta: copyFor(
-                  context,
-                  'Read-only until exact commands are safely verified',
-                  'Apenas leitura até os comandos serem verificados',
-                ),
-                value: copyFor(context, 'Locked', 'Bloqueado'),
-              ),
-              _DataRow(
-                icon: Icons.history,
-                title: copyFor(
-                  context,
-                  'Connection history',
-                  'Histórico de ligação',
-                ),
-                meta: copyFor(
-                  context,
-                  'Review an interrupted sync without losing local data',
-                  'Rever uma sincronização interrompida sem perder dados locais',
-                ),
-                value: copyFor(context, 'Review', 'Rever'),
-                onTap: () => context.go('/you/ring/sync-issue'),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 22),
+        const SizedBox(height: 18),
         LibreRingPrimaryButton(
           key: const Key('ring-device-sync'),
-          label: pairing.syncInProgress
-              ? copyFor(context, 'Refreshing…', 'A atualizar…')
-              : copyFor(context, 'Refresh ring', 'Atualizar anel'),
+          label: busy
+              ? copyFor(context, 'Syncing…', 'A sincronizar…')
+              : copyFor(context, 'Sync ring', 'Sincronizar anel'),
           icon: Icons.sync,
-          onPressed: demo || pairing.syncInProgress
-              ? null
-              : () async {
-                  await ref.read(ringPairingProvider.notifier).quickSync();
-                  if (!context.mounted) return;
-                  final result = ref.read(ringPairingProvider);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        result.syncError ??
-                            copyFor(
-                              context,
-                              'Ring data refreshed locally.',
-                              'Dados do anel atualizados localmente.',
-                            ),
-                      ),
-                    ),
-                  );
-                },
+          onPressed: !canRefresh || busy ? null : _refresh,
+        ),
+        const SizedBox(height: 8),
+        Text(
+          copyFor(
+            context,
+            'LibreRing connects during sync, then releases the ring. Your history stays available offline.',
+            'O LibreRing liga durante a sincronização e depois liberta o anel. O histórico continua disponível sem ligação.',
+          ),
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        const SizedBox(height: 20),
+        _ActionTile(
+          key: const Key('ring-capabilities'),
+          icon: Icons.health_and_safety_outlined,
+          title: copyFor(
+            context,
+            'Supported features',
+            'Funcionalidades disponíveis',
+          ),
+          body: copyFor(
+            context,
+            'What this ring can share with LibreRing',
+            'O que este anel pode partilhar com o LibreRing',
+          ),
+          onTap: () => context.push('/you/ring/capabilities'),
+        ),
+        _ActionTile(
+          key: const Key('ring-sync-help'),
+          icon: Icons.help_outline,
+          title: copyFor(context, 'Sync help', 'Ajuda com a sincronização'),
+          body:
+              pairing.syncError ??
+              copyFor(
+                context,
+                'Connection tips and retry',
+                'Sugestões de ligação e nova tentativa',
+              ),
+          onTap: () => context.push('/you/ring/sync-issue'),
+        ),
+        _ActionTile(
+          key: const Key('ring-device-setup'),
+          icon: Icons.bluetooth_searching_rounded,
+          title: copyFor(context, 'Ring setup', 'Configurar anel'),
+          body: copyFor(
+            context,
+            'Find and verify a nearby COLMI R12',
+            'Encontrar e verificar um COLMI R12 próximo',
+          ),
+          onTap: busy ? null : () => context.push('/pairing/scan'),
         ),
       ],
     );
   }
 }
 
-class DataHubScreen extends ConsumerWidget {
+class DataHubScreen extends ConsumerStatefulWidget {
   const DataHubScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<DataHubScreen> createState() => _DataHubScreenState();
+}
+
+class _DataHubScreenState extends ConsumerState<DataHubScreen> {
+  String? _busy;
+  String? _message;
+  bool _failed = false;
+
+  void _feedback(String message, {bool failed = false}) {
+    if (!mounted) return;
+    setState(() {
+      _message = message;
+      _failed = failed;
+    });
+  }
+
+  void _begin(String action) {
+    setState(() {
+      _busy = action;
+      _message = null;
+      _failed = false;
+    });
+  }
+
+  void _finish() {
+    if (mounted) setState(() => _busy = null);
+  }
+
+  Future<void> _createExport() async {
+    if (_busy != null) return;
+    _begin('export');
+    try {
+      await ref.read(dataExportProvider.notifier).create();
+    } catch (_) {
+      if (!mounted) return;
+      _feedback(
+        copyFor(
+          context,
+          'Could not create the export. Your records are still on this phone. Try again.',
+          'Não foi possível criar a exportação. Os registos continuam neste telemóvel. Tente novamente.',
+        ),
+        failed: true,
+      );
+    } finally {
+      _finish();
+    }
+  }
+
+  Future<void> _share(LocalExportResult result) async {
+    if (_busy != null) return;
+    _begin('share');
+    try {
+      final box = context.findRenderObject() as RenderBox?;
+      await SharePlus.instance.share(
+        ShareParams(
+          subject: copyFor(
+            context,
+            'LibreRing data export',
+            'Exportação de dados LibreRing',
+          ),
+          text: copyFor(
+            context,
+            '${result.rowCount} records exported from this phone.',
+            '${result.rowCount} registos exportados deste telemóvel.',
+          ),
+          files: <XFile>[
+            XFile(result.jsonFile.path),
+            XFile(result.csvFile.path),
+          ],
+          sharePositionOrigin: box == null
+              ? null
+              : box.localToGlobal(Offset.zero) & box.size,
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      _feedback(
+        copyFor(
+          context,
+          'Could not open sharing. Your export is still available; try again.',
+          'Não foi possível abrir a partilha. A exportação continua disponível; tente novamente.',
+        ),
+        failed: true,
+      );
+    } finally {
+      _finish();
+    }
+  }
+
+  Future<void> _deleteManual() async {
+    if (_busy != null || ref.read(ringPairingProvider).syncInProgress) return;
+    final unreadable = ref.read(journalProvider).hasError;
+    _begin('manual');
+    try {
+      final confirmed = await _confirm(
+        context,
+        title: unreadable
+            ? copyFor(
+                context,
+                'Delete unreadable manual context?',
+                'Eliminar contexto manual ilegível?',
+              )
+            : copyFor(
+                context,
+                'Delete all manual context?',
+                'Eliminar todo o contexto manual?',
+              ),
+        body: unreadable
+            ? copyFor(
+                context,
+                'The saved journal file cannot be read, so its contents cannot be previewed. Deleting it cannot be undone. Ring measurements and existing exports are kept.',
+                'O ficheiro do diário não pode ser lido, pelo que não é possível pré-visualizar o conteúdo. A eliminação não pode ser anulada. As medições do anel e exportações existentes são mantidas.',
+              )
+            : copyFor(
+                context,
+                'Ring measurements and files you already exported remain on this phone.',
+                'As medições do anel e os ficheiros já exportados permanecem neste telemóvel.',
+              ),
+      );
+      if (!confirmed || !mounted) return;
+      if (ref.read(ringPairingProvider).syncInProgress) {
+        _feedback(
+          copyFor(
+            context,
+            'A sync has started. Wait for it to finish, then try deleting again.',
+            'Foi iniciada uma sincronização. Aguarde o fim e tente eliminar novamente.',
+          ),
+        );
+        return;
+      }
+      await ref.read(journalProvider.notifier).deleteAll();
+      if (!mounted) return;
+      _feedback(
+        copyFor(
+          context,
+          'Manual context deleted.',
+          'Contexto manual eliminado.',
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      _feedback(
+        unreadable
+            ? copyFor(
+                context,
+                'Could not delete unreadable manual context. The file has been kept; try again.',
+                'Não foi possível eliminar o contexto manual ilegível. O ficheiro foi mantido; tente novamente.',
+              )
+            : copyFor(
+                context,
+                'Could not delete manual context. Your entries are still available; try again.',
+                'Não foi possível eliminar o contexto manual. Os registos continuam disponíveis; tente novamente.',
+              ),
+        failed: true,
+      );
+    } finally {
+      _finish();
+    }
+  }
+
+  Future<void> _deleteRing() async {
+    if (_busy != null) return;
+    if (ref.read(ringPairingProvider).syncInProgress) {
+      _feedback(
+        copyFor(
+          context,
+          'Wait for the current sync to finish.',
+          'Aguarde o fim da sincronização.',
+        ),
+      );
+      return;
+    }
+    final unreadable = ref.read(ringDataProvider).hasError;
+    _begin('ring');
+    try {
+      final confirmed = await _confirm(
+        context,
+        title: unreadable
+            ? copyFor(
+                context,
+                'Delete unreadable ring history?',
+                'Eliminar histórico ilegível do anel?',
+              )
+            : copyFor(
+                context,
+                'Delete all local ring history?',
+                'Eliminar todo o histórico local do anel?',
+              ),
+        body: unreadable
+            ? copyFor(
+                context,
+                'The saved ring-history file cannot be read, so its contents cannot be previewed. Deleting it cannot be undone. Manual context and existing exports are kept. The ring itself is not erased.',
+                'O ficheiro de histórico do anel não pode ser lido, pelo que não é possível pré-visualizar o conteúdo. A eliminação não pode ser anulada. O contexto manual e exportações existentes são mantidos. O anel não é apagado.',
+              )
+            : copyFor(
+                context,
+                'This removes ring records from LibreRing on this phone. Manual context and files you already exported stay in place. The ring itself is not erased.',
+                'Isto remove os registos do anel neste telemóvel. O contexto manual e os ficheiros já exportados permanecem. O anel não é apagado.',
+              ),
+      );
+      if (!confirmed || !mounted) return;
+      if (ref.read(ringPairingProvider).syncInProgress) {
+        _feedback(
+          copyFor(
+            context,
+            'A sync has started. Wait for it to finish, then try deleting again.',
+            'Foi iniciada uma sincronização. Aguarde o fim e tente eliminar novamente.',
+          ),
+        );
+        return;
+      }
+      await ref.read(ringDataProvider.notifier).deleteAll();
+      if (!mounted) return;
+      _feedback(
+        copyFor(
+          context,
+          'Local ring history deleted.',
+          'Histórico local do anel eliminado.',
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      _feedback(
+        unreadable
+            ? copyFor(
+                context,
+                'Could not delete unreadable ring history. The file has been kept; try again.',
+                'Não foi possível eliminar o histórico ilegível do anel. O ficheiro foi mantido; tente novamente.',
+              )
+            : copyFor(
+                context,
+                'Could not delete ring history. Your records are still available; try again.',
+                'Não foi possível eliminar o histórico do anel. Os registos continuam disponíveis; tente novamente.',
+              ),
+        failed: true,
+      );
+    } finally {
+      _finish();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final demo = ref.watch(isDemoModeProvider);
-    final dataset = demo ? null : ref.watch(ringDataProvider).value;
+    final ring = ref.watch(ringDataProvider);
+    final dataset = demo ? null : ring.value;
     final journal = ref.watch(journalProvider);
     final export = ref.watch(dataExportProvider);
     final result = export.value;
+    final syncing = ref.watch(ringPairingProvider).syncInProgress;
     final canExport =
         !demo &&
         dataset != null &&
+        !ring.isLoading &&
+        !ring.hasError &&
+        !journal.isLoading &&
+        !journal.hasError &&
         ref.watch(dataExportServiceProvider) != null;
+    final ringCount = demo
+        ? copyFor(context, 'Preview', 'Pré-visualização')
+        : ring.isLoading
+        ? copyFor(context, 'Loading…', 'A carregar…')
+        : ring.hasError
+        ? copyFor(context, 'Unavailable', 'Indisponível')
+        : dataset == null
+        ? copyFor(context, 'No records', 'Sem registos')
+        : '${dataset.recordCount}';
+    final journalCount = journal.isLoading
+        ? copyFor(context, 'Loading…', 'A carregar…')
+        : journal.hasError
+        ? copyFor(context, 'Unavailable', 'Indisponível')
+        : '${journal.value?.length ?? 0}';
     return _AppScreen(
       key: const Key('screen-data-hub'),
       activePath: '/you',
@@ -2802,66 +3273,97 @@ class DataHubScreen extends ConsumerWidget {
             label: copyFor(context, 'Back to You', 'Voltar ao perfil'),
             fallbackPath: '/you',
           ),
-          center: LibreRingEyebrow(copyFor(context, 'Data', 'Dados')),
-          trailing: _Confidence(
-            copyFor(context, 'On device', 'No dispositivo'),
+          center: LibreRingEyebrow(
+            copyFor(context, 'Your data', 'Os seus dados'),
           ),
+          trailing: const Icon(Icons.lock_outline_rounded, size: 19),
         ),
         const SizedBox(height: 24),
-        _DateLabel(
-          copyFor(
-            context,
-            'Portable · Inspectable · Removable',
-            'Portáteis · Inspecionáveis · Removíveis',
-          ),
-        ),
-        const SizedBox(height: 6),
         _Heading(
           copyFor(
             context,
-            'Your data has an exit.',
-            'Os seus dados têm saída.',
+            'Your data, in your hands.',
+            'Os seus dados, nas suas mãos.',
           ),
-          fontSize: 46,
+          fontSize: 32,
         ),
-        const SizedBox(height: 28),
+        const SizedBox(height: 10),
+        Text(
+          copyFor(
+            context,
+            'Export a copy or remove records from this phone.',
+            'Exporte uma cópia ou remova registos deste telemóvel.',
+          ),
+          style: Theme.of(context).textTheme.bodyMedium,
+        ),
+        const SizedBox(height: 24),
         LibreRingCard(
           child: Column(
             children: <Widget>[
               _CompactEvidenceRow(
                 title: copyFor(context, 'Ring history', 'Histórico do anel'),
-                value: '${dataset?.recordCount ?? 0}',
+                value: ringCount,
                 detail: copyFor(
                   context,
-                  'Decoded records · no raw packets',
-                  'Registos descodificados · sem pacotes brutos',
+                  'Stored on this phone',
+                  'Guardado neste telemóvel',
                 ),
               ),
               _CompactEvidenceRow(
                 title: copyFor(context, 'Manual context', 'Contexto manual'),
-                value: '${journal.value?.length ?? 0}',
+                value: journalCount,
                 detail: copyFor(
                   context,
-                  'Stored and deletable separately',
-                  'Guardado e eliminável separadamente',
+                  'Your journal and activity entries',
+                  'Os seus registos de diário e atividade',
                 ),
               ),
               _CompactEvidenceRow(
-                title: copyFor(context, 'BLE identifier', 'Identificador BLE'),
-                value: copyFor(context, 'Not stored', 'Não guardado'),
+                title: copyFor(
+                  context,
+                  'Device identity',
+                  'Identidade do dispositivo',
+                ),
+                value: copyFor(context, 'Private', 'Privada'),
                 detail: copyFor(
                   context,
-                  'Excluded from health storage and export',
-                  'Excluído do armazenamento de saúde e da exportação',
+                  'No Bluetooth identifier in your export',
+                  'Sem identificador Bluetooth na exportação',
                 ),
               ),
             ],
           ),
         ),
+        if (!demo && (ring.hasError || journal.hasError)) ...<Widget>[
+          const SizedBox(height: 16),
+          _AccentNote(
+            copyFor(
+              context,
+              'Some saved records could not be read. Existing files have been kept.',
+              'Não foi possível ler alguns registos. Os ficheiros existentes foram mantidos.',
+            ),
+          ),
+          TextButton(
+            key: const Key('retry-data-stores'),
+            onPressed: _busy != null
+                ? null
+                : () {
+                    if (ring.hasError) ref.invalidate(ringDataProvider);
+                    if (journal.hasError) ref.invalidate(journalProvider);
+                  },
+            child: Text(
+              copyFor(
+                context,
+                'Try loading again',
+                'Tentar carregar novamente',
+              ),
+            ),
+          ),
+        ],
         const SizedBox(height: 22),
         LibreRingPrimaryButton(
           key: const Key('create-data-export'),
-          label: export.isLoading
+          label: _busy == 'export' || export.isLoading
               ? copyFor(context, 'Creating export…', 'A criar exportação…')
               : copyFor(
                   context,
@@ -2869,29 +3371,41 @@ class DataHubScreen extends ConsumerWidget {
                   'Criar exportação JSON + CSV',
                 ),
           icon: Icons.download_outlined,
-          onPressed: !canExport || export.isLoading
+          onPressed: !canExport || _busy != null || export.isLoading
               ? null
-              : () async {
-                  try {
-                    await ref.read(dataExportProvider.notifier).create();
-                  } catch (_) {
-                    if (!context.mounted) return;
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          copyFor(
-                            context,
-                            'Export stopped safely. No existing data changed.',
-                            'A exportação parou em segurança. Nenhum dado existente foi alterado.',
-                          ),
-                        ),
-                      ),
-                    );
-                  }
-                },
+              : _createExport,
         ),
-        if (result != null) ...<Widget>[
+        if (!demo &&
+            !ring.isLoading &&
+            !ring.hasError &&
+            dataset == null) ...<Widget>[
+          const SizedBox(height: 12),
+          Text(
+            copyFor(
+              context,
+              'Sync your ring to create an export. Journal-only exports are not available yet.',
+              'Sincronize o anel para criar uma exportação. A exportação apenas do diário ainda não está disponível.',
+            ),
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ],
+        if (_message != null) ...<Widget>[
           const SizedBox(height: 16),
+          Semantics(
+            liveRegion: true,
+            child: Text(
+              _message!,
+              key: const Key('data-hub-feedback'),
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: _failed
+                    ? Theme.of(context).colorScheme.error
+                    : LibreRingTokens.sage,
+              ),
+            ),
+          ),
+        ],
+        if (result != null) ...<Widget>[
+          const SizedBox(height: 18),
           LibreRingCard(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -2904,41 +3418,32 @@ class DataHubScreen extends ConsumerWidget {
                     '${result.rowCount} linhas',
                   ),
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 8),
                 Text(
-                  'SHA-256 ${result.sha256.substring(0, 16)}…',
+                  copyFor(
+                    context,
+                    'Created ${DateFormat('d MMM, HH:mm').format(result.createdAtUtc.toLocal())} · JSON and CSV',
+                    'Criado ${DateFormat('d MMM, HH:mm').format(result.createdAtUtc.toLocal())} · JSON e CSV',
+                  ),
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 14),
                 OutlinedButton.icon(
                   key: const Key('share-data-export'),
-                  onPressed: () async {
-                    final box = context.findRenderObject() as RenderBox?;
-                    await SharePlus.instance.share(
-                      ShareParams(
-                        subject: copyFor(
-                          context,
-                          'LibreRing local data export',
-                          'Exportação local de dados do LibreRing',
-                        ),
-                        text: copyFor(
-                          context,
-                          '${result.rowCount} locally generated records · SHA-256 ${result.sha256}',
-                          '${result.rowCount} registos gerados localmente · SHA-256 ${result.sha256}',
-                        ),
-                        files: <XFile>[
-                          XFile(result.jsonFile.path),
-                          XFile(result.csvFile.path),
-                        ],
-                        sharePositionOrigin: box == null
-                            ? null
-                            : box.localToGlobal(Offset.zero) & box.size,
-                      ),
-                    );
-                  },
+                  onPressed: _busy != null ? null : () => _share(result),
                   icon: const Icon(Icons.ios_share, size: 18),
                   label: Text(
-                    copyFor(context, 'Share files', 'Partilhar ficheiros'),
+                    _busy == 'share'
+                        ? copyFor(
+                            context,
+                            'Opening share…',
+                            'A abrir partilha…',
+                          )
+                        : copyFor(
+                            context,
+                            'Share files',
+                            'Partilhar ficheiros',
+                          ),
                   ),
                 ),
               ],
@@ -2946,88 +3451,107 @@ class DataHubScreen extends ConsumerWidget {
           ),
         ],
         const SizedBox(height: 30),
-        _SectionHeading(title: copyFor(context, 'Delete', 'Eliminar')),
+        _SectionHeading(
+          title: copyFor(
+            context,
+            'Remove local records',
+            'Remover registos locais',
+          ),
+        ),
         _ActionTile(
           key: const Key('delete-manual-context'),
           icon: Icons.delete_outline,
-          title: copyFor(
-            context,
-            'Delete manual context',
-            'Eliminar contexto manual',
-          ),
-          body: copyFor(
-            context,
-            'Keeps ring measurements and prior exports',
-            'Mantém medições do anel e exportações anteriores',
-          ),
-          onTap: journal.value?.isEmpty ?? true
+          title: _busy == 'manual'
+              ? copyFor(context, 'Please wait…', 'Aguarde…')
+              : journal.hasError
+              ? copyFor(
+                  context,
+                  'Delete unreadable manual context',
+                  'Eliminar contexto manual ilegível',
+                )
+              : copyFor(
+                  context,
+                  'Delete manual context',
+                  'Eliminar contexto manual',
+                ),
+          body: syncing
+              ? copyFor(
+                  context,
+                  'Available after the current sync finishes',
+                  'Disponível após a sincronização atual',
+                )
+              : journal.hasError
+              ? copyFor(
+                  context,
+                  'Cannot preview this file · deletion cannot be undone',
+                  'Não é possível pré-visualizar · a eliminação não pode ser anulada',
+                )
+              : copyFor(
+                  context,
+                  'Keeps ring measurements and prior exports',
+                  'Mantém medições do anel e exportações anteriores',
+                ),
+          onTap:
+              _busy != null ||
+                  syncing ||
+                  journal.isLoading ||
+                  (journal.hasError &&
+                      ref.watch(journalRepositoryProvider) == null) ||
+                  (!journal.hasError && (journal.value?.isEmpty ?? true))
               ? null
-              : () async {
-                  final confirmed = await _confirm(
-                    context,
-                    title: copyFor(
-                      context,
-                      'Delete all manual context?',
-                      'Eliminar todo o contexto manual?',
-                    ),
-                    body: copyFor(
-                      context,
-                      'Ring measurements remain on this phone.',
-                      'As medições do anel permanecem neste telemóvel.',
-                    ),
-                  );
-                  if (confirmed) {
-                    await ref.read(journalProvider.notifier).deleteAll();
-                  }
-                },
+              : _deleteManual,
         ),
         _ActionTile(
           key: const Key('delete-ring-history-hub'),
           icon: Icons.delete_forever_outlined,
-          title: copyFor(
-            context,
-            'Delete ring history',
-            'Eliminar histórico do anel',
-          ),
-          body: copyFor(
-            context,
-            'Keeps manual context and exported files',
-            'Mantém contexto manual e ficheiros exportados',
-          ),
-          onTap: dataset == null
+          title: _busy == 'ring'
+              ? copyFor(context, 'Please wait…', 'Aguarde…')
+              : ring.hasError
+              ? copyFor(
+                  context,
+                  'Delete unreadable ring history',
+                  'Eliminar histórico ilegível do anel',
+                )
+              : copyFor(
+                  context,
+                  'Delete ring history',
+                  'Eliminar histórico do anel',
+                ),
+          body: syncing
+              ? copyFor(
+                  context,
+                  'Available after the current sync finishes',
+                  'Disponível após a sincronização atual',
+                )
+              : ring.hasError
+              ? copyFor(
+                  context,
+                  'Cannot preview this file · deletion cannot be undone',
+                  'Não é possível pré-visualizar · a eliminação não pode ser anulada',
+                )
+              : copyFor(
+                  context,
+                  'Keeps manual context and exported files',
+                  'Mantém contexto manual e ficheiros exportados',
+                ),
+          onTap:
+              _busy != null ||
+                  syncing ||
+                  ring.isLoading ||
+                  (ring.hasError &&
+                      ref.watch(ringDataRepositoryProvider) == null) ||
+                  (!ring.hasError && dataset == null)
               ? null
-              : () async {
-                  final confirmed = await _confirm(
-                    context,
-                    title: copyFor(
-                      context,
-                      'Delete all local ring history?',
-                      'Eliminar todo o histórico local do anel?',
-                    ),
-                    body: copyFor(
-                      context,
-                      'This removes decoded ring records from LibreRing. Manual context and files you already exported stay in place.',
-                      'Isto remove os registos descodificados do anel do LibreRing. O contexto manual e os ficheiros já exportados permanecem.',
-                    ),
-                  );
-                  if (!confirmed) return;
-                  await ref.read(ringDataProvider.notifier).deleteAll();
-                },
+              : _deleteRing,
         ),
-        _ActionTile(
-          key: const Key('data-hub-cycle-privacy'),
-          icon: Icons.lock_outline,
-          title: copyFor(
+        const SizedBox(height: 8),
+        Text(
+          copyFor(
             context,
-            'Cycle Context controls',
-            'Controlos do Contexto do ciclo',
+            'Exported files are separate copies. Deleting records here does not remove copies you have saved or shared.',
+            'Os ficheiros exportados são cópias separadas. Eliminar registos aqui não remove cópias guardadas ou partilhadas.',
           ),
-          body: copyFor(
-            context,
-            'Separate consent, export, and deletion boundary',
-            'Limite separado de consentimento, exportação e eliminação',
-          ),
-          onTap: () => context.go('/privacy/cycle'),
+          style: Theme.of(context).textTheme.bodySmall,
         ),
       ],
     );
@@ -3056,10 +3580,10 @@ class AboutScreen extends StatelessWidget {
       _Heading(
         copyFor(
           context,
-          'Premium health software without a private cloud.',
-          'Software de saúde premium sem uma nuvem privada.',
+          'Built around your privacy.',
+          'Feito a pensar na sua privacidade.',
         ),
-        fontSize: 44,
+        fontSize: 34,
       ),
       const SizedBox(height: 16),
       Text(
@@ -3110,14 +3634,89 @@ class AboutScreen extends StatelessWidget {
   );
 }
 
-class CyclePrivacyScreen extends ConsumerWidget {
+class CyclePrivacyScreen extends ConsumerStatefulWidget {
   const CyclePrivacyScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final settings = ref.watch(privacySettingsProvider);
-    final controller = ref.read(privacySettingsProvider.notifier);
+  ConsumerState<CyclePrivacyScreen> createState() => _CyclePrivacyScreenState();
+}
+
+class _CyclePrivacyScreenState extends ConsumerState<CyclePrivacyScreen> {
+  bool _deleting = false;
+
+  Future<void> _deleteRingData() async {
+    if (_deleting || ref.read(ringPairingProvider).syncInProgress) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(
+          copyFor(
+            dialogContext,
+            'Delete local ring data?',
+            'Eliminar dados locais do anel?',
+          ),
+        ),
+        content: Text(
+          copyFor(
+            dialogContext,
+            'This removes stored history from this phone. It does not erase the ring.',
+            'Isto remove o histórico guardado neste telemóvel. Não apaga o anel.',
+          ),
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: Text(copyFor(dialogContext, 'Cancel', 'Cancelar')),
+          ),
+          FilledButton(
+            key: const Key('confirm-delete-ring-data'),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(copyFor(dialogContext, 'Delete', 'Eliminar')),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    // Sync may have started while the confirmation was open.
+    if (ref.read(ringPairingProvider).syncInProgress) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            copyFor(
+              context,
+              'Let your ring finish syncing before deleting its history.',
+              'Deixe o anel terminar a sincronização antes de eliminar o histórico.',
+            ),
+          ),
+        ),
+      );
+      return;
+    }
+    setState(() => _deleting = true);
+    try {
+      await ref.read(ringDataProvider.notifier).deleteAll();
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            copyFor(
+              context,
+              'Could not delete local history. Your stored data is still available.',
+              'Não foi possível eliminar o histórico local. Os dados guardados continuam disponíveis.',
+            ),
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _deleting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final ringDataset = ref.watch(ringDataProvider).value;
+    final syncing = ref.watch(ringPairingProvider).syncInProgress;
     return _AppScreen(
       key: const Key('screen-cycle-privacy'),
       activePath: '/you',
@@ -3131,72 +3730,56 @@ class CyclePrivacyScreen extends ConsumerWidget {
           trailing: const SizedBox(width: 48),
         ),
         const SizedBox(height: 20),
-        _DateLabel(copyFor(context, 'Cycle data', 'Dados do ciclo')),
+        _DateLabel(copyFor(context, 'Cycle context', 'Contexto do ciclo')),
         const SizedBox(height: 4),
-        _Heading(
-          copyFor(
-            context,
-            'Choose what stays available',
-            'Escolha o que fica disponível',
-          ),
-        ),
+        _Heading(copyFor(context, 'Not available yet', 'Ainda não disponível')),
         const SizedBox(height: 10),
         Text(
           copyFor(
             context,
-            'Cycle entries are optional, stored locally, and excluded from recovery scoring.',
-            'Os registos do ciclo são opcionais, locais e excluídos da pontuação de recuperação.',
+            'Cycle tracking is not part of LibreRing yet. No cycle entries are collected, and there are no cycle predictions or export settings to enable.',
+            'O LibreRing ainda não inclui acompanhamento do ciclo. Não são recolhidos registos do ciclo e não existem previsões nem definições de exportação para ativar.',
           ),
           style: Theme.of(context).textTheme.bodySmall,
         ),
-        const SizedBox(height: 36),
-        _PrivacyRow(
-          title: copyFor(
-            context,
-            'Keep cycle entries on this phone',
-            'Manter registos do ciclo neste telemóvel',
-          ),
-          body: copyFor(
-            context,
-            'Turning this off removes local entries from future views.',
-            'Desativar remove os registos locais das vistas futuras.',
-          ),
-          value: settings.keepLocal,
-          onChanged: controller.setKeepLocal,
-          key: const Key('privacy-keep-local'),
-        ),
-        _PrivacyRow(
-          title: copyFor(
-            context,
-            'Use for personal trend context',
-            'Usar como contexto de tendência pessoal',
-          ),
-          body: copyFor(
-            context,
-            'Shows context beside trends. Never changes measured values.',
-            'Mostra contexto junto às tendências. Nunca altera valores medidos.',
-          ),
-          value: settings.useAsContext,
-          onChanged: settings.keepLocal ? controller.setUseAsContext : null,
-          key: const Key('privacy-use-context'),
-        ),
-        _PrivacyRow(
-          title: copyFor(context, 'Allow export', 'Permitir exportação'),
-          body: copyFor(
-            context,
-            'Requires a separate confirmation for every export.',
-            'Exige uma confirmação separada para cada exportação.',
-          ),
-          value: settings.allowExport,
-          onChanged: settings.keepLocal ? controller.setAllowExport : null,
-          key: const Key('privacy-allow-export'),
-        ),
-        const SizedBox(height: 24),
-        _AccentNote(
-          copyFor(
-            context,
-            'No cycle data is shared by changing these controls.',
-            'Nenhum dado do ciclo é partilhado ao alterar estes controlos.',
+        const SizedBox(height: 28),
+        LibreRingCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              const Icon(Icons.lock_outline, size: 26),
+              const SizedBox(height: 14),
+              Text(
+                copyFor(
+                  context,
+                  'Your existing data stays yours',
+                  'Os seus dados continuam a ser seus',
+                ),
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                copyFor(
+                  context,
+                  'Manage the ring history and journal entries that are actually stored on this phone.',
+                  'Faça a gestão do histórico do anel e dos registos do diário guardados neste telemóvel.',
+                ),
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              const SizedBox(height: 16),
+              OutlinedButton.icon(
+                key: const Key('cycle-data-controls'),
+                onPressed: () => context.go('/you/data'),
+                icon: const Icon(Icons.folder_outlined),
+                label: Text(
+                  copyFor(
+                    context,
+                    'Open data controls',
+                    'Abrir controlos de dados',
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
         if (ringDataset != null) ...<Widget>[
@@ -3221,49 +3804,24 @@ class CyclePrivacyScreen extends ConsumerWidget {
           const SizedBox(height: 14),
           OutlinedButton(
             key: const Key('delete-ring-data'),
-            onPressed: () async {
-              final confirmed = await showDialog<bool>(
-                context: context,
-                builder: (dialogContext) => AlertDialog(
-                  title: Text(
-                    copyFor(
-                      dialogContext,
-                      'Delete local ring data?',
-                      'Eliminar dados locais do anel?',
-                    ),
-                  ),
-                  content: Text(
-                    copyFor(
-                      dialogContext,
-                      'This removes stored history from this phone. It does not erase the ring.',
-                      'Isto remove o histórico guardado neste telemóvel. Não apaga o anel.',
-                    ),
-                  ),
-                  actions: <Widget>[
-                    TextButton(
-                      onPressed: () => Navigator.pop(dialogContext, false),
-                      child: Text(copyFor(dialogContext, 'Cancel', 'Cancelar')),
-                    ),
-                    FilledButton(
-                      key: const Key('confirm-delete-ring-data'),
-                      onPressed: () => Navigator.pop(dialogContext, true),
-                      child: Text(copyFor(dialogContext, 'Delete', 'Eliminar')),
-                    ),
-                  ],
-                ),
-              );
-              if (confirmed == true) {
-                await ref.read(ringDataProvider.notifier).deleteAll();
-              }
-            },
+            onPressed: syncing || _deleting ? null : _deleteRingData,
             child: Text(
               copyFor(
                 context,
-                'Delete local ring data',
-                'Eliminar dados locais do anel',
+                _deleting ? 'Deleting…' : 'Delete local ring data',
+                _deleting ? 'A eliminar…' : 'Eliminar dados locais do anel',
               ),
             ),
           ),
+          if (syncing)
+            Text(
+              copyFor(
+                context,
+                'Available after your ring finishes syncing.',
+                'Disponível quando o anel terminar a sincronização.',
+              ),
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
         ],
         const SizedBox(height: 24),
         LibreRingPrimaryButton(
@@ -3371,117 +3929,10 @@ class _AppScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: SafeArea(
-        bottom: activePath == null,
-        child: SingleChildScrollView(
-          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-          padding: const EdgeInsets.fromLTRB(24, 20, 24, 36),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: children,
-          ),
-        ),
-      ),
-      bottomNavigationBar: activePath == null
-          ? null
-          : _BottomNav(activePath: activePath!),
-    );
-  }
-}
-
-class _BottomNav extends StatelessWidget {
-  const _BottomNav({required this.activePath});
-
-  final String activePath;
-
-  @override
-  Widget build(BuildContext context) {
-    const items = <(String, String)>[
-      ('/today', 'Today'),
-      ('/vitals', 'Vitals'),
-      ('/trends', 'Trends'),
-      ('/you', 'You'),
-    ];
-    return ColoredBox(
-      color: Colors.transparent,
-      child: SafeArea(
-        top: false,
-        minimum: const EdgeInsets.only(bottom: 14),
-        child: Center(
-          heightFactor: 1,
-          child: Container(
-            width: MediaQuery.sizeOf(context).width - 32,
-            constraints: const BoxConstraints(maxWidth: 430),
-            height: 64,
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-            decoration: BoxDecoration(
-              color: LibreRingTokens.foreground,
-              borderRadius: BorderRadius.circular(18),
-            ),
-            child: Row(
-              children: items
-                  .map(((String, String) item) {
-                    final selected =
-                        activePath == item.$1 ||
-                        (item.$1 == '/vitals' && activePath == '/metrics');
-                    return Expanded(
-                      child: Semantics(
-                        selected: selected,
-                        label: item.$2,
-                        button: true,
-                        child: ExcludeSemantics(
-                          child: TextButton(
-                            onPressed: () => context.go(item.$1),
-                            style: TextButton.styleFrom(
-                              foregroundColor: selected
-                                  ? Colors.white
-                                  : const Color(0xFFC5C2BC),
-                              minimumSize: const Size(64, 48),
-                              padding: EdgeInsets.zero,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              mainAxisSize: MainAxisSize.min,
-                              children: <Widget>[
-                                Text(
-                                  item.$2,
-                                  maxLines: 1,
-                                  textScaler: TextScaler.noScaling,
-                                  style: const TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                                const SizedBox(height: 6),
-                                AnimatedContainer(
-                                  duration:
-                                      MediaQuery.disableAnimationsOf(context)
-                                      ? Duration.zero
-                                      : LibreRingTokens.fast,
-                                  curve: LibreRingTokens.curve,
-                                  width: selected ? 18 : 0,
-                                  height: 2,
-                                  decoration: BoxDecoration(
-                                    color: Colors.white,
-                                    borderRadius: BorderRadius.circular(2),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    );
-                  })
-                  .toList(growable: false),
-            ),
-          ),
-        ),
-      ),
+    return RingPageScaffold(
+      activePath: activePath,
+      scrollKey: key?.toString(),
+      children: children,
     );
   }
 }
@@ -3941,13 +4392,19 @@ class _ActionTile extends StatelessWidget {
 }
 
 class _JournalRow extends StatelessWidget {
-  const _JournalRow({required this.entry, required this.onDelete});
+  const _JournalRow({
+    required this.entry,
+    required this.onDelete,
+    this.deleting = false,
+  });
 
   final JournalEntry entry;
-  final VoidCallback onDelete;
+  final VoidCallback? onDelete;
+  final bool deleting;
 
   @override
   Widget build(BuildContext context) => Container(
+    key: Key('journal-entry-${entry.id}'),
     constraints: const BoxConstraints(minHeight: 82),
     decoration: const BoxDecoration(
       border: Border(bottom: BorderSide(color: LibreRingTokens.border)),
@@ -3974,17 +4431,27 @@ class _JournalRow extends StatelessWidget {
                 style: const TextStyle(fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: 3),
+              Text(entry.details, style: Theme.of(context).textTheme.bodySmall),
+              const SizedBox(height: 4),
               Text(
-                '${entry.details} · ${copyFor(context, 'You logged', 'Registado por si')}',
-                style: Theme.of(context).textTheme.bodySmall,
+                '${MaterialLocalizations.of(context).formatShortDate(entry.occurredAtUtc.toLocal())} · '
+                '${MaterialLocalizations.of(context).formatTimeOfDay(TimeOfDay.fromDateTime(entry.occurredAtUtc.toLocal()))}',
+                style: Theme.of(context).textTheme.labelSmall,
               ),
             ],
           ),
         ),
         IconButton(
+          key: Key('delete-journal-${entry.id}'),
           tooltip: copyFor(context, 'Delete entry', 'Eliminar registo'),
           onPressed: onDelete,
-          icon: const Icon(Icons.delete_outline, size: 19),
+          icon: deleting
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.delete_outline, size: 19),
         ),
       ],
     ),
@@ -4800,61 +5267,6 @@ class _FieldLabel extends StatelessWidget {
     child: Text(
       text,
       style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-    ),
-  );
-}
-
-class _PrivacyRow extends StatelessWidget {
-  const _PrivacyRow({
-    required this.title,
-    required this.body,
-    required this.value,
-    required this.onChanged,
-    super.key,
-  });
-
-  final String title;
-  final String body;
-  final bool value;
-  final ValueChanged<bool>? onChanged;
-
-  @override
-  Widget build(BuildContext context) => Container(
-    constraints: const BoxConstraints(minHeight: 96),
-    decoration: const BoxDecoration(
-      border: Border(bottom: BorderSide(color: LibreRingTokens.border)),
-    ),
-    child: Row(
-      children: <Widget>[
-        Expanded(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  body,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    height: 1.45,
-                    color: LibreRingTokens.muted,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(width: 12),
-        Switch(value: value, onChanged: onChanged),
-      ],
     ),
   );
 }

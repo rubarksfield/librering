@@ -8,6 +8,8 @@ import 'package:librering_mobile/src/storage/journal_repository.dart';
 import 'package:librering_mobile/src/storage/ring_data_repository.dart';
 import 'package:ring_core/ring_core.dart';
 
+final _now = DateTime(2026, 8, 26, 23, 30);
+
 void main() {
   test('returning production users launch directly into Today', () async {
     expect(
@@ -38,23 +40,29 @@ void main() {
     final repository = _MemoryRepository(_dataset());
 
     await tester.pumpWidget(
-      LibreRingApp(initialLocation: '/today', ringDataRepository: repository),
+      LibreRingApp(
+        currentLocalTime: _now,
+        initialLocation: '/today',
+        ringDataRepository: repository,
+      ),
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('8 hours of sleep was recorded.'), findsOneWidget);
+    expect(find.text('1h 0m'), findsOneWidget);
+    expect(find.textContaining('partial stages'), findsOneWidget);
     expect(find.byKey(const Key('domain-recovery')), findsNothing);
     expect(find.text('Recovery'), findsNothing);
     expect(find.text('500'), findsOneWidget);
     expect(find.text('82'), findsNothing);
     expect(find.textContaining('Demo data'), findsNothing);
 
-    await tester.tap(find.text('All signals'));
+    await tester.tap(find.byKey(const Key('tab-vitals')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('screen-metrics')), findsOneWidget);
     expect(find.text('500', findRichText: true), findsOneWidget);
-    expect(find.textContaining('64 bpm', findRichText: true), findsOneWidget);
-    expect(find.textContaining('95–98 %', findRichText: true), findsOneWidget);
+    expect(find.text('64'), findsOneWidget);
+    expect(find.text('62 bpm average'), findsOneWidget);
+    expect(find.text('95–98'), findsOneWidget);
   });
 
   testWidgets(
@@ -68,6 +76,7 @@ void main() {
 
       await tester.pumpWidget(
         LibreRingApp(
+          currentLocalTime: _now,
           initialLocation: '/privacy/cycle',
           ringDataRepository: repository,
         ),
@@ -96,6 +105,7 @@ void main() {
 
     await tester.pumpWidget(
       LibreRingApp(
+        currentLocalTime: _now,
         initialLocation: '/today',
         ringDataRepository: _MemoryRepository(_dataset()),
       ),
@@ -104,13 +114,16 @@ void main() {
 
     await tester.tap(find.bySemanticsLabel('Trends'));
     await tester.pumpAndSettle();
-    for (final key in <String>[
-      'trend-sleep',
-      'trend-pulse',
-      'trend-movement',
-      'trend-oxygen',
+    for (final metric in <(String, String)>[
+      ('Sleep', 'trend-sleep'),
+      ('Steps', 'trend-movement'),
+      ('Pulse', 'trend-pulse'),
+      ('Oxygen', 'trend-oxygen'),
     ]) {
-      expect(find.byKey(Key(key)), findsOneWidget);
+      await tester.ensureVisible(find.widgetWithText(ChoiceChip, metric.$1));
+      await tester.tap(find.widgetWithText(ChoiceChip, metric.$1));
+      await tester.pumpAndSettle();
+      expect(find.byKey(Key(metric.$2)), findsOneWidget);
     }
     expect(find.byKey(const Key('trend-range-selector')), findsOneWidget);
     await tester.tap(find.text('7 days'));
@@ -137,13 +150,9 @@ void main() {
       (
         '/movement',
         'screen-movement',
-        <String>['Today, hour by hour', 'Firmware kcal'],
+        <String>['Hour by hour', 'Active energy'],
       ),
-      (
-        '/sleep',
-        'screen-sleep',
-        <String>['Night architecture', 'Continuity, without a score'],
-      ),
+      ('/sleep', 'screen-sleep', <String>['Sleep stages', 'Sleep continuity']),
       (
         '/heart',
         'screen-heart',
@@ -152,26 +161,27 @@ void main() {
       (
         '/oxygen',
         'screen-oxygen',
-        <String>['Daily range map', 'not exact hourly averages'],
+        <String>['Daily range map', 'Captured range'],
       ),
       (
         '/signals/hrv-index',
         'screen-hrv-index',
-        <String>['unitless form', 'unit and calculation are unverified'],
+        <String>['unitless index', 'unit is unverified'],
       ),
       (
         '/signals/stress-index',
         'screen-stress-index',
-        <String>['unitless form', 'formula and thresholds are unverified'],
+        <String>['unitless index', 'scale has not been independently verified'],
       ),
       (
         '/you/ring/capabilities',
         'screen-capabilities',
-        <String>['Available locally', 'Not yet available'],
+        <String>['Supported readings', 'Not available in LibreRing yet'],
       ),
     ]) {
       await tester.pumpWidget(
         LibreRingApp(
+          currentLocalTime: _now,
           key: ValueKey<String>('analytics-${route.$1}'),
           initialLocation: route.$1,
           ringDataRepository: repository,
@@ -179,6 +189,12 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.byKey(Key(route.$2)), findsOneWidget, reason: route.$1);
+      final disclosure = find.byKey(const Key('analytics-source-disclosure'));
+      if (disclosure.evaluate().isNotEmpty) {
+        await tester.ensureVisible(disclosure);
+        await tester.tap(disclosure);
+        await tester.pumpAndSettle();
+      }
       for (final text in route.$3) {
         expect(find.textContaining(text), findsWidgets, reason: route.$1);
       }
@@ -198,6 +214,7 @@ void main() {
 
     await tester.pumpWidget(
       LibreRingApp(
+        currentLocalTime: _now,
         initialLocation: '/you/data',
         ringDataRepository: repository,
         dataExportService: exportService,
@@ -248,6 +265,7 @@ void main() {
     ]) {
       await tester.pumpWidget(
         LibreRingApp(
+          currentLocalTime: _now,
           key: ValueKey<String>('compact-$route'),
           initialLocation: route,
           ringDataRepository: _MemoryRepository(_dataset()),
@@ -301,8 +319,8 @@ class _MemoryExportService implements DataExportService {
 }
 
 RingSyncDataset _dataset() {
-  final localNow = DateTime.now();
-  final now = DateTime.now().toUtc();
+  final localNow = _now;
+  final now = _now.toUtc();
   final todayAtNoonUtc = DateTime(
     localNow.year,
     localNow.month,

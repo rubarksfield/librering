@@ -1,165 +1,337 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart' hide TextDirection;
 import 'package:ring_design_system/ring_design_system.dart';
 
 import 'app_state.dart';
+import 'presentation_data.dart';
 import 'ring_analytics.dart';
 import 'storage/journal_repository.dart';
+import 'storage/preferences_repository.dart';
+import 'ui/app_chrome.dart';
 
 String _copy(BuildContext context, String english, String portuguese) =>
     Localizations.localeOf(context).languageCode == 'pt' ? portuguese : english;
 
-class ProductDayTimelineScreen extends ConsumerWidget {
+String _timelineDuration(int minutes) => '${minutes ~/ 60}h ${minutes % 60}m';
+
+class ProductDayTimelineScreen extends ConsumerStatefulWidget {
   const ProductDayTimelineScreen({super.key});
+  @override
+  ConsumerState<ProductDayTimelineScreen> createState() =>
+      _ProductDayTimelineScreenState();
+}
+
+class _ProductDayTimelineScreenState
+    extends ConsumerState<ProductDayTimelineScreen> {
+  DateTime? _selectedDay;
+  String _filter = 'All';
+  int _visibleLimit = 40;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final demo = ref.watch(isDemoModeProvider);
-    final dataset = demo ? null : ref.watch(ringDataProvider).value;
-    final journal = ref.watch(journalProvider).value ?? const <JournalEntry>[];
+    final state = ref.watch(displayRingDataProvider);
+    final dataset = state.value;
+    final journalState = ref.watch(journalProvider);
+    final journal = journalState.value ?? const <JournalEntry>[];
+    final preferences =
+        ref.watch(appPreferencesProvider).value ?? const AppPreferences();
+    final now = ref.watch(currentLocalTimeProvider);
+    final today = RingCalendar.day(now);
+    final query = GoRouterState.of(context).uri.queryParameters['date'];
+    DateTime? requested;
+    if (query != null && RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(query)) {
+      final parsed = DateTime.tryParse(query);
+      if (parsed != null && DateFormat('yyyy-MM-dd').format(parsed) == query) {
+        requested = parsed;
+      }
+    }
+    var day = RingCalendar.day(_selectedDay ?? requested ?? today);
+    if (day.isAfter(today)) day = today;
+    final analytics = dataset == null
+        ? null
+        : RingAnalytics.fromDataset(dataset, localNow: now, selectedDay: day);
+    final journalDays = journal
+        .where((entry) => !entry.occurredAtUtc.isAfter(now))
+        .map((entry) => RingCalendar.day(entry.occurredAtUtc.toLocal()))
+        .toList();
+    final earliest = <DateTime>[analytics?.earliestDay ?? today, ...journalDays]
+      ..sort();
+    String route(String value) =>
+        '$value?date=${DateFormat('yyyy-MM-dd').format(day)}';
     final events = <_TimelineEvent>[];
-    if (dataset != null) {
-      final analytics = RingAnalytics.fromDataset(
-        dataset,
-        localNow: ref.watch(currentLocalTimeProvider),
-      );
-      final day = analytics.selectedDay;
-      final activity = analytics.activityFor(day);
-      final pulse = analytics.pulseFor(day);
-      final oxygen = analytics.oxygenFor(day);
-      if (dataset.sleep.isNotEmpty) {
-        final sessions = dataset.sleep.toList(growable: false)
-          ..sort((a, b) => a.endedAtUtc.compareTo(b.endedAtUtc));
-        final sleep = sessions.last;
+    if (analytics != null) {
+      for (final sleep in analytics.sleepOn(day)) {
         events.add(
           _TimelineEvent(
-            time: _clock(sleep.endedAtUtc),
-            title: _copy(
-              context,
-              'Sleep interval ended',
-              'Intervalo de sono terminou',
-            ),
-            detail: _copy(
-              context,
-              'Ring-recorded firmware interval',
-              'Intervalo do firmware registado pelo anel',
-            ),
-            provenance: _copy(context, 'Ring-recorded', 'Registado pelo anel'),
-          ),
-        );
-      }
-      if (activity.buckets.isNotEmpty) {
-        events.add(
-          _TimelineEvent(
-            time: _clock(activity.buckets.last.startedAtUtc),
-            title: _copy(
-              context,
-              '${activity.steps} steps retained',
-              '${activity.steps} passos retidos',
-            ),
-            detail: _copy(
-              context,
-              '${activity.coveredHours} covered hours · ${activity.firmwareCalories} firmware kcal',
-              '${activity.coveredHours} horas cobertas · ${activity.firmwareCalories} kcal do firmware',
-            ),
+            at: sleep.session.endedAtUtc,
+            title: sleep.stages.isEmpty
+                ? _copy(
+                    context,
+                    'Sleep window ended',
+                    'Intervalo de sono terminou',
+                  )
+                : _copy(
+                    context,
+                    'Estimated sleep · ${_timelineDuration(sleep.asleepStageMinutes)}',
+                    'Sono estimado · ${_timelineDuration(sleep.asleepStageMinutes)}',
+                  ),
+            detail:
+                '${_clock(sleep.session.startedAtUtc)} – ${_clock(sleep.session.endedAtUtc)}',
             provenance: _copy(context, 'Ring estimate', 'Estimativa do anel'),
+            category: 'Sleep',
+            route: route('/sleep'),
           ),
         );
       }
-      if (pulse.samples.isNotEmpty) {
+      for (final hour
+          in analytics
+              .activityFor(day)
+              .hourly
+              .where((value) => value.hasRecord)) {
         events.add(
           _TimelineEvent(
-            time: _clock(pulse.samples.last.at),
-            title: _copy(
-              context,
-              '${pulse.samples.last.value} bpm pulse sample',
-              'Amostra de pulso de ${pulse.samples.last.value} bpm',
-            ),
-            detail: _copy(
-              context,
-              '${pulse.samples.length} measured samples retained for the day',
-              '${pulse.samples.length} amostras medidas retidas para o dia',
-            ),
-            provenance: _copy(context, 'Ring-recorded', 'Registado pelo anel'),
-          ),
-        );
-      }
-      if (oxygen.ranges.isNotEmpty) {
-        events.add(
-          _TimelineEvent(
-            time: _clock(oxygen.ranges.last.hourStartedAtUtc),
-            title: _copy(
-              context,
-              'Oxygen sample range retained',
-              'Intervalo de oxigénio retido',
-            ),
-            detail: _copy(
-              context,
-              'Samples present · no validated result',
-              'Amostras presentes · sem resultado validado',
-            ),
+            at: hour.startedAt,
+            title:
+                '${NumberFormat.decimalPattern().format(hour.steps)}${_copy(context, ' steps', ' passos')}',
+            detail:
+                '${preferences.formatDistance(hour.distanceMeters)} · ${hour.firmwareCalories} kcal',
             provenance: _copy(
               context,
-              'Interpret with care',
-              'Interpretar com cuidado',
+              'Ring estimate · hourly',
+              'Estimativa do anel · hora',
             ),
+            category: 'Activity',
+            route: route('/movement'),
+          ),
+        );
+      }
+      for (final pulse in analytics.pulseFor(day).samples) {
+        events.add(
+          _TimelineEvent(
+            at: pulse.at,
+            title: '${pulse.value} bpm',
+            detail: _copy(
+              context,
+              'Heart rate reading',
+              'Leitura da frequência cardíaca',
+            ),
+            provenance: _copy(context, 'Ring reading', 'Leitura do anel'),
+            category: 'Vitals',
+            route: route('/heart'),
+          ),
+        );
+      }
+      for (final oxygen in analytics.oxygenFor(day).ranges) {
+        events.add(
+          _TimelineEvent(
+            at: oxygen.hourStartedAtUtc,
+            title: '${oxygen.minimumPercent}–${oxygen.maximumPercent}%',
+            detail: _copy(
+              context,
+              'Blood oxygen · hourly range',
+              'Oxigénio no sangue · intervalo horário',
+            ),
+            provenance: _copy(context, 'Ring reading', 'Leitura do anel'),
+            category: 'Vitals',
+            route: route('/oxygen'),
           ),
         );
       }
     }
     for (final entry in journal) {
+      if (!RingCalendar.sameDay(entry.occurredAtUtc, day) ||
+          entry.occurredAtUtc.isAfter(now)) {
+        continue;
+      }
       events.add(
         _TimelineEvent(
-          time: _clock(entry.occurredAtUtc),
+          at: entry.occurredAtUtc,
           title: entry.title,
           detail: entry.details,
-          provenance: _copy(context, 'Manual', 'Manual'),
+          provenance: _copy(context, 'Added by you', 'Adicionado por si'),
+          category: 'Journal',
+          route: '/journal',
         ),
       );
     }
-    events.sort((a, b) => b.time.compareTo(a.time));
-
-    return ProductSystemScaffold(
-      screenKey: const Key('screen-day-timeline'),
+    events.sort((a, b) => b.at.compareTo(a.at));
+    final visible = events
+        .where((event) => _filter == 'All' || event.category == _filter)
+        .toList();
+    return RingPageScaffold(
+      key: const Key('screen-day-timeline'),
       activePath: '/today',
-      showBack: true,
-      backLabel: _copy(context, 'Back to Today', 'Voltar a Hoje'),
-      backPath: '/today',
-      contextLabel: _copy(context, 'Today in context', 'Hoje em contexto'),
-      eyebrow: _copy(context, 'Timeline', 'Cronologia'),
-      title: _copy(
-        context,
-        'One day, without blending the sources.',
-        'Um dia, sem misturar as fontes.',
-      ),
-      intro: _copy(
-        context,
-        'Ring records and manual context share a timeline while keeping their provenance visible.',
-        'Os registos do anel e o contexto manual partilham uma cronologia, mantendo a origem visível.',
-      ),
+      scrollKey: 'day-timeline',
       children: <Widget>[
-        if (events.isEmpty)
-          _StatusPanel(
+        Row(
+          children: <Widget>[
+            IconButton(
+              tooltip: _copy(context, 'Back to Today', 'Voltar a Hoje'),
+              onPressed: () =>
+                  context.canPop() ? context.pop() : context.go('/today'),
+              icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
+            ),
+            Expanded(
+              child: Text(
+                _copy(context, 'Your day, in context', 'O seu dia em contexto'),
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+        RingDaySelector(
+          selectedDay: day,
+          earliestDay: earliest.first,
+          latestDay: today,
+          onChanged: (value) => setState(() {
+            _selectedDay = value;
+            _visibleLimit = 40;
+          }),
+        ),
+        const SizedBox(height: 16),
+        Text(
+          demo
+              ? _copy(
+                  context,
+                  'Example ring data · Your journal stays separate',
+                  'Exemplo do anel · O diário permanece separado',
+                )
+              : _copy(
+                  context,
+                  'Ring readings and moments you have added.',
+                  'Leituras do anel e momentos que adicionou.',
+                ),
+          style: const TextStyle(fontSize: 13, color: LibreRingTokens.muted),
+        ),
+        const SizedBox(height: 16),
+        if (journalState.hasError) ...<Widget>[
+          Text(
+            _copy(
+              context,
+              'Your journal could not be loaded.',
+              'Não foi possível abrir o diário.',
+            ),
+            style: const TextStyle(fontSize: 13),
+          ),
+          TextButton(
+            onPressed: () => ref.invalidate(journalProvider),
+            child: Text(
+              _copy(context, 'Retry journal', 'Tentar abrir o diário'),
+            ),
+          ),
+          const SizedBox(height: 8),
+        ],
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: <Widget>[
+            for (final category in const <String>[
+              'All',
+              'Activity',
+              'Sleep',
+              'Vitals',
+              'Journal',
+            ])
+              ChoiceChip(
+                key: Key('timeline-filter-${category.toLowerCase()}'),
+                label: Text(
+                  _copy(
+                    context,
+                    category,
+                    const <String, String>{
+                      'All': 'Tudo',
+                      'Activity': 'Atividade',
+                      'Sleep': 'Sono',
+                      'Vitals': 'Sinais',
+                      'Journal': 'Diário',
+                    }[category]!,
+                  ),
+                ),
+                selected: category == _filter,
+                onSelected: (_) => setState(() {
+                  _filter = category;
+                  _visibleLimit = 40;
+                }),
+              ),
+          ],
+        ),
+        const SizedBox(height: 20),
+        if (state.isLoading && !state.hasValue) const RingLoadingState(),
+        if (state.hasError && !state.hasValue)
+          RingEmptyState(
             title: _copy(
               context,
-              'No local events yet.',
-              'Ainda não há eventos locais.',
+              'Ring data could not be loaded',
+              'Não foi possível carregar os dados do anel',
             ),
             body: _copy(
               context,
-              'Sync the ring or add manual context. Missing history remains missing.',
-              'Sincronize o anel ou adicione contexto manual. O histórico em falta permanece em falta.',
+              'Try opening your saved readings again.',
+              'Tente abrir novamente as leituras guardadas.',
             ),
-          )
-        else
-          for (final event in events) _TimelineRow(event: event),
-        const SizedBox(height: 22),
-        OutlinedButton(
-          onPressed: () => context.go('/activity/sports'),
-          child: Text(
-            _copy(context, 'Add manual activity', 'Adicionar atividade manual'),
+            action: _copy(context, 'Try again', 'Tentar novamente'),
+            onAction: () => ref.invalidate(ringDataProvider),
           ),
+        if (visible.isEmpty &&
+            !state.isLoading &&
+            !state.hasError &&
+            !journalState.isLoading &&
+            !journalState.hasError)
+          RingEmptyState(
+            title: _copy(
+              context,
+              'No moments here yet',
+              'Ainda não há momentos aqui',
+            ),
+            body: _copy(
+              context,
+              'Choose another day or add an activity to your journal.',
+              'Escolha outro dia ou adicione uma atividade ao diário.',
+            ),
+            icon: Icons.event_note_outlined,
+          ),
+        if (visible.isNotEmpty) ...<Widget>[
+          Text(
+            visible.length.toString() +
+                _copy(
+                  context,
+                  ' moments · latest first',
+                  ' momentos · mais recentes primeiro',
+                ),
+            style: const TextStyle(fontSize: 12, color: LibreRingTokens.muted),
+          ),
+          const SizedBox(height: 8),
+          for (final event in visible.take(_visibleLimit))
+            Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: event.route == null
+                    ? null
+                    : () => context.push(event.route!),
+                child: _TimelineRow(event: event),
+              ),
+            ),
+          if (visible.length > _visibleLimit)
+            TextButton.icon(
+              key: const Key('timeline-show-more'),
+              onPressed: () => setState(() => _visibleLimit += 40),
+              icon: const Icon(Icons.expand_more_rounded),
+              label: Text(
+                _copy(context, 'Show more moments', 'Ver mais momentos'),
+              ),
+            ),
+        ],
+        const SizedBox(height: 22),
+        LibreRingPrimaryButton(
+          label: _copy(context, 'Add an activity', 'Adicionar uma atividade'),
+          icon: Icons.add_rounded,
+          onPressed: () => context.push(route('/activity/sports')),
         ),
       ],
     );
@@ -412,6 +584,13 @@ class _ActivityLogScreenState extends ConsumerState<ActivityLogScreen> {
   final note = TextEditingController();
   String effort = 'Moderate';
   bool saved = false;
+  bool saving = false;
+  String? error;
+
+  void _changed() => setState(() {
+    saved = false;
+    error = null;
+  });
 
   @override
   void dispose() {
@@ -447,7 +626,16 @@ class _ActivityLogScreenState extends ConsumerState<ActivityLogScreen> {
         TextField(
           key: const Key('activity-duration'),
           controller: duration,
+          readOnly: saving,
           keyboardType: TextInputType.number,
+          onChanged: (_) => _changed(),
+          decoration: InputDecoration(
+            labelText: _copy(
+              context,
+              'Duration in minutes',
+              'Duração em minutos',
+            ),
+          ),
         ),
         const SizedBox(height: 16),
         _FieldLabel(label: _copy(context, 'Effort', 'Esforço')),
@@ -459,7 +647,13 @@ class _ActivityLogScreenState extends ConsumerState<ActivityLogScreen> {
                 (value) => DropdownMenuItem(value: value, child: Text(value)),
               )
               .toList(growable: false),
-          onChanged: (value) => setState(() => effort = value ?? effort),
+          onChanged: saving
+              ? null
+              : (value) => setState(() {
+                  effort = value ?? effort;
+                  saved = false;
+                  error = null;
+                }),
         ),
         const SizedBox(height: 16),
         _FieldLabel(
@@ -468,8 +662,13 @@ class _ActivityLogScreenState extends ConsumerState<ActivityLogScreen> {
         TextField(
           key: const Key('activity-note'),
           controller: note,
+          readOnly: saving,
           maxLength: 160,
           maxLines: 3,
+          onChanged: (_) => _changed(),
+          decoration: InputDecoration(
+            labelText: _copy(context, 'Activity note', 'Nota da atividade'),
+          ),
         ),
         const SizedBox(height: 12),
         _SourceNote(
@@ -480,14 +679,24 @@ class _ActivityLogScreenState extends ConsumerState<ActivityLogScreen> {
           ),
         ),
         const SizedBox(height: 18),
+        if (error != null) ...<Widget>[
+          Text(
+            error!,
+            style: TextStyle(color: Theme.of(context).colorScheme.error),
+          ),
+          const SizedBox(height: 12),
+        ],
         LibreRingPrimaryButton(
           key: const Key('save-activity'),
-          label: saved
+          label: saving
+              ? _copy(context, 'Saving…', 'A guardar…')
+              : saved
               ? _copy(context, 'Saved locally', 'Guardado localmente')
               : _copy(context, 'Save activity', 'Guardar atividade'),
-          onPressed: saved
+          onPressed: saved || saving
               ? null
               : () async {
+                  if (saving || saved) return;
                   final minutes = int.tryParse(duration.text.trim());
                   if (minutes == null || minutes < 1 || minutes > 1440) {
                     ScaffoldMessenger.of(context).showSnackBar(
@@ -503,14 +712,33 @@ class _ActivityLogScreenState extends ConsumerState<ActivityLogScreen> {
                     );
                     return;
                   }
-                  await ref
-                      .read(journalProvider.notifier)
-                      .saveCheckIn(
-                        tags: <String>['Exercise', activityName],
-                        note:
-                            '$minutes minutes · $effort${note.text.trim().isEmpty ? '' : ' · ${note.text.trim()}'}',
+                  FocusScope.of(context).unfocus();
+                  setState(() {
+                    saving = true;
+                    error = null;
+                  });
+                  try {
+                    await ref
+                        .read(journalProvider.notifier)
+                        .saveCheckIn(
+                          tags: <String>['Exercise', activityName],
+                          note:
+                              '$minutes minutes · $effort${note.text.trim().isEmpty ? '' : ' · ${note.text.trim()}'}',
+                        );
+                    if (mounted) setState(() => saved = true);
+                  } catch (_) {
+                    if (mounted) {
+                      setState(
+                        () => error = _copy(
+                          context,
+                          'Could not save this activity. Your entry is still here; try again.',
+                          'Não foi possível guardar a atividade. O registo continua aqui; tente novamente.',
+                        ),
                       );
-                  if (mounted) setState(() => saved = true);
+                    }
+                  } finally {
+                    if (mounted) setState(() => saving = false);
+                  }
                 },
         ),
       ],
@@ -518,96 +746,307 @@ class _ActivityLogScreenState extends ConsumerState<ActivityLogScreen> {
   }
 }
 
-class ProfilePreferencesScreen extends StatefulWidget {
+class ProfilePreferencesScreen extends ConsumerStatefulWidget {
   const ProfilePreferencesScreen({super.key});
 
   @override
-  State<ProfilePreferencesScreen> createState() =>
+  ConsumerState<ProfilePreferencesScreen> createState() =>
       _ProfilePreferencesScreenState();
 }
 
-class _ProfilePreferencesScreenState extends State<ProfilePreferencesScreen> {
+class _ProfilePreferencesScreenState
+    extends ConsumerState<ProfilePreferencesScreen> {
+  final _formKey = GlobalKey<FormState>();
   final name = TextEditingController();
-  String units = 'Metric';
-  String focus = 'Balanced';
-  String notifications = 'Important insights only';
+  final steps = TextEditingController();
+  final sleepHours = TextEditingController();
+  UnitSystem units = UnitSystem.metric;
+  bool _hydrated = false;
+  bool _saved = false;
+  bool _saving = false;
+  String? _error;
+
+  void _changed() => setState(() {
+    _saved = false;
+    _error = null;
+  });
 
   @override
   void dispose() {
     name.dispose();
+    steps.dispose();
+    sleepHours.dispose();
     super.dispose();
   }
 
   @override
-  Widget build(BuildContext context) => ProductSystemScaffold(
-    screenKey: const Key('screen-profile-preferences'),
-    showBack: true,
-    backLabel: _copy(context, 'Back to You', 'Voltar ao Perfil'),
-    backPath: '/you',
-    contextLabel: _copy(context, 'Personal settings', 'Definições pessoais'),
-    eyebrow: _copy(context, 'Profile and preferences', 'Perfil e preferências'),
-    title: _copy(
-      context,
-      'Make the product useful without making it noisy.',
-      'Torne o produto útil sem o tornar ruidoso.',
-    ),
-    children: <Widget>[
-      _FieldLabel(
-        label: _copy(context, 'Display name', 'Nome de apresentação'),
+  Widget build(BuildContext context) {
+    final preferences = ref.watch(appPreferencesProvider);
+    final demo = ref.watch(isDemoModeProvider);
+    if (!_hydrated && preferences.value != null) {
+      final value = preferences.requireValue;
+      name.text = value.displayName;
+      steps.text = '${value.dailyStepGoal}';
+      sleepHours.text = NumberFormat('0.0#')
+          .format(value.sleepTargetMinutes / 60);
+      units = value.unitSystem;
+      _hydrated = true;
+    }
+    return ProductSystemScaffold(
+      screenKey: const Key('screen-profile-preferences'),
+      showBack: true,
+      backLabel: _copy(context, 'Back to You', 'Voltar ao Perfil'),
+      backPath: '/you',
+      contextLabel: _copy(context, 'Personal settings', 'Definições pessoais'),
+      eyebrow: _copy(
+        context,
+        'Profile and preferences',
+        'Perfil e preferências',
       ),
-      TextField(controller: name, textCapitalization: TextCapitalization.words),
-      const SizedBox(height: 16),
-      _FieldLabel(label: _copy(context, 'Units', 'Unidades')),
-      DropdownButtonFormField<String>(
-        initialValue: units,
-        isExpanded: true,
-        items: <String>['Metric', 'Imperial']
-            .map((value) => DropdownMenuItem(value: value, child: Text(value)))
-            .toList(growable: false),
-        onChanged: (value) => setState(() => units = value ?? units),
-      ),
-      const SizedBox(height: 16),
-      _FieldLabel(label: _copy(context, 'Daily emphasis', 'Ênfase diária')),
-      DropdownButtonFormField<String>(
-        initialValue: focus,
-        isExpanded: true,
-        items: <String>['Balanced', 'Sleep', 'Activity']
-            .map((value) => DropdownMenuItem(value: value, child: Text(value)))
-            .toList(growable: false),
-        onChanged: (value) => setState(() => focus = value ?? focus),
-      ),
-      const SizedBox(height: 16),
-      _FieldLabel(label: _copy(context, 'Notifications', 'Notificações')),
-      DropdownButtonFormField<String>(
-        initialValue: notifications,
-        isExpanded: true,
-        items: <String>['Important insights only', 'Morning and evening', 'Off']
-            .map((value) => DropdownMenuItem(value: value, child: Text(value)))
-            .toList(growable: false),
-        onChanged: (value) =>
-            setState(() => notifications = value ?? notifications),
-      ),
-      const SizedBox(height: 20),
-      LibreRingPrimaryButton(
-        label: _copy(
-          context,
-          'Save for this session',
-          'Guardar para esta sessão',
-        ),
-        onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              _copy(
-                context,
-                'Preferences applied for this session.',
-                'Preferências aplicadas a esta sessão.',
+      title: _copy(context, 'Make it yours.', 'À sua medida.'),
+      intro: demo
+          ? _copy(
+              context,
+              'Try your own preferences. Preview settings reset when you close the app.',
+              'Experimente as suas preferências. Nesta demonstração, são repostas quando fecha a aplicação.',
+            )
+          : _copy(
+              context,
+              'Your name, units and personal targets stay on this phone.',
+              'O seu nome, unidades e objetivos pessoais ficam neste telemóvel.',
+            ),
+      children: <Widget>[
+        if (!_hydrated && preferences.isLoading)
+          const Center(child: CircularProgressIndicator())
+        else if (!_hydrated && preferences.hasError)
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _StatusPanel(
+                title: _copy(
+                  context,
+                  'Preferences could not be loaded',
+                  'Não foi possível ler as preferências',
+                ),
+                body: _copy(
+                  context,
+                  'Your saved file has been kept. Try loading it again.',
+                  'O ficheiro guardado foi mantido. Tente voltar a carregá-lo.',
+                ),
               ),
+              const SizedBox(height: 12),
+              OutlinedButton(
+                onPressed: () => ref.invalidate(appPreferencesProvider),
+                child: Text(_copy(context, 'Try again', 'Tentar novamente')),
+              ),
+            ],
+          )
+        else
+          Form(
+            key: _formKey,
+            onChanged: _changed,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                _FieldLabel(
+                  label: _copy(context, 'Display name', 'Nome de apresentação'),
+                ),
+                TextFormField(
+                  key: const Key('preferences-name'),
+                  controller: name,
+                  readOnly: _saving,
+                  textCapitalization: TextCapitalization.words,
+                  maxLength: 40,
+                  decoration: InputDecoration(
+                    labelText: _copy(
+                      context,
+                      'Your name (optional)',
+                      'O seu nome (opcional)',
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                _FieldLabel(label: _copy(context, 'Units', 'Unidades')),
+                DropdownButtonFormField<UnitSystem>(
+                  key: const Key('preferences-units'),
+                  initialValue: units,
+                  isExpanded: true,
+                  decoration: InputDecoration(
+                    labelText: _copy(
+                      context,
+                      'Distance units',
+                      'Unidades de distância',
+                    ),
+                  ),
+                  items: <DropdownMenuItem<UnitSystem>>[
+                    DropdownMenuItem(
+                      value: UnitSystem.metric,
+                      child: Text(_copy(context, 'Kilometres', 'Quilómetros')),
+                    ),
+                    DropdownMenuItem(
+                      value: UnitSystem.imperial,
+                      child: Text(_copy(context, 'Miles', 'Milhas')),
+                    ),
+                  ],
+                  onChanged: _saving
+                      ? null
+                      : (value) => setState(() => units = value ?? units),
+                ),
+                const SizedBox(height: 16),
+                _FieldLabel(
+                  label: _copy(
+                    context,
+                    'Daily step goal',
+                    'Objetivo diário de passos',
+                  ),
+                ),
+                TextFormField(
+                  key: const Key('preferences-step-goal'),
+                  controller: steps,
+                  readOnly: _saving,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(
+                    labelText: _copy(
+                      context,
+                      'Steps per day',
+                      'Passos por dia',
+                    ),
+                  ),
+                  validator: (value) {
+                    final parsed = int.tryParse(value?.trim() ?? '');
+                    return parsed == null || parsed < 500 || parsed > 50000
+                        ? _copy(
+                            context,
+                            'Choose 500–50,000 steps.',
+                            'Escolha 500–50.000 passos.',
+                          )
+                        : null;
+                  },
+                ),
+                const SizedBox(height: 16),
+                _FieldLabel(
+                  label: _copy(context, 'Sleep target', 'Objetivo de sono'),
+                ),
+                TextFormField(
+                  key: const Key('preferences-sleep-target'),
+                  controller: sleepHours,
+                  readOnly: _saving,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  decoration: InputDecoration(
+                    labelText: _copy(
+                      context,
+                      'Hours per night',
+                      'Horas por noite',
+                    ),
+                  ),
+                  validator: (value) {
+                    final parsed = double.tryParse(
+                      value?.trim().replaceAll(',', '.') ?? '',
+                    );
+                    return parsed == null ||
+                            !parsed.isFinite ||
+                            parsed < 4 ||
+                            parsed > 12
+                        ? _copy(
+                            context,
+                            'Choose 4–12 hours.',
+                            'Escolha 4–12 horas.',
+                          )
+                        : null;
+                  },
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  _copy(
+                    context,
+                    'Targets are your own preferences, not a health recommendation.',
+                    'Os objetivos são preferências pessoais, não uma recomendação de saúde.',
+                  ),
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const SizedBox(height: 20),
+                if (_error != null) ...<Widget>[
+                  Text(
+                    _error!,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+                LibreRingPrimaryButton(
+                  key: const Key('save-preferences'),
+                  label: _saving
+                      ? _copy(context, 'Saving…', 'A guardar…')
+                      : _saved
+                      ? _copy(
+                          context,
+                          demo
+                              ? 'Saved for this preview'
+                              : 'Saved on this phone',
+                          demo
+                              ? 'Guardado nesta demonstração'
+                              : 'Guardado neste telemóvel',
+                        )
+                      : _copy(
+                          context,
+                          'Save preferences',
+                          'Guardar preferências',
+                        ),
+                  onPressed: _saving || _saved
+                      ? null
+                      : () async {
+                          if (_saving || _saved) return;
+                          if (!(_formKey.currentState?.validate() ?? false)) {
+                            return;
+                          }
+                          FocusScope.of(context).unfocus();
+                          setState(() {
+                            _saving = true;
+                            _error = null;
+                          });
+                          try {
+                            await ref
+                                .read(appPreferencesProvider.notifier)
+                                .save(
+                                  AppPreferences(
+                                    displayName: name.text.trim(),
+                                    unitSystem: units,
+                                    dailyStepGoal: int.parse(steps.text.trim()),
+                                    sleepTargetMinutes:
+                                        (double.parse(
+                                                  sleepHours.text
+                                                      .trim()
+                                                      .replaceAll(',', '.'),
+                                                ) *
+                                                60)
+                                            .round(),
+                                  ),
+                                );
+                            if (mounted) setState(() => _saved = true);
+                          } catch (_) {
+                            if (mounted) {
+                              setState(
+                                () => _error = _copy(
+                                  context,
+                                  'Could not save. Your changes are still here; try again.',
+                                  'Não foi possível guardar. As alterações continuam aqui; tente novamente.',
+                                ),
+                              );
+                            }
+                          } finally {
+                            if (mounted) setState(() => _saving = false);
+                          }
+                        },
+                ),
+              ],
             ),
           ),
-        ),
-      ),
-    ],
-  );
+      ],
+    );
+  }
 }
 
 class SyncIssueScreen extends ConsumerWidget {
@@ -621,21 +1060,19 @@ class SyncIssueScreen extends ConsumerWidget {
       showBack: true,
       backLabel: _copy(context, 'Back to Device', 'Voltar ao Dispositivo'),
       backPath: '/you/ring',
-      contextLabel: _copy(
-        context,
-        'Past sync issue',
-        'Problema de sincronização anterior',
-      ),
-      eyebrow: _copy(context, 'Connection history', 'Histórico de ligação'),
-      title: _copy(
-        context,
-        'The ring moved out of range.',
-        'O anel ficou fora de alcance.',
-      ),
+      contextLabel: _copy(context, 'Sync support', 'Ajuda com a sincronização'),
+      eyebrow: _copy(context, 'Connection', 'Ligação'),
+      title: pairing.syncError == null
+          ? _copy(
+              context,
+              'Ready for your next sync.',
+              'Pronto para sincronizar.',
+            )
+          : _copy(context, 'Let’s get you connected.', 'Vamos voltar a ligar.'),
       intro: _copy(
         context,
-        'No local records were deleted. A later successful sync can complete a missing interval.',
-        'Nenhum registo local foi eliminado. Uma sincronização posterior pode completar um intervalo em falta.',
+        'Keep the ring near your phone, enable Bluetooth and close other apps connected to the ring.',
+        'Mantenha o anel perto do telemóvel, ative o Bluetooth e feche outras aplicações ligadas ao anel.',
       ),
       children: <Widget>[
         _StatusPanel(
@@ -650,8 +1087,8 @@ class SyncIssueScreen extends ConsumerWidget {
               pairing.syncError ??
               _copy(
                 context,
-                'Connection history is informational. Missing data is never shown as zero.',
-                'O histórico de ligação é informativo. Dados em falta nunca são mostrados como zero.',
+                'No sync error has been reported in this session.',
+                'Nenhum erro de sincronização foi registado nesta sessão.',
               ),
         ),
         const SizedBox(height: 18),
@@ -906,172 +1343,72 @@ class ProductSystemScaffold extends StatelessWidget {
   final List<Widget> children;
 
   @override
-  Widget build(BuildContext context) => Scaffold(
+  Widget build(BuildContext context) => RingPageScaffold(
     key: screenKey,
-    body: SafeArea(
-      bottom: activePath == null,
-      child: SingleChildScrollView(
-        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-        padding: const EdgeInsets.fromLTRB(24, 20, 24, 40),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Row(
-              children: <Widget>[
-                if (showBack)
-                  IconButton(
-                    tooltip: backLabel,
-                    onPressed: () => context.canPop()
-                        ? context.pop()
-                        : context.go(backPath ?? '/today'),
-                    icon: const Icon(Icons.arrow_back, size: 20),
-                  )
-                else
-                  const LibreRingWordmark(),
-                const Spacer(),
-                if (!showBack)
-                  Text(
-                    _copy(context, 'Stored locally', 'Guardado localmente'),
-                    style: const TextStyle(
-                      fontSize: 11,
-                      color: LibreRingTokens.muted,
-                    ),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 28),
-            if (contextLabel != null) ...<Widget>[
-              Text(
-                contextLabel!,
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: LibreRingTokens.muted,
-                ),
-              ),
-              const SizedBox(height: 8),
-            ],
-            LibreRingEyebrow(eyebrow),
-            const SizedBox(height: 8),
+    activePath: activePath,
+    scrollKey: screenKey.toString(),
+    children: <Widget>[
+      Row(
+        children: <Widget>[
+          if (showBack)
+            IconButton(
+              tooltip: backLabel,
+              onPressed: () => context.canPop()
+                  ? context.pop()
+                  : context.go(backPath ?? '/today'),
+              icon: const Icon(Icons.arrow_back, size: 20),
+            )
+          else
+            const LibreRingWordmark(),
+          const Spacer(),
+          if (!showBack)
             Text(
-              title,
-              style: Theme.of(context).textTheme.displayMedium?.copyWith(
-                color: LibreRingTokens.accent,
-                fontSize: 42,
-                height: 1.02,
-                letterSpacing: -1.8,
+              _copy(context, 'Stored locally', 'Guardado localmente'),
+              style: const TextStyle(
+                fontSize: 11,
+                color: LibreRingTokens.muted,
               ),
             ),
-            if (intro != null) ...<Widget>[
-              const SizedBox(height: 16),
-              Text(intro!, style: Theme.of(context).textTheme.bodyMedium),
-            ],
-            const SizedBox(height: 30),
-            ...children,
-          ],
+        ],
+      ),
+      const SizedBox(height: 22),
+      LibreRingEyebrow(eyebrow),
+      const SizedBox(height: 8),
+      Text(
+        title,
+        style: Theme.of(context).textTheme.displayMedium?.copyWith(
+          color: LibreRingTokens.foreground,
+          fontSize: 32,
+          height: 1.1,
+          letterSpacing: -.9,
         ),
       ),
-    ),
-    bottomNavigationBar: activePath == null
-        ? null
-        : _ProductBottomNav(activePath: activePath!),
+      if (intro != null) ...<Widget>[
+        const SizedBox(height: 12),
+        Text(intro!, style: Theme.of(context).textTheme.bodyMedium),
+      ],
+      const SizedBox(height: 24),
+      ...children,
+    ],
   );
-}
-
-class _ProductBottomNav extends StatelessWidget {
-  const _ProductBottomNav({required this.activePath});
-
-  final String activePath;
-
-  @override
-  Widget build(BuildContext context) {
-    const items = <(String, String)>[
-      ('/today', 'Today'),
-      ('/vitals', 'Vitals'),
-      ('/trends', 'Trends'),
-      ('/you', 'You'),
-    ];
-    return SafeArea(
-      top: false,
-      minimum: const EdgeInsets.only(bottom: 14),
-      child: Center(
-        heightFactor: 1,
-        child: Container(
-          width: MediaQuery.sizeOf(context).width - 32,
-          constraints: const BoxConstraints(maxWidth: 430),
-          height: 64,
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-          decoration: BoxDecoration(
-            color: LibreRingTokens.foreground,
-            borderRadius: BorderRadius.circular(18),
-          ),
-          child: Row(
-            children: items
-                .map((item) {
-                  final selected = item.$1 == activePath;
-                  return Expanded(
-                    child: Semantics(
-                      button: true,
-                      selected: selected,
-                      label: item.$2,
-                      child: ExcludeSemantics(
-                        child: TextButton(
-                          onPressed: () => context.go(item.$1),
-                          style: TextButton.styleFrom(
-                            foregroundColor: selected
-                                ? Colors.white
-                                : const Color(0xFFC5C2BC),
-                            minimumSize: const Size(64, 48),
-                            padding: EdgeInsets.zero,
-                          ),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            mainAxisSize: MainAxisSize.min,
-                            children: <Widget>[
-                              Text(
-                                item.$2,
-                                textScaler: TextScaler.noScaling,
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              const SizedBox(height: 6),
-                              AnimatedContainer(
-                                duration:
-                                    MediaQuery.disableAnimationsOf(context)
-                                    ? Duration.zero
-                                    : LibreRingTokens.fast,
-                                curve: LibreRingTokens.curve,
-                                width: selected ? 18 : 0,
-                                height: 2,
-                                color: Colors.white,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  );
-                })
-                .toList(growable: false),
-          ),
-        ),
-      ),
-    );
-  }
 }
 
 class _TimelineEvent {
   const _TimelineEvent({
-    required this.time,
+    required this.at,
     required this.title,
     required this.detail,
     required this.provenance,
+    this.category = 'All',
+    this.route,
   });
-  final String time;
+  final DateTime at;
+  String get time => _clock(at);
   final String title;
   final String detail;
   final String provenance;
+  final String category;
+  final String? route;
 }
 
 class _TimelineRow extends StatelessWidget {
@@ -1079,52 +1416,73 @@ class _TimelineRow extends StatelessWidget {
   final _TimelineEvent event;
 
   @override
-  Widget build(BuildContext context) => Container(
-    constraints: const BoxConstraints(minHeight: 88),
-    decoration: const BoxDecoration(
-      border: Border(bottom: BorderSide(color: LibreRingTokens.border)),
-    ),
-    padding: const EdgeInsets.symmetric(vertical: 14),
-    child: Row(
+  Widget build(BuildContext context) {
+    final largeText = MediaQuery.textScalerOf(context).scale(1) > 1.3;
+    final content = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        SizedBox(
-          width: 52,
-          child: Text(
-            event.time,
-            style: const TextStyle(fontSize: 11, color: LibreRingTokens.muted),
-          ),
+        Text(
+          event.title,
+          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
         ),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Text(
-                event.title,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 3),
-              Text(
-                event.detail,
-                style: const TextStyle(
-                  fontSize: 11,
-                  color: LibreRingTokens.muted,
-                ),
-              ),
-            ],
+        const SizedBox(height: 5),
+        if (event.detail.isNotEmpty)
+          Text(
+            event.detail,
+            style: const TextStyle(fontSize: 13, color: LibreRingTokens.muted),
           ),
-        ),
-        const SizedBox(width: 10),
+        const SizedBox(height: 6),
         Text(
           event.provenance,
-          style: const TextStyle(fontSize: 9, color: LibreRingTokens.accent),
+          style: const TextStyle(fontSize: 12, color: LibreRingTokens.sage),
         ),
       ],
-    ),
-  );
+    );
+    return Container(
+      constraints: const BoxConstraints(minHeight: 88),
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: LibreRingTokens.border)),
+      ),
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      child: largeText
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  event.time,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: LibreRingTokens.muted,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                content,
+              ],
+            )
+          : Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                SizedBox(
+                  width: 58,
+                  child: Text(
+                    event.time,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: LibreRingTokens.muted,
+                    ),
+                  ),
+                ),
+                Expanded(child: content),
+                const SizedBox(width: 8),
+                const Icon(
+                  Icons.chevron_right_rounded,
+                  size: 18,
+                  color: LibreRingTokens.muted,
+                ),
+              ],
+            ),
+    );
+  }
 }
 
 class _StatusPanel extends StatelessWidget {

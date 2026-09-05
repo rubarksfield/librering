@@ -140,4 +140,84 @@ void main() {
       ProductConfidence.unavailable,
     );
   });
+
+  test(
+    'sleep windows include all sessions without counting overlaps twice',
+    () {
+      final now = DateTime(2026, 8, 26, 20);
+      RingSleepSession session(int startHour, int endHour) => RingSleepSession(
+        startedAtUtc: DateTime(2026, 8, 26, startHour).toUtc(),
+        endedAtUtc: DateTime(2026, 8, 26, endHour).toUtc(),
+        stages: const [],
+      );
+      final view = RingProductView.fromDataset(
+        RingSyncDataset(
+          lastSyncedAtUtc: now.toUtc(),
+          source: const RingDataSource(driverId: 'test'),
+          availability: const {},
+          sleep: [session(0, 7), session(6, 8), session(14, 15)],
+        ),
+        localNow: now,
+      );
+      expect(view.range(1).single.sleepMinutes, 9 * 60);
+      expect(view.dailySignal.headline, contains('sleep window'));
+      expect(view.domain(ProductDomain.sleep).status, 'Sleep window');
+    },
+  );
+
+  test('product view excludes future samples and unfinished sleep windows', () {
+    final now = DateTime(2026, 8, 26, 10);
+    final future = now.add(const Duration(hours: 1)).toUtc();
+    final view = RingProductView.fromDataset(
+      RingSyncDataset(
+        lastSyncedAtUtc: now.toUtc(),
+        source: const RingDataSource(driverId: 'test'),
+        availability: const {},
+        heartRate: [RingHeartRateSample(measuredAtUtc: future, bpm: 88)],
+        activity: [
+          RingActivityBucket(
+            startedAtUtc: future,
+            steps: 100,
+            distanceMeters: 70,
+            firmwareCalories: 4,
+          ),
+        ],
+        oxygen: [
+          RingOxygenRange(
+            hourStartedAtUtc: future,
+            minimumPercent: 96,
+            maximumPercent: 99,
+          ),
+        ],
+        sleep: [
+          RingSleepSession(
+            startedAtUtc: now.subtract(const Duration(hours: 2)).toUtc(),
+            endedAtUtc: future,
+            stages: const [],
+          ),
+        ],
+      ),
+      localNow: now,
+    );
+    expect(view.latestSleep, isNull);
+    expect(view.domain(ProductDomain.heart).value, '—');
+    expect(view.domain(ProductDomain.movement).value, '—');
+    expect(view.domain(ProductDomain.oxygen).value, '—');
+    expect(view.validTrendDays, 0);
+  });
+
+  test('trend dates remain distinct at daylight saving transitions', () {
+    final now = DateTime(2026, 3, 31, 12);
+    final view = RingProductView.fromDataset(
+      RingSyncDataset(
+        lastSyncedAtUtc: now.toUtc(),
+        source: const RingDataSource(driverId: 'test'),
+        availability: const {},
+      ),
+      localNow: now,
+    );
+    expect(view.range(5).map((value) => value.day), [
+      for (var day = 27; day <= 31; day++) DateTime(2026, 3, day),
+    ]);
+  });
 }

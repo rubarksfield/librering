@@ -63,6 +63,7 @@ void main() {
     for (final entry in routes.entries) {
       await tester.pumpWidget(
         LibreRingApp(
+          currentLocalTime: DateTime(2026, 8, 26, 23, 15),
           key: ValueKey<String>(entry.key),
           demoMode: true,
           initialLocation: entry.key,
@@ -74,7 +75,7 @@ void main() {
     }
   });
 
-  testWidgets('critical evidence-to-privacy journey preserves local state', (
+  testWidgets('daily history to journal and data controls stays reachable', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(390, 844);
@@ -83,24 +84,27 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
 
     await tester.pumpWidget(
-      const LibreRingApp(demoMode: true, initialLocation: '/sleep'),
+      LibreRingApp(
+        currentLocalTime: DateTime(2026, 8, 26, 23, 15),
+        demoMode: true,
+        initialLocation: '/today',
+      ),
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('How this was calculated'));
+    await tester.tap(find.byKey(const Key('daily-signal')));
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('screen-evidence')), findsOneWidget);
+    expect(find.byKey(const Key('screen-sleep')), findsOneWidget);
 
-    await tester.tap(find.text('Unsupported reading example'));
-    await tester.pumpAndSettle();
-    expect(find.byKey(const Key('screen-no-result')), findsOneWidget);
-
-    await tester.tap(find.byKey(const Key('supported-trend-link')));
+    await tester.tap(find.byKey(const Key('tab-trends')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('screen-trends')), findsOneWidget);
 
     await tester.ensureVisible(find.byKey(const Key('trend-add-context')));
     await tester.tap(find.byKey(const Key('trend-add-context')));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('journal-add-swim')));
+    await tester.tap(find.byKey(const Key('journal-add-swim')));
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.byKey(const Key('save-swim')));
     await tester.tap(find.byKey(const Key('save-swim')));
@@ -109,10 +113,10 @@ void main() {
 
     await tester.tap(find.bySemanticsLabel('You'));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.byKey(const Key('you-cycle')));
-    await tester.tap(find.byKey(const Key('you-cycle')));
+    await tester.ensureVisible(find.byKey(const Key('you-data')));
+    await tester.tap(find.byKey(const Key('you-data')));
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('screen-cycle-privacy')), findsOneWidget);
+    expect(find.byKey(const Key('screen-data-hub')), findsOneWidget);
   });
 
   testWidgets('product-system navigation exposes four clear destinations', (
@@ -124,17 +128,22 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
 
     await tester.pumpWidget(
-      const LibreRingApp(demoMode: true, initialLocation: '/today'),
+      LibreRingApp(
+        currentLocalTime: DateTime(2026, 8, 26, 23, 15),
+        demoMode: true,
+        initialLocation: '/today',
+      ),
     );
     await tester.pumpAndSettle();
 
     for (final label in <String>['Today', 'Vitals', 'Trends', 'You']) {
-      expect(find.bySemanticsLabel(label), findsOneWidget);
+      expect(find.byKey(Key('tab-${label.toLowerCase()}')), findsOneWidget);
     }
     await tester.tap(find.bySemanticsLabel('Vitals'));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('screen-metrics')), findsOneWidget);
-    expect(find.textContaining('with their limits'), findsOneWidget);
+    expect(find.text('Firmware indexes'), findsOneWidget);
+    expect(find.text('Blood oxygen'), findsOneWidget);
   });
 
   testWidgets('new capability routes never turn unavailable into zero', (
@@ -148,6 +157,7 @@ void main() {
     for (final route in <String>['/vitals/rhr', '/vitals/temperature']) {
       await tester.pumpWidget(
         LibreRingApp(
+          currentLocalTime: DateTime(2026, 8, 26, 23, 15),
           key: ValueKey<String>('boundary-$route'),
           initialLocation: route,
         ),
@@ -166,10 +176,16 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
-    await tester.pumpWidget(const LibreRingApp(initialLocation: '/today'));
+    await tester.pumpWidget(
+      LibreRingApp(
+        currentLocalTime: DateTime(2026, 8, 26, 23, 15),
+        initialLocation: '/today',
+      ),
+    );
     await tester.pumpAndSettle();
 
-    expect(find.text('No production data yet'), findsOneWidget);
+    expect(find.text('Your day starts here.'), findsOneWidget);
+    expect(find.text('Connect your ring'), findsOneWidget);
     expect(find.text('82'), findsNothing);
     expect(find.textContaining('Demo data'), findsNothing);
   });
@@ -181,7 +197,11 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
 
     await tester.pumpWidget(
-      const LibreRingApp(demoMode: true, locale: Locale('pt', 'PT')),
+      LibreRingApp(
+        currentLocalTime: DateTime(2026, 8, 26, 23, 15),
+        demoMode: true,
+        locale: Locale('pt', 'PT'),
+      ),
     );
     await tester.pumpAndSettle();
 
@@ -226,6 +246,7 @@ void main() {
     ]) {
       await tester.pumpWidget(
         LibreRingApp(
+          currentLocalTime: DateTime(2026, 8, 26, 23, 15),
           key: ValueKey<String>('large-$route'),
           demoMode: true,
           initialLocation: route,
@@ -248,7 +269,11 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
 
     await tester.pumpWidget(
-      const LibreRingApp(demoMode: true, initialLocation: '/journal/check-in'),
+      LibreRingApp(
+        currentLocalTime: DateTime(2026, 8, 26, 23, 15),
+        demoMode: true,
+        initialLocation: '/journal/check-in',
+      ),
     );
     await tester.pumpAndSettle();
     final save = find.byKey(const Key('save-check-in'));
@@ -289,6 +314,7 @@ void main() {
     ]) {
       await tester.pumpWidget(
         LibreRingApp(
+          currentLocalTime: DateTime(2026, 8, 26, 23, 15),
           key: ValueKey<String>('back-${route.$1}'),
           demoMode: true,
           initialLocation: route.$1,

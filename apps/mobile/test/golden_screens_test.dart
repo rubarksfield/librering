@@ -41,6 +41,7 @@ void main() {
         LibreRingApp(
           key: ValueKey<String>(route.$1),
           demoMode: true,
+          currentLocalTime: DateTime(2026, 8, 26, 23, 15),
           initialLocation: route.$1,
         ),
       );

@@ -45,37 +45,39 @@ class LibreRingPrimaryButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: double.infinity,
-      height: 56,
-      child: FilledButton(
-        style: FilledButton.styleFrom(
-          backgroundColor: LibreRingTokens.foreground,
-          foregroundColor: LibreRingTokens.onForeground,
-          disabledBackgroundColor: LibreRingTokens.border,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(LibreRingTokens.controlRadius),
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-        ),
-        onPressed: onPressed,
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: <Widget>[
-            Expanded(
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  label,
-                  maxLines: 1,
-                  style: const TextStyle(fontWeight: FontWeight.w600),
-                ),
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 56),
+      child: SizedBox(
+        width: double.infinity,
+        child: FilledButton(
+          style: FilledButton.styleFrom(
+            backgroundColor: LibreRingTokens.foreground,
+            foregroundColor: LibreRingTokens.onForeground,
+            disabledBackgroundColor: LibreRingTokens.border,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(
+                LibreRingTokens.controlRadius,
               ),
             ),
-            const SizedBox(width: 12),
-            Icon(icon, size: 20),
-          ],
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 17),
+          ),
+          onPressed: onPressed,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: <Widget>[
+              Expanded(
+                child: Text(
+                  label,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Icon(icon, size: 20),
+            ],
+          ),
         ),
       ),
     );
@@ -83,17 +85,26 @@ class LibreRingPrimaryButton extends StatelessWidget {
 }
 
 class LibreRingCard extends StatelessWidget {
-  const LibreRingCard({required this.child, this.padding, super.key});
+  const LibreRingCard({
+    required this.child,
+    this.padding,
+    this.backgroundColor,
+    super.key,
+  });
 
   final Widget child;
   final EdgeInsetsGeometry? padding;
+  final Color? backgroundColor;
 
   @override
   Widget build(BuildContext context) {
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: LibreRingTokens.surface,
+        color: backgroundColor ?? LibreRingTokens.surface,
         borderRadius: BorderRadius.circular(LibreRingTokens.cardRadius),
+        border: Border.all(
+          color: LibreRingTokens.border.withValues(alpha: .75),
+        ),
       ),
       child: Padding(
         padding: padding ?? const EdgeInsets.all(18),
@@ -112,7 +123,7 @@ class LibreRingEyebrow extends StatelessWidget {
   Widget build(BuildContext context) => Text(
     label.toUpperCase(),
     style: const TextStyle(
-      fontSize: 10,
+      fontSize: 11,
       fontWeight: FontWeight.w600,
       letterSpacing: 1,
     ),
