@@ -119,6 +119,9 @@ Mantenha o anel perto e toque em Sincronizar. Uma leitura de bateria bem-sucedid
 const _syncEnglish = '''Bringing saved readings to your phone
 The ring collects readings while you wear it. Sync connects over Bluetooth, requests the available history and saves what was received on this phone. It is not continuous live monitoring.
 
+Refresh or Sync?
+Pull down on a readings page to reload data already saved on your phone. This does not connect to the ring. Tap the Sync button to fetch new readings over Bluetooth. Saved results appear automatically when the sync finishes; you do not need to pull again.
+
 What the status means
 The status names the actual step: finding the ring, connecting, reading a type of history, saving, or finishing. Keep the ring nearby and LibreRing open until it finishes. A day count means days checked, not a percentage of the whole sync.
 
@@ -133,6 +136,9 @@ It is the ring’s last reported charge, not a completion indicator. Example mod
 
 const _syncPortuguese = '''Trazer leituras guardadas para o telemóvel
 O anel recolhe leituras enquanto o usa. A sincronização liga-se por Bluetooth, pede o histórico disponível e guarda o que recebeu neste telemóvel. Não é monitorização contínua em direto.
+
+Atualizar ou Sincronizar?
+Puxe para baixo numa página de leituras para voltar a carregar os dados já guardados no telemóvel. Isto não liga ao anel. Toque no botão Sincronizar para obter novas leituras por Bluetooth. Os resultados guardados aparecem automaticamente quando a sincronização termina; não precisa de puxar novamente.
 
 O que significa o estado
 O estado identifica a etapa real: procurar o anel, ligar, ler um tipo de histórico, guardar ou terminar. Mantenha o anel perto e o LibreRing aberto até terminar. A contagem de dias indica dias verificados, não uma percentagem da sincronização completa.

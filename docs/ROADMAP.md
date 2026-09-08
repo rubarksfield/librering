@@ -14,8 +14,14 @@ possible dashboard metrics.
 - [x] Durable name, metric/imperial distance, and personal step/sleep targets.
 - [x] Missing-versus-zero handling, future-record filtering, and overlap-safe sleep summaries.
 - [x] Journal save/delete error recovery, duplicate-submit guards, and sync-safe deletion.
+- [x] Saved-reading pull-to-refresh, separate explicit Bluetooth sync, and immediate
+  publication after saving new readings.
+- [x] Stage-aware sync feedback, plain-language signal explanations, consistent
+  green sleep charts, and restrained interaction/result haptics.
 - [x] Physical iPhone release build, install, independent launch, and version
-  readback for `1.2.0 (10)`.
+  readback for `1.3.2 (13)`; see the [delivery record](testing/release-1.3.2.md).
+- [x] Versioned source-release notes and reproducible, fictional-data app screenshots.
+- [ ] Verify new refresh gestures and tactile feedback on the physical phone.
 - [ ] Complete foreground sync, relaunch, daylight-saving/timezone, low-battery,
   and competing-app tests with the owned R12.
 - [ ] Run VoiceOver and larger accessibility-size passes on physical iPhone.
@@ -30,9 +36,12 @@ possible dashboard metrics.
 - [ ] Add a contributor-safe fixture validation tool that rejects identifiers,
   timestamps, and physiological values before commit.
 - [ ] Improve background-sync behaviour within iOS and Android platform limits.
+- [ ] Validate live pulse with a usable worn-ring reading and reliable
+  stop/cancel lifecycle before enabling it in production; see the
+  [acceptance boundary](testing/live-pulse-acceptance-2026-09-07.md).
 - [ ] Add an opt-in Apple Health / Health Connect proposal only after a privacy
   and provenance review.
-- [ ] Package reproducible beta builds and release notes.
+- [ ] Distribute installable beta builds beyond personal development signing.
 
 ## Later — validated interpretation
 

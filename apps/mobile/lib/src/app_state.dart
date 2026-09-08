@@ -106,6 +106,42 @@ class RingDataController extends AsyncNotifier<RingSyncDataset?> {
     return _initialRead;
   }
 
+  /// Re-reads saved history without contacting the ring. Use this instead of
+  /// invalidating the provider so a pending merge or deletion finishes first.
+  /// Cached readings remain visible; a failure is rethrown for the caller to
+  /// explain, while a successful retry also clears a failed initial-read gate.
+  Future<void> refresh() => _operations.run(() async {
+    try {
+      await _initialRead;
+    } catch (_) {
+      // A fresh local read can recover a temporary storage failure. It never
+      // deletes or overwrites the existing file to make that recovery happen.
+    }
+    if (!ref.mounted) return;
+    final previous = state;
+    if (!previous.hasValue) state = const AsyncLoading<RingSyncDataset?>();
+    try {
+      final repository = ref.read(ringDataRepositoryProvider);
+      if (repository == null) {
+        throw StateError('Local ring storage is unavailable in this build.');
+      }
+      final reloaded = await repository.read();
+      if (!ref.mounted) return;
+      _initialRead = Future<RingSyncDataset?>.value(reloaded);
+      // Analytics excludes future samples. Advance its cached clock before
+      // publishing readings collected since the last minute tick.
+      ref.invalidate(currentLocalTimeProvider);
+      state = AsyncData<RingSyncDataset?>(reloaded);
+    } catch (error, stackTrace) {
+      if (ref.mounted) {
+        state = previous.hasValue
+            ? previous
+            : AsyncError<RingSyncDataset?>(error, stackTrace);
+      }
+      rethrow;
+    }
+  });
+
   Future<RingSyncDataset> merge(RingSyncDataset incoming) =>
       _operations.run(() async {
         await _initialRead;
@@ -117,6 +153,7 @@ class RingDataController extends AsyncNotifier<RingSyncDataset?> {
         if (!previous.hasValue) state = const AsyncLoading<RingSyncDataset?>();
         try {
           final merged = await repository.merge(incoming);
+          ref.invalidate(currentLocalTimeProvider);
           state = AsyncData<RingSyncDataset?>(merged);
           return merged;
         } catch (error, stackTrace) {

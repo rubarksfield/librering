@@ -2163,6 +2163,7 @@ class _SwimEntryScreenState extends ConsumerState<SwimEntryScreen> {
     if (_saving || _saved) return;
     final duration = int.tryParse(_duration.text.trim());
     if (duration == null || duration < 1 || duration > 300) {
+      RingHaptics.error();
       setState(
         () => _durationError = copyFor(
           context,
@@ -2186,9 +2187,13 @@ class _SwimEntryScreenState extends ConsumerState<SwimEntryScreen> {
             environment: _pool,
             effort: _effort,
           );
-      if (mounted) setState(() => _saved = true);
+      if (mounted) {
+        RingHaptics.success();
+        setState(() => _saved = true);
+      }
     } catch (_) {
       if (mounted) {
+        RingHaptics.error();
         setState(
           () => _error = copyFor(
             context,
@@ -2263,6 +2268,7 @@ class _SwimEntryScreenState extends ConsumerState<SwimEntryScreen> {
         _FieldLabel(copyFor(context, 'Pool length', 'Comprimento da piscina')),
         DropdownButtonFormField<String>(
           key: const Key('swim-pool'),
+          enableFeedback: false,
           initialValue: _pool,
           decoration: InputDecoration(
             filled: true,
@@ -2281,15 +2287,20 @@ class _SwimEntryScreenState extends ConsumerState<SwimEntryScreen> {
           ],
           onChanged: _saving
               ? null
-              : (String? value) => setState(() {
-                  _changed();
-                  _pool = value ?? _pool;
-                }),
+              : (String? value) {
+                  if (value == null || value == _pool) return;
+                  RingHaptics.selection();
+                  setState(() {
+                    _changed();
+                    _pool = value;
+                  });
+                },
         ),
         const SizedBox(height: 18),
         _FieldLabel(copyFor(context, 'Effort', 'Esforço')),
         SegmentedButton<String>(
           key: const Key('swim-effort'),
+          style: SegmentedButton.styleFrom(enableFeedback: false),
           showSelectedIcon: false,
           segments: <ButtonSegment<String>>[
             ButtonSegment(
@@ -2308,14 +2319,20 @@ class _SwimEntryScreenState extends ConsumerState<SwimEntryScreen> {
           selected: <String>{_effort},
           onSelectionChanged: _saving
               ? null
-              : (Set<String> value) => setState(() {
-                  _changed();
-                  _effort = value.first;
-                }),
+              : (Set<String> value) {
+                  if (value.first == _effort) return;
+                  RingHaptics.selection();
+                  setState(() {
+                    _changed();
+                    _effort = value.first;
+                  });
+                },
         ),
         const SizedBox(height: 24),
         LibreRingPrimaryButton(
           key: const Key('save-swim'),
+          // The persisted result supplies feedback, not both press and result.
+          hapticsEnabled: false,
           label: _saving
               ? copyFor(context, 'Saving…', 'A guardar…')
               : _saved
@@ -2359,8 +2376,10 @@ class _JournalScreenState extends ConsumerState<JournalScreen> {
     setState(() => _deletingId = entry.id);
     try {
       await ref.read(journalProvider.notifier).delete(entry.id);
+      if (mounted) RingHaptics.success();
     } catch (_) {
       if (!mounted) return;
+      RingHaptics.error();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -2514,9 +2533,13 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen> {
       await ref
           .read(journalProvider.notifier)
           .saveCheckIn(tags: _selected.toList(), note: _note.text);
-      if (mounted) setState(() => _saved = true);
+      if (mounted) {
+        RingHaptics.success();
+        setState(() => _saved = true);
+      }
     } catch (_) {
       if (mounted) {
+        RingHaptics.error();
         setState(
           () => _error = copyFor(
             context,
@@ -2584,11 +2607,15 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen> {
                   showCheckmark: false,
                   onSelected: _saving
                       ? null
-                      : (value) => setState(() {
-                          _saved = false;
-                          _error = null;
-                          value ? _selected.add(tag) : _selected.remove(tag);
-                        }),
+                      : (value) {
+                          if (value == selected) return;
+                          RingHaptics.selection();
+                          setState(() {
+                            _saved = false;
+                            _error = null;
+                            value ? _selected.add(tag) : _selected.remove(tag);
+                          });
+                        },
                 );
               })
               .toList(growable: false),
@@ -2626,6 +2653,7 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen> {
         const SizedBox(height: 22),
         LibreRingPrimaryButton(
           key: const Key('save-check-in'),
+          hapticsEnabled: false,
           label: _saving
               ? copyFor(context, 'Saving…', 'A guardar…')
               : _saved
@@ -4553,6 +4581,7 @@ class _JournalRow extends StatelessWidget {
         ),
         IconButton(
           key: Key('delete-journal-${entry.id}'),
+          enableFeedback: false,
           tooltip: copyFor(context, 'Delete entry', 'Eliminar registo'),
           onPressed: onDelete,
           icon: deleting

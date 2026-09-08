@@ -10,6 +10,7 @@ import 'ring_analytics.dart';
 import 'storage/journal_repository.dart';
 import 'storage/preferences_repository.dart';
 import 'ui/app_chrome.dart';
+import 'ui/refresh_readings.dart';
 import 'ui/sync_status_card.dart';
 
 String _copy(BuildContext context, String english, String portuguese) =>
@@ -166,6 +167,7 @@ class _ProductDayTimelineScreenState
       key: const Key('screen-day-timeline'),
       activePath: '/today',
       scrollKey: 'day-timeline',
+      onRefresh: demo ? null : () => refreshSavedRingReadings(context, ref),
       children: <Widget>[
         Row(
           children: <Widget>[
@@ -255,10 +257,14 @@ class _ProductDayTimelineScreenState
                   ),
                 ),
                 selected: category == _filter,
-                onSelected: (_) => setState(() {
-                  _filter = category;
-                  _visibleLimit = 40;
-                }),
+                onSelected: (_) {
+                  if (_filter == category) return;
+                  RingHaptics.selection();
+                  setState(() {
+                    _filter = category;
+                    _visibleLimit = 40;
+                  });
+                },
               ),
           ],
         ),
@@ -277,7 +283,7 @@ class _ProductDayTimelineScreenState
               'Tente abrir novamente as leituras guardadas.',
             ),
             action: _copy(context, 'Try again', 'Tentar novamente'),
-            onAction: () => ref.invalidate(ringDataProvider),
+            onAction: () => refreshSavedRingReadings(context, ref),
           ),
         if (visible.isEmpty &&
             !state.isLoading &&
@@ -650,11 +656,15 @@ class _ActivityLogScreenState extends ConsumerState<ActivityLogScreen> {
               .toList(growable: false),
           onChanged: saving
               ? null
-              : (value) => setState(() {
-                  effort = value ?? effort;
-                  saved = false;
-                  error = null;
-                }),
+              : (value) {
+                  if (value == null || value == effort) return;
+                  RingHaptics.selection();
+                  setState(() {
+                    effort = value;
+                    saved = false;
+                    error = null;
+                  });
+                },
         ),
         const SizedBox(height: 16),
         _FieldLabel(
@@ -689,6 +699,7 @@ class _ActivityLogScreenState extends ConsumerState<ActivityLogScreen> {
         ],
         LibreRingPrimaryButton(
           key: const Key('save-activity'),
+          hapticsEnabled: false,
           label: saving
               ? _copy(context, 'Saving…', 'A guardar…')
               : saved
@@ -700,6 +711,7 @@ class _ActivityLogScreenState extends ConsumerState<ActivityLogScreen> {
                   if (saving || saved) return;
                   final minutes = int.tryParse(duration.text.trim());
                   if (minutes == null || minutes < 1 || minutes > 1440) {
+                    RingHaptics.error();
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Text(
@@ -726,9 +738,13 @@ class _ActivityLogScreenState extends ConsumerState<ActivityLogScreen> {
                           note:
                               '$minutes minutes · $effort${note.text.trim().isEmpty ? '' : ' · ${note.text.trim()}'}',
                         );
-                    if (mounted) setState(() => saved = true);
+                    if (mounted) {
+                      RingHaptics.success();
+                      setState(() => saved = true);
+                    }
                   } catch (_) {
                     if (mounted) {
+                      RingHaptics.error();
                       setState(
                         () => error = _copy(
                           context,
@@ -891,7 +907,11 @@ class _ProfilePreferencesScreenState
                   ],
                   onChanged: _saving
                       ? null
-                      : (value) => setState(() => units = value ?? units),
+                      : (value) {
+                          if (value == null || value == units) return;
+                          RingHaptics.selection();
+                          setState(() => units = value);
+                        },
                 ),
                 const SizedBox(height: 16),
                 _FieldLabel(
@@ -979,6 +999,7 @@ class _ProfilePreferencesScreenState
                 ],
                 LibreRingPrimaryButton(
                   key: const Key('save-preferences'),
+                  hapticsEnabled: false,
                   label: _saving
                       ? _copy(context, 'Saving…', 'A guardar…')
                       : _saved
@@ -1001,6 +1022,7 @@ class _ProfilePreferencesScreenState
                       : () async {
                           if (_saving || _saved) return;
                           if (!(_formKey.currentState?.validate() ?? false)) {
+                            RingHaptics.error();
                             return;
                           }
                           FocusScope.of(context).unfocus();
@@ -1026,9 +1048,13 @@ class _ProfilePreferencesScreenState
                                             .round(),
                                   ),
                                 );
-                            if (mounted) setState(() => _saved = true);
+                            if (mounted) {
+                              RingHaptics.success();
+                              setState(() => _saved = true);
+                            }
                           } catch (_) {
                             if (mounted) {
+                              RingHaptics.error();
                               setState(
                                 () => _error = _copy(
                                   context,

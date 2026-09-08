@@ -150,8 +150,10 @@ class ColmiQringDriver implements RingDriver {
       DeviceCapability.battery: confidence,
       DeviceCapability.charging: confidence,
       DeviceCapability.deviceClock: confidence,
-      DeviceCapability.liveHeartRate: confidence,
-      DeviceCapability.liveOxygen: confidence,
+      // Diagnostic transport exists, but production measurement remains gated
+      // on a nonzero physical reading and an accepted completion/stop lifecycle.
+      DeviceCapability.liveHeartRate: CapabilityConfidence.unavailable,
+      DeviceCapability.liveOxygen: CapabilityConfidence.unavailable,
       DeviceCapability.steps: confidence,
       DeviceCapability.distance: confidence,
       DeviceCapability.calories: confidence,

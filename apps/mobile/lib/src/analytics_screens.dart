@@ -14,6 +14,7 @@ import 'ring_analytics.dart';
 import 'storage/journal_repository.dart';
 import 'storage/preferences_repository.dart';
 import 'ui/app_chrome.dart';
+import 'ui/refresh_readings.dart';
 import 'ui/calorie_education.dart';
 import 'ui/hrv_education.dart';
 import 'ui/sleep_palette.dart';
@@ -72,7 +73,11 @@ mixin _CalendarDetail<T extends ConsumerStatefulWidget> on ConsumerState<T> {
               ButtonSegment(value: 30, label: Text('Month')),
             ],
             selected: <int>{days},
-            onSelectionChanged: (value) => setState(() => days = value.first),
+            onSelectionChanged: (value) {
+              if (days == value.first) return;
+              RingHaptics.selection();
+              setState(() => days = value.first);
+            },
           ),
         ),
       ],
@@ -559,6 +564,27 @@ class _HeartLabScreenState extends ConsumerState<HeartLabScreen>
           'Daily and period summaries use only the readings shown. Gaps remain where readings are missing. '
           'A reading alone cannot diagnose a condition.',
         ),
+        TextButton.icon(
+          key: const Key('live-pulse-help'),
+          icon: const Icon(Icons.sensors_rounded, size: 18),
+          label: Text(
+            copyFor(
+              context,
+              'Can I see my pulse live?',
+              'Posso ver a pulsação em direto?',
+            ),
+          ),
+          onPressed: () => showRingInfo(
+            context,
+            title: copyFor(context, 'Live pulse', 'Pulsação em direto'),
+            closeLabel: copyFor(context, 'Got it', 'Entendido'),
+            body: copyFor(
+              context,
+              'This version shows saved pulse readings, with the time each was recorded. Sync brings those readings to your phone; pulling down only refreshes the saved view.\n\nOn-demand pulse is not enabled yet. The R12 can respond to a measurement request, but our device test received warm-up responses without a usable pulse value. A real reading and a reliable stop/cancel sequence still need to be verified before we offer live measurement.\n\nA Bluetooth connection alone does not mean a pulse reading is live. LibreRing will not turn old readings or warm-up responses into a live pulse display.',
+              'Esta versão mostra leituras de pulsação guardadas, com a hora de cada registo. Sincronizar traz essas leituras para o telemóvel; puxar para baixo apenas atualiza a vista dos dados guardados.\n\nA medição de pulsação a pedido ainda não está ativa. O R12 responde ao pedido, mas o nosso teste recebeu respostas de preparação sem um valor utilizável. Ainda é necessário verificar uma leitura real e uma sequência fiável para parar ou cancelar a medição.\n\nUma ligação Bluetooth, por si só, não significa que a leitura seja em direto. O LibreRing não apresenta leituras antigas nem respostas de preparação como pulsação em direto.',
+            ),
+          ),
+        ),
       ],
     );
   }
@@ -944,7 +970,7 @@ class CapabilitiesScreen extends ConsumerWidget {
                 icon: Icons.sensors,
                 title: 'Live measurements',
                 value: '',
-                detail: 'Starting pulse and oxygen readings on demand',
+                detail: 'On-demand pulse and oxygen need device validation before they can be enabled',
               ),
               _EvidenceRow(
                 icon: Icons.favorite_border,
@@ -984,6 +1010,9 @@ class _AnalyticsScreen extends ConsumerWidget {
     return RingPageScaffold(
       activePath: activePath,
       scrollKey: key.toString(),
+      onRefresh: ref.watch(isDemoModeProvider)
+          ? null
+          : () => refreshSavedRingReadings(context, ref),
       children: <Widget>[
         if (ref.watch(isDemoModeProvider))
           const Padding(
@@ -1001,7 +1030,7 @@ class _AnalyticsScreen extends ConsumerWidget {
             body: 'Try loading it again. Your ring readings have not been changed.',
             icon: Icons.refresh_rounded,
             action: 'Try again',
-            onAction: () => ref.invalidate(ringDataProvider),
+            onAction: () => refreshSavedRingReadings(context, ref),
           )
         else
           ...children,
@@ -1278,6 +1307,7 @@ class RingHistoryChart extends StatefulWidget {
 }
 
 class _RingHistoryChartState extends State<RingHistoryChart> {
+  final _selectionHaptics = RingSelectionHaptics();
   int? _selected;
   List<RingChartPoint> get points =>
       widget.points
@@ -1291,9 +1321,25 @@ class _RingHistoryChartState extends State<RingHistoryChart> {
     super.didUpdateWidget(oldWidget);
     if (widget.start != oldWidget.start ||
         widget.end != oldWidget.end ||
-        widget.points.length != oldWidget.points.length) {
+        widget.unit != oldWidget.unit ||
+        widget.points.length != oldWidget.points.length ||
+        widget.points.indexed.any((entry) {
+          final old = oldWidget.points[entry.$1];
+          final next = entry.$2;
+          return old.at != next.at ||
+              old.value != next.value ||
+              old.upper != next.upper ||
+              old.label != next.label;
+        })) {
       _selected = null;
+      _selectionHaptics.reset();
     }
+  }
+
+  void _select(int index) {
+    if (_selected == index) return;
+    _selectionHaptics.selection(index);
+    setState(() => _selected = index);
   }
 
   String describe(RingChartPoint p) =>
@@ -1363,7 +1409,7 @@ class _RingHistoryChartState extends State<RingHistoryChart> {
                   nearest = i;
                 }
               }
-              setState(() => _selected = nearest);
+              _select(nearest);
             }
 
             return Semantics(
@@ -1381,17 +1427,10 @@ class _RingHistoryChartState extends State<RingHistoryChart> {
                   data.length - 1,
                 )],
               ),
-              onIncrease: () => setState(
-                () => _selected = ((_selected ?? -1) + 1).clamp(
-                  0,
-                  data.length - 1,
-                ),
-              ),
-              onDecrease: () => setState(
-                () => _selected = ((_selected ?? data.length) - 1).clamp(
-                  0,
-                  data.length - 1,
-                ),
+              onIncrease: () =>
+                  _select(((_selected ?? -1) + 1).clamp(0, data.length - 1)),
+              onDecrease: () => _select(
+                ((_selected ?? data.length) - 1).clamp(0, data.length - 1),
               ),
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
@@ -1642,6 +1681,7 @@ class _SleepTimeline extends StatefulWidget {
 }
 
 class _SleepTimelineState extends State<_SleepTimeline> {
+  final _selectionHaptics = RingSelectionHaptics();
   DateTime? _selectedAt;
   Offset? _holdOrigin;
   double? _holdFraction;
@@ -1664,6 +1704,7 @@ class _SleepTimelineState extends State<_SleepTimeline> {
               entry.$2.durationMinutes != next.durationMinutes;
         })) {
       _selectedAt = null;
+      _selectionHaptics.reset();
       _endHold();
     }
   }
@@ -1701,7 +1742,14 @@ class _SleepTimelineState extends State<_SleepTimeline> {
         ),
       ),
     );
-    if (at != _selectedAt) setState(() => _selectedAt = at);
+    if (at != _selectedAt) {
+      // A cue marks a stage/gap boundary, not every pixel or minute scrubbed.
+      final interval = _intervals.indexWhere(
+        (span) => !at.isBefore(span.start) && at.isBefore(span.end),
+      );
+      _selectionHaptics.selection(interval);
+      setState(() => _selectedAt = at);
+    }
   }
 
   void _endHold() {
@@ -1717,6 +1765,8 @@ class _SleepTimelineState extends State<_SleepTimeline> {
       '${interval.stage == null ? ' · No stage recorded' : ''}';
 
   void _step(List<_SleepInspectionInterval> intervals, int index) {
+    if (_selectedAt == intervals[index].start) return;
+    _selectionHaptics.selection(index);
     setState(() => _selectedAt = intervals[index].start);
   }
 

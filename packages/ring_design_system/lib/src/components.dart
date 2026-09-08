@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'haptics.dart';
 import 'tokens.dart';
 
 class LibreRingWordmark extends StatelessWidget {
@@ -36,12 +37,14 @@ class LibreRingPrimaryButton extends StatelessWidget {
     required this.label,
     required this.onPressed,
     this.icon = Icons.arrow_forward,
+    this.hapticsEnabled = true,
     super.key,
   });
 
   final String label;
   final VoidCallback? onPressed;
   final IconData icon;
+  final bool hapticsEnabled;
 
   @override
   Widget build(BuildContext context) {
@@ -51,6 +54,7 @@ class LibreRingPrimaryButton extends StatelessWidget {
         width: double.infinity,
         child: FilledButton(
           style: FilledButton.styleFrom(
+            enableFeedback: false,
             backgroundColor: LibreRingTokens.foreground,
             foregroundColor: LibreRingTokens.onForeground,
             disabledBackgroundColor: LibreRingTokens.border,
@@ -61,7 +65,12 @@ class LibreRingPrimaryButton extends StatelessWidget {
             ),
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 17),
           ),
-          onPressed: onPressed,
+          onPressed: onPressed == null
+              ? null
+              : () {
+                  RingHaptics.action(enabled: hapticsEnabled);
+                  onPressed!();
+                },
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: <Widget>[

@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/design/brand/librering-app-icon-master.png" width="112" alt="LibreRing app icon: an open black ring with a coral signal dot" />
+  <img src="docs/design/brand/librering-app-icon-master.png" width="112" alt="LibreRing app icon" />
 </p>
 
 <h1 align="center">LibreRing</h1>
@@ -8,7 +8,7 @@
 
 <p align="center">
   A local-first, open-source Flutter companion for the COLMI R12 smart ring.<br />
-  Calm daily views, transparent evidence, no account, and no invented health scores.
+  Clear daily readings. Thoughtful details. No account or subscription in the current app.
 </p>
 
 <p align="center">
@@ -20,55 +20,81 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/rubarksfield/librering/releases/tag/v1.3.2">Release 1.3.2</a> ·
   <a href="#quick-start">Quick start</a> ·
   <a href="#what-the-r12-can-supply">Supported data</a> ·
   <a href="#screen-gallery">Screens</a> ·
-  <a href="docs/ROADMAP.md">Roadmap</a> ·
+  <a href="CHANGELOG.md">Changelog</a> ·
   <a href="CONTRIBUTING.md">Contribute</a>
 </p>
 
 <p align="center">
-  <img src="apps/mobile/test/goldens/analytics_today.png" width="240" alt="Refined LibreRing Today with sleep, steps, pulse and oxygen" />
-  <img src="apps/mobile/test/goldens/analytics_sleep.png" width="240" alt="Interactive sleep-stage history" />
-  <img src="apps/mobile/test/goldens/trends.png" width="240" alt="Daily history and period comparisons" />
+  <img src="docs/media/v1.3.2/today.png" width="240" alt="LibreRing 1.3.2 Today: daily guidance, sleep and recorded ring readings" />
+  <img src="docs/media/v1.3.2/sleep.png" width="240" alt="LibreRing 1.3.2 Sleep: green sleep-stage timeline and session details" />
+  <img src="docs/media/v1.3.2/vitals.png" width="240" alt="LibreRing 1.3.2 Vitals: supported readings with clear units and source limits" />
 </p>
 
-## Why LibreRing
+<p align="center"><sub>Actual Flutter screens with deterministic fictional test data—not personal health records or evidence of sensor accuracy.</sub></p>
 
-Affordable smart rings can collect useful signals, but the experience around
-them is often cloud-dependent, vague about provenance, or overconfident about
-what a sensor can prove. LibreRing takes a narrower path:
+## A calmer way to understand your ring
 
-- **Local-first:** ring history and manual context stay on the phone.
-- **Evidence before interpretation:** measured, firmware-estimated, manual,
-  missing, and unsupported data remain visibly different.
-- **No account required:** the supported R12 path talks to the ring over BLE.
-- **No fake precision:** gaps stay gaps; oxygen remains a min–max range; opaque
-  firmware fields are not renamed as clinical metrics.
-- **A product, not just a protocol demo:** pairing, daily summaries, drill-downs,
-  trends, journal context, privacy controls, export, and deletion are designed
-  as one coherent mobile experience.
+LibreRing brings sleep, movement, pulse and oxygen history into a warm,
+sage-green interface you can explore at your own pace. Inspect a night, compare
+recorded days, add your own context, and understand what each number can—and
+cannot—tell you.
 
-LibreRing is a development preview, not a medical device. It is not in the App
-Store or Play Store yet.
+- **Your data stays close.** Ring history, journal entries and preferences are
+  stored on your phone. Export and sharing are explicit choices.
+- **Clarity next to the number.** HRV, stress, energy, battery and sync have
+  explanations in the app, not just in a manual.
+- **Details that feel considered.** Inspectable charts, green sleep stages,
+  restrained native haptics, persistent tab position and reduced-motion support.
+- **Honest when data is missing.** Gaps stay gaps. Firmware estimates are labelled.
+  Unsupported measurements do not become made-up health scores.
+- **No account to create.** The supported COLMI R12 path connects over Bluetooth.
+  The current app has no billing or paid tier; it also has no LibreRing cloud
+  account, cloud backup or cross-phone sync.
+
+**Status: development preview / source release.** Version **1.3.2 (13)** has
+been built, installed and launched on an owned iPhone using development signing.
+This is not App Store, Play Store or TestFlight distribution; there is no public
+IPA to install. See the [release record](docs/testing/release-1.3.2.md) for what
+was checked and what still needs hardware testing.
 
 ## See it in motion
 
-[![A short animated tour of the LibreRing Today, Vitals, Sleep, Activity, Heart, Oxygen, Trends, Data and You screens](docs/media/librering-tour.gif)](docs/media/librering-tour.mp4)
+<p align="center">
+  <a href="docs/media/v1.3.2/librering-tour.mp4"><img src="docs/media/v1.3.2/librering-tour.gif" width="320" alt="A tour of LibreRing 1.3.2: Today, sleep, supported readings, refresh and in-app explanations" /></a>
+</p>
 
-<p align="center"><sub>Earlier preview: 11.6-second tour of the previous layout · click for MP4 · deterministic fictional data. Current refinement screenshots are above and below.</sub></p>
+<p align="center"><sub>26-second screenshot tour · fictional fixtures on the production UI path · click for MP4. Sync progress is simulated; this is not a physical-ring or live-measurement recording. <a href="docs/media/v1.3.2/README.md">Media provenance</a></sub></p>
 
-## Refinement preview
+## What's new in 1.3.2
 
-Today brings sleep and key readings forward. Vitals keeps the full supported
-signal set one tap away. Trends offers inspectable daily points and 7/30/90-day
-comparisons with missing days left empty. Root tabs preserve your place, and
-detail screens use native navigation and accessible chart controls.
+- **Pull to refresh the saved view.** Today, Vitals, Trends and reading details
+  reload local phone data, even on short or empty pages. Existing readings stay
+  visible if a reload fails. **Sync** remains the separate Bluetooth action that
+  fetches ring history.
+- **Newly saved readings appear immediately.** A reproduced clock-cache delay
+  is fixed; a successful sync updates Today and previously visited Vitals without
+  another pull. This is a specific display fix, not a claim that every possible
+  missing-ring-data issue is solved.
+- **A more tactile interface.** Navigation, chart selections and actual
+  save/refresh outcomes have restrained haptics. Disabled controls and passive
+  updates stay quiet; sleep feedback follows stage boundaries.
+- **Inspection stays trustworthy.** Historical dates remain selected after
+  refresh. Changed chart samples cannot leave an old value selected, and Trends
+  keeps the chosen calendar day across midnight.
+- **Live means live.** The pulse page explains saved readings versus on-demand
+  acquisition. Live pulse and oxygen remain unavailable in production until
+  usable physical readings and safe stop/cancel behaviour are verified.
 
-Name, distance units, and personal step/sleep goals now persist locally. Saves
-and deletion report failures without discarding your records, and sync remains
-bounded to the verified R12 path. See the [refinement QA record](docs/testing/refinement-2026-09-05.md)
-for scope and outstanding hardware verification.
+The release builds on green sleep scrubbing, staged sync feedback, a separate
+last-reported ring-battery label, safe introduction replay, and daily suggestions
+with a visible **Why this?** explanation. HRV and stress firmware indexes never
+drive those suggestions.
+
+[Full changelog](CHANGELOG.md) · [Refresh and haptics QA](docs/testing/refresh-haptics-2026-09-07.md) · [In-app explanation guide](docs/testing/in-app-explanations-2026-09-05.md)
 
 ## What the R12 can supply
 
@@ -79,62 +105,48 @@ tested; physiological accuracy is not independently validated.
 | Signal or capability | Current status | What LibreRing says |
 | --- | --- | --- |
 | Local BLE pairing and device facts | Supported | Exact-family discovery, service validation, battery, and firmware |
-| Activity history | Supported | Steps plus clearly labelled firmware distance and calorie estimates |
+| Activity history | Supported | Steps and firmware-estimated distance; “Ring energy value” has unverified units and is **not** presented as confirmed active calories |
 | Pulse history | Supported | Recorded BPM-like samples with gaps preserved; not a diagnosis |
 | Sleep history | Supported | Firmware session and stage-duration estimates; not EEG |
 | Blood oxygen history | Supported | Hourly firmware minimum–maximum ranges; not medical oximetry |
 | Firmware “HRV” field | Exploratory | Shown only as an opaque firmware index, never RMSSD or SDNN |
 | Firmware stress field | Exploratory | Shown only as an opaque vendor index, never emotional or clinical stress |
-| Live pulse / oxygen | Transport verified | The owned-device run produced warm-up packets but no non-zero reading, so the UI reports no reading |
-| Temperature, blood pressure, respiration, VO₂ max | Unsupported | Not shown as measured R12 data |
+| Live pulse / oxygen | Not enabled in production | Owned-device tests returned warm-up packets, not usable readings; a Bluetooth connection is not live measurement |
+| Temperature, blood pressure, respiration, VO₂ max, ring GPS | Unsupported | Not shown as measured R12 data |
 | Recovery / readiness score | Not enabled from R12 data | LibreRing does not manufacture a score from unsupported inputs |
 
 See the [R12 evidence record](docs/protocol/colmi-r12-evidence.md) and
 [protocol matrix](docs/protocol/colmi-qring.md) for commands, confidence levels,
-fixtures, and remaining physical-device work.
+fixtures, and remaining physical-device work. The [live-measurement acceptance
+checklist](docs/testing/live-pulse-acceptance-2026-09-07.md) explains why live
+pulse and oxygen are still gated.
 
 ## Screen gallery
 
-These are representative deterministic 390 × 844 renders from the app's widget tests. The
-first group is the R12-backed product path. Screens marked **concept/demo** test
-UX states and do not claim that the ring supplies a score or unsupported metric.
+These versioned captures render the current Flutter production UI with
+deterministic fictional fixtures. They show the interface and its data boundaries,
+not private readings, concept screens or proof of physiological accuracy.
 
 <table>
   <tr>
-    <td align="center"><img src="apps/mobile/test/goldens/analytics_today.png" width="210" alt="LibreRing measured-data Today screen" /><br /><sub>Today · R12-backed</sub></td>
-    <td align="center"><img src="apps/mobile/test/goldens/analytics_metrics.png" width="210" alt="LibreRing Vitals screen" /><br /><sub>Vitals · R12-backed</sub></td>
-    <td align="center"><img src="apps/mobile/test/goldens/analytics_activity.png" width="210" alt="LibreRing activity history screen" /><br /><sub>Activity · R12-backed</sub></td>
-    <td align="center"><img src="apps/mobile/test/goldens/analytics_heart.png" width="210" alt="LibreRing heart history screen" /><br /><sub>Heart · R12-backed</sub></td>
+    <td align="center"><img src="docs/media/v1.3.2/heart.png" width="230" alt="Recorded pulse history and the distinction from live measurement" /><br /><sub>Pulse · saved readings</sub></td>
+    <td align="center"><img src="docs/media/v1.3.2/activity.png" width="230" alt="Activity history with steps, firmware distance and an unverified ring energy value" /><br /><sub>Activity · honest energy units</sub></td>
+    <td align="center"><img src="docs/media/v1.3.2/oxygen.png" width="230" alt="Recorded oxygen minimum and maximum ranges" /><br /><sub>Oxygen · firmware ranges</sub></td>
   </tr>
   <tr>
-    <td align="center"><img src="apps/mobile/test/goldens/analytics_sleep.png" width="210" alt="LibreRing sleep history screen" /><br /><sub>Sleep · firmware estimate</sub></td>
-    <td align="center"><img src="apps/mobile/test/goldens/analytics_oxygen.png" width="210" alt="LibreRing oxygen range screen" /><br /><sub>Oxygen · firmware ranges</sub></td>
-    <td align="center"><img src="apps/mobile/test/goldens/analytics_hrv_index.png" width="210" alt="LibreRing opaque HRV firmware index screen" /><br /><sub>Firmware HRV index</sub></td>
-    <td align="center"><img src="apps/mobile/test/goldens/analytics_stress_index.png" width="210" alt="LibreRing opaque stress firmware index screen" /><br /><sub>Firmware stress index</sub></td>
+    <td align="center"><img src="docs/media/v1.3.2/hrv-index.png" width="230" alt="Firmware HRV index with its unverified measurement boundary" /><br /><sub>HRV index · limits made visible</sub></td>
+    <td align="center"><img src="docs/media/v1.3.2/stress-index.png" width="230" alt="Firmware stress index without invented clinical thresholds" /><br /><sub>Stress index · not a diagnosis</sub></td>
+    <td align="center"><img src="docs/media/v1.3.2/trends.png" width="230" alt="Daily trends with inspectable points and missing days preserved" /><br /><sub>Trends · explore recorded days</sub></td>
   </tr>
   <tr>
-    <td align="center"><img src="apps/mobile/test/goldens/analytics_capabilities.png" width="210" alt="LibreRing ring capabilities screen" /><br /><sub>Ring capabilities</sub></td>
-    <td align="center"><img src="apps/mobile/test/goldens/trends.png" width="210" alt="LibreRing trends screen" /><br /><sub>Trends</sub></td>
-    <td align="center"><img src="apps/mobile/test/goldens/journal.png" width="210" alt="LibreRing journal screen" /><br /><sub>Journal</sub></td>
-    <td align="center"><img src="apps/mobile/test/goldens/data_hub.png" width="210" alt="LibreRing local data and export screen" /><br /><sub>Data and deletion</sub></td>
+    <td align="center"><img src="docs/media/v1.3.2/hrv-explained.png" width="230" alt="In-app guide explaining HRV and why the ring's firmware index is different" /><br /><sub>What is HRV?</sub></td>
+    <td align="center"><img src="docs/media/v1.3.2/stress-explained.png" width="230" alt="In-app guide explaining what is and is not known about the stress index" /><br /><sub>What does stress mean?</sub></td>
+    <td align="center"><img src="docs/media/v1.3.2/refresh.png" width="230" alt="Saved-reading refresh feedback, separate from Bluetooth sync" /><br /><sub>Refresh · saved phone data</sub></td>
   </tr>
   <tr>
-    <td align="center"><img src="apps/mobile/test/goldens/cycle_privacy.png" width="210" alt="LibreRing cycle-context privacy screen" /><br /><sub>Cycle privacy</sub></td>
-    <td align="center"><img src="apps/mobile/test/goldens/welcome.png" width="210" alt="LibreRing onboarding screen" /><br /><sub>Welcome</sub></td>
-    <td align="center"><img src="apps/mobile/test/goldens/you.png" width="210" alt="LibreRing You screen" /><br /><sub>You</sub></td>
-    <td align="center"><img src="apps/mobile/test/goldens/product_profile.png" width="210" alt="LibreRing durable profile preferences screen" /><br /><sub>Profile and personal goals</sub></td>
-  </tr>
-  <tr>
-    <td align="center"><img src="apps/mobile/test/goldens/metrics.png" width="210" alt="LibreRing compact vitals overview" /><br /><sub>Vitals overview · concept/demo</sub></td>
-    <td align="center"><img src="apps/mobile/test/goldens/today.png" width="210" alt="LibreRing illustrative Today state" /><br /><sub>Daily conclusion · concept/demo</sub></td>
-    <td align="center"><img src="apps/mobile/test/goldens/product_day_timeline.png" width="210" alt="LibreRing provenance timeline" /><br /><sub>Timeline · concept/demo</sub></td>
-    <td align="center"><img src="apps/mobile/test/goldens/product_activity_sports.png" width="210" alt="LibreRing manual activity picker" /><br /><sub>Activity picker · concept/demo</sub></td>
-  </tr>
-  <tr>
-    <td align="center"><img src="apps/mobile/test/goldens/product_activity_suggestion.png" width="210" alt="LibreRing activity suggestion screen" /><br /><sub>Activity suggestion · concept/demo</sub></td>
-    <td align="center"><img src="apps/mobile/test/goldens/product_temperature_boundary.png" width="210" alt="LibreRing unsupported temperature boundary screen" /><br /><sub>Unsupported temperature</sub></td>
-    <td></td>
-    <td></td>
+    <td align="center"><img src="docs/media/v1.3.2/syncing.png" width="230" alt="Simulated Bluetooth sync progress in the actual app: named stage and elapsed time" /><br /><sub>Sync · simulated progress state</sub></td>
+    <td align="center"><img src="docs/media/v1.3.2/welcome.png" width="230" alt="LibreRing's introduction, which can be replayed from You" /><br /><sub>Welcome · revisit any time</sub></td>
+    <td align="center"><a href="docs/media/v1.3.2/librering-tour.mp4">Watch the screen tour</a><br /><sub>Current version · fictional fixtures</sub></td>
   </tr>
 </table>
 
@@ -172,10 +184,11 @@ values when stored ring data is unavailable.
 
 For an iPhone app that launches from the Home Screen, build profile or release
 mode through Flutter/Xcode; iOS intentionally restricts standalone launch of
-debug Flutter builds.
+debug Flutter builds. A physical iPhone build requires your own Xcode signing
+configuration. Source code is not a pre-signed distributable app.
 
 ```sh
-flutter build ios --release
+flutter run --release --dart-define=LIBRERING_DEMO=false --dart-define=LIBRERING_CAPTURE=false
 ```
 
 ## Verify the project
@@ -190,10 +203,16 @@ python3 run_research.py
 python3 -m unittest discover tests -v
 ```
 
-The Flutter suite includes route, persistence, export/deletion, BLE adapter,
-decoder, compact-screen, accessibility, and golden-render coverage. The scoring
-sandbox uses a fixed seed and fictional data; passing it does not establish
-clinical validity.
+The 1.3.2 mobile release preflight passed **427 tests** and a clean analyzer.
+Coverage includes real pull gestures, automatic post-sync updates, storage
+failures, chart selection, haptic events, accessibility and golden renders.
+Package-level protocol tests are separate; see the [QA record](docs/testing/refresh-haptics-2026-09-07.md)
+for exact commands and results. The scoring sandbox uses fictional data and is
+not production scoring or clinical validation.
+
+An installed release is not proof of every hardware interaction. Real-ring sync
+regression, tactile feel, full physical-device VoiceOver and live-sensor
+acceptance remain separate checks.
 
 ## Project map
 
@@ -209,12 +228,12 @@ clinical validity.
 
 ## Looking for an open smart-ring app?
 
-People often discover this space while searching for an Oura Ring alternative,
-RingConn app, Ultrahuman Ring AIR dashboard, Samsung Galaxy Ring companion,
-WHOOP alternative, Garmin/Fitbit wearable dashboard, or an open-source
-COLMI/QRing app. LibreRing currently connects only to the verified COLMI R12
-path described above. It does **not** connect to Oura, RingConn, Ultrahuman,
-Samsung, WHOOP, Garmin, Fitbit, or Apple Ring devices.
+Looking for an Oura Ring alternative, a RingConn or Ultrahuman Ring AIR
+dashboard, or an open-source COLMI / QRing app—even if your search was
+“Colomi ring”? The compatibility boundary matters: LibreRing currently connects
+only to the verified **COLMI R12** path described above. It does **not** connect
+to Oura, RingConn, Ultrahuman, Samsung Galaxy Ring, WHOOP, Garmin or Fitbit
+devices.
 
 LibreRing is independent and is not affiliated with, authorised by, sponsored
 by, or endorsed by COLMI, QRing, Oura, RingConn, Ultrahuman, Samsung, WHOOP,

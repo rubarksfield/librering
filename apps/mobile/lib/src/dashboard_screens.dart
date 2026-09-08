@@ -13,9 +13,11 @@ import 'daily_guidance.dart';
 import 'localized_copy.dart';
 import 'presentation_data.dart';
 import 'ring_analytics.dart';
+import 'sync_progress.dart';
 import 'storage/preferences_repository.dart';
 import 'ui/app_chrome.dart';
 import 'ui/daily_guidance_card.dart';
+import 'ui/refresh_readings.dart';
 import 'ui/ring_status_help.dart';
 import 'ui/sleep_palette.dart';
 import 'ui/sync_status_card.dart';
@@ -62,10 +64,20 @@ class _RefinedTodayScreenState extends ConsumerState<RefinedTodayScreen>
       return;
     }
     if (ref.read(ringPairingClientProvider) == null) {
+      RingHaptics.action();
       if (mounted) context.push('/pairing/scan');
       return;
     }
+    RingHaptics.action();
     await ref.read(ringPairingProvider.notifier).quickSync();
+    if (!mounted) return;
+    final result = ref.read(ringPairingProvider);
+    if (result.syncProgress?.stage == RingSyncStage.completed) {
+      RingHaptics.success();
+    } else if (result.syncProgress?.stage == RingSyncStage.failed ||
+        result.syncProgress?.stage == RingSyncStage.partial) {
+      RingHaptics.error();
+    }
   }
 
   @override
@@ -113,7 +125,7 @@ class _RefinedTodayScreenState extends ConsumerState<RefinedTodayScreen>
       key: const Key('screen-today'),
       activePath: '/today',
       scrollKey: 'today',
-      onRefresh: demo ? null : _sync,
+      onRefresh: demo ? null : () => refreshSavedRingReadings(context, ref),
       children: [
         _DashboardHeader(
           title: 'Today',
@@ -137,7 +149,7 @@ class _RefinedTodayScreenState extends ConsumerState<RefinedTodayScreen>
         if (data.isLoading && dataset == null)
           const RingLoadingState()
         else if (data.hasError && dataset == null)
-          _ReadError(onRetry: () => ref.invalidate(ringDataProvider))
+          _ReadError(onRetry: () => refreshSavedRingReadings(context, ref))
         else if (analytics == null && pairing.syncInProgress && !demo)
           const RingEmptyState(
             title: 'Your first readings are on their way.',
@@ -304,6 +316,9 @@ class _RefinedVitalsScreenState extends ConsumerState<RefinedVitalsScreen> {
       key: const Key('screen-metrics'),
       activePath: '/vitals',
       scrollKey: 'vitals',
+      onRefresh: ref.watch(isDemoModeProvider)
+          ? null
+          : () => refreshSavedRingReadings(context, ref),
       children: [
         _DashboardHeader(
           title: 'Vitals',
@@ -322,7 +337,7 @@ class _RefinedVitalsScreenState extends ConsumerState<RefinedVitalsScreen> {
         if (data.isLoading && dataset == null)
           const RingLoadingState()
         else if (data.hasError && dataset == null)
-          _ReadError(onRetry: () => ref.invalidate(ringDataProvider))
+          _ReadError(onRetry: () => refreshSavedRingReadings(context, ref))
         else if (analytics == null)
           RingEmptyState(
             title: 'Meet your daily signals.',
@@ -449,8 +464,9 @@ class RefinedTrendsScreen extends ConsumerStatefulWidget {
 }
 
 class _RefinedTrendsScreenState extends ConsumerState<RefinedTrendsScreen> {
+  final _selectionHaptics = RingSelectionHaptics();
   int _days = 30;
-  int? _selected;
+  DateTime? _inspectedDay;
   _TrendMetric _metric = _TrendMetric.sleep;
   String get _name => switch (_metric) {
     _TrendMetric.sleep => 'Sleep',
@@ -530,14 +546,19 @@ class _RefinedTrendsScreenState extends ConsumerState<RefinedTrendsScreen> {
     final priorAverage = prior.isEmpty
         ? null
         : prior.reduce((a, b) => a + b) / prior.length;
-    final inspected = _selected != null && _selected! < values.length
-        ? _selected
+    // Keep the selected calendar day stable when refresh crosses midnight.
+    final inspectedIndex = dates.indexWhere((day) => day == _inspectedDay);
+    final int? inspected = inspectedIndex >= 0 && inspectedIndex < values.length
+        ? inspectedIndex
         : null;
     final shown = inspected == null ? average : values[inspected];
     return RingPageScaffold(
       key: const Key('screen-trends'),
       activePath: '/trends',
       scrollKey: 'trends',
+      onRefresh: ref.watch(isDemoModeProvider)
+          ? null
+          : () => refreshSavedRingReadings(context, ref),
       children: [
         _DashboardHeader(
           title: 'Trends',
@@ -556,7 +577,7 @@ class _RefinedTrendsScreenState extends ConsumerState<RefinedTrendsScreen> {
         if (data.isLoading && data.value == null)
           const RingLoadingState()
         else if (data.hasError && data.value == null)
-          _ReadError(onRetry: () => ref.invalidate(ringDataProvider))
+          _ReadError(onRetry: () => refreshSavedRingReadings(context, ref))
         else if (analytics == null)
           RingEmptyState(
             title: 'Small days. Bigger picture.',
@@ -584,10 +605,15 @@ class _RefinedTrendsScreenState extends ConsumerState<RefinedTrendsScreen> {
                         selected: _metric == metric,
                         showCheckmark: false,
                         selectedColor: LibreRingTokens.sageSoft,
-                        onSelected: (_) => setState(() {
-                          _metric = metric;
-                          _selected = null;
-                        }),
+                        onSelected: (_) {
+                          if (_metric == metric) return;
+                          RingHaptics.selection();
+                          _selectionHaptics.reset();
+                          setState(() {
+                            _metric = metric;
+                            _inspectedDay = null;
+                          });
+                        },
                       ),
                     ),
                   )
@@ -606,10 +632,15 @@ class _RefinedTrendsScreenState extends ConsumerState<RefinedTrendsScreen> {
                 ButtonSegment(value: 90, label: Text('90 days')),
               ],
               selected: {_days},
-              onSelectionChanged: (value) => setState(() {
-                _days = value.first;
-                _selected = null;
-              }),
+              onSelectionChanged: (value) {
+                if (_days == value.first) return;
+                RingHaptics.selection();
+                _selectionHaptics.reset();
+                setState(() {
+                  _days = value.first;
+                  _inspectedDay = null;
+                });
+              },
             ),
           ),
           const SizedBox(height: 22),
@@ -671,7 +702,12 @@ class _RefinedTrendsScreenState extends ConsumerState<RefinedTrendsScreen> {
                         ? (value) =>
                               '${value.round() ~/ 60}h${(value.round() % 60).toString().padLeft(2, '0')}'
                         : _number,
-                    onSelected: (index) => setState(() => _selected = index),
+                    onSelected: (index) {
+                      final day = dates[index];
+                      if (_inspectedDay == day) return;
+                      _selectionHaptics.selection(day);
+                      setState(() => _inspectedDay = day);
+                    },
                   ),
                 const SizedBox(height: 14),
                 Text(
@@ -687,7 +723,11 @@ class _RefinedTrendsScreenState extends ConsumerState<RefinedTrendsScreen> {
                     label: const Text('Explore this day'),
                   ),
                   TextButton(
-                    onPressed: () => setState(() => _selected = null),
+                    onPressed: () {
+                      RingHaptics.selection();
+                      _selectionHaptics.reset();
+                      setState(() => _inspectedDay = null);
+                    },
                     child: const Text('Back to period average'),
                   ),
                 ] else
@@ -855,6 +895,7 @@ class _SyncButton extends StatelessWidget {
     child: TextButton.icon(
       key: const Key('today-quick-sync'),
       style: TextButton.styleFrom(
+        enableFeedback: false,
         backgroundColor: LibreRingTokens.sageSoft,
         padding: const EdgeInsets.symmetric(horizontal: 12),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
@@ -907,10 +948,15 @@ class _SleepHero extends StatelessWidget {
   final DateTime day;
   final int target;
   final VoidCallback onTap;
+  void _open() {
+    RingHaptics.selection();
+    onTap();
+  }
+
   @override
   Widget build(BuildContext context) => Semantics(
     button: true,
-    onTap: onTap,
+    onTap: _open,
     excludeSemantics: true,
     label: sleep == null
         ? 'Sleep, no session this day'
@@ -920,7 +966,8 @@ class _SleepHero extends StatelessWidget {
       borderRadius: BorderRadius.circular(26),
       child: InkWell(
         key: const Key('daily-signal'),
-        onTap: onTap,
+        onTap: _open,
+        enableFeedback: false,
         borderRadius: BorderRadius.circular(26),
         child: Padding(
           padding: const EdgeInsets.all(22),
@@ -1096,11 +1143,16 @@ class _MetricTile extends StatelessWidget {
   final Color color;
   final String? unit;
   final VoidCallback onTap;
+  void _open() {
+    RingHaptics.selection();
+    onTap();
+  }
+
   @override
   Widget build(BuildContext context) => Semantics(
     button: true,
     label: '$title, $value ${unit ?? ''}, $detail',
-    onTap: onTap,
+    onTap: _open,
     excludeSemantics: true,
     child: Material(
       color: LibreRingTokens.surface,
@@ -1109,7 +1161,8 @@ class _MetricTile extends StatelessWidget {
         side: const BorderSide(color: LibreRingTokens.border),
       ),
       child: InkWell(
-        onTap: onTap,
+        onTap: _open,
+        enableFeedback: false,
         borderRadius: BorderRadius.circular(22),
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -1279,17 +1332,23 @@ class _ActionRow extends StatelessWidget {
   final String? value;
   final bool plain;
   final VoidCallback onTap;
+  void _open() {
+    RingHaptics.selection();
+    onTap();
+  }
+
   @override
   Widget build(BuildContext context) => Semantics(
     button: true,
-    onTap: onTap,
+    onTap: _open,
     label: '$title${value == null ? '' : ', $value'}. $subtitle',
     excludeSemantics: true,
     child: Material(
       color: plain ? Colors.transparent : LibreRingTokens.surface,
       borderRadius: BorderRadius.circular(20),
       child: InkWell(
-        onTap: onTap,
+        onTap: _open,
+        enableFeedback: false,
         borderRadius: BorderRadius.circular(20),
         child: Padding(
           padding: EdgeInsets.symmetric(

@@ -73,8 +73,47 @@ void main() {
         CapabilityConfidence.familyCorroborated,
       );
       expect(capabilities.supports(DeviceCapability.rawPacketLogging), isFalse);
+      for (final capability in <DeviceCapability>[
+        DeviceCapability.liveHeartRate,
+        DeviceCapability.liveOxygen,
+      ]) {
+        expect(capabilities.supports(capability), isFalse);
+        expect(
+          capabilities.confidenceFor(capability),
+          CapabilityConfidence.unavailable,
+        );
+      }
     },
   );
+
+  for (final connected in <bool>[false, true]) {
+    test(
+      'live pulse and oxygen remain gated without writes when ${connected ? 'connected' : 'disconnected'}',
+      () async {
+        final transport = _FakeTransport(_completeServices());
+        final driver = ColmiQringDriver(transport);
+        if (connected) {
+          await driver.connect(
+            const RingPeripheral(deviceId: '1', name: 'COLMI R12_A1'),
+          );
+        }
+
+        for (final type in LiveMeasurementType.values) {
+          await expectLater(
+            driver.startLiveMeasurement(type),
+            throwsA(
+              isA<ProtocolEvidenceIncompleteException>().having(
+                (error) => error.message,
+                'acceptance gate',
+                contains('nonzero R12 reading and its completion lifecycle'),
+              ),
+            ),
+          );
+        }
+        expect(transport.writes, isEmpty);
+      },
+    );
+  }
 
   test(
     'sync requires a connection while live and settings remain gated',

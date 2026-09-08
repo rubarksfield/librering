@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:ring_design_system/ring_design_system.dart';
@@ -100,12 +99,14 @@ class RingBottomNav extends StatelessWidget {
                         ][index]
                       : item.$2;
                   void activate() {
-                    HapticFeedback.selectionClick();
                     final shell = StatefulNavigationShell.maybeOf(context);
                     if (shell != null) {
+                      if (shell.currentIndex == index) return;
+                      RingHaptics.selection();
                       shell.goBranch(index);
                     } else if (!selected ||
                         GoRouterState.of(context).uri.path != item.$1) {
+                      RingHaptics.selection();
                       context.go(item.$1);
                     }
                   }
@@ -120,6 +121,7 @@ class RingBottomNav extends StatelessWidget {
                         child: InkWell(
                           key: Key('tab-${item.$2.toLowerCase()}'),
                           borderRadius: BorderRadius.circular(20),
+                          enableFeedback: false,
                           onTap: activate,
                           child: AnimatedContainer(
                             duration: MediaQuery.disableAnimationsOf(context)
@@ -206,7 +208,13 @@ class RingSectionHeader extends StatelessWidget {
         final button = action == null
             ? null
             : TextButton(
-                onPressed: onAction,
+                style: TextButton.styleFrom(enableFeedback: false),
+                onPressed: onAction == null
+                    ? null
+                    : () {
+                        RingHaptics.action();
+                        onAction!();
+                      },
                 child: Text(action!, style: const TextStyle(fontSize: 12)),
               );
         if (constraints.maxWidth < 400 &&
@@ -250,18 +258,24 @@ class RingDaySelector extends StatelessWidget {
         IconButton(
           key: const Key('previous-day'),
           tooltip: 'Previous day',
+          enableFeedback: false,
           onPressed: selected.isAfter(first)
-              ? () => onChanged(
-                  DateTime(selected.year, selected.month, selected.day - 1),
-                )
+              ? () {
+                  RingHaptics.selection();
+                  onChanged(
+                    DateTime(selected.year, selected.month, selected.day - 1),
+                  );
+                }
               : null,
           icon: const Icon(Icons.chevron_left_rounded),
         ),
         Expanded(
           child: TextButton.icon(
             key: const Key('select-day'),
+            style: TextButton.styleFrom(enableFeedback: false),
             icon: const Icon(Icons.calendar_today_outlined, size: 15),
             onPressed: () async {
+              RingHaptics.action();
               final date = await showDatePicker(
                 context: context,
                 initialDate: selected.isBefore(first) ? first : selected,
@@ -269,7 +283,9 @@ class RingDaySelector extends StatelessWidget {
                 lastDate: last,
                 helpText: 'Choose a day',
               );
-              if (date != null) onChanged(date);
+              if (!context.mounted || date == null || date == selected) return;
+              RingHaptics.selection();
+              onChanged(date);
             },
             label: Text(
               '${selected == last ? 'Today, ' : ''}${DateFormat('d MMM').format(selected)}',
@@ -280,10 +296,14 @@ class RingDaySelector extends StatelessWidget {
         IconButton(
           key: const Key('next-day'),
           tooltip: 'Next day',
+          enableFeedback: false,
           onPressed: selected.isBefore(last)
-              ? () => onChanged(
-                  DateTime(selected.year, selected.month, selected.day + 1),
-                )
+              ? () {
+                  RingHaptics.selection();
+                  onChanged(
+                    DateTime(selected.year, selected.month, selected.day + 1),
+                  );
+                }
               : null,
           icon: const Icon(Icons.chevron_right_rounded),
         ),
@@ -377,38 +397,42 @@ Future<void> showRingInfo(
   required String title,
   required String body,
   String closeLabel = 'Got it',
-}) => showModalBottomSheet<void>(
-  context: context,
-  isScrollControlled: true,
-  useSafeArea: true,
-  sheetAnimationStyle: MediaQuery.disableAnimationsOf(context)
-      ? AnimationStyle.noAnimation
-      : null,
-  builder: (context) => Padding(
-    padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
-    child: SingleChildScrollView(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: const TextStyle(
-              fontSize: 26,
-              fontWeight: FontWeight.w500,
-              letterSpacing: -.6,
+  bool hapticsEnabled = true,
+}) {
+  RingHaptics.action(enabled: hapticsEnabled);
+  return showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    useSafeArea: true,
+    sheetAnimationStyle: MediaQuery.disableAnimationsOf(context)
+        ? AnimationStyle.noAnimation
+        : null,
+    builder: (context) => Padding(
+      padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: const TextStyle(
+                fontSize: 26,
+                fontWeight: FontWeight.w500,
+                letterSpacing: -.6,
+              ),
             ),
-          ),
-          const SizedBox(height: 16),
-          Text(body, style: Theme.of(context).textTheme.bodyLarge),
-          const SizedBox(height: 24),
-          LibreRingPrimaryButton(
-            label: closeLabel,
-            icon: Icons.check_rounded,
-            onPressed: () => Navigator.pop(context),
-          ),
-        ],
+            const SizedBox(height: 16),
+            Text(body, style: Theme.of(context).textTheme.bodyLarge),
+            const SizedBox(height: 24),
+            LibreRingPrimaryButton(
+              label: closeLabel,
+              icon: Icons.check_rounded,
+              onPressed: () => Navigator.pop(context),
+            ),
+          ],
+        ),
       ),
     ),
-  ),
-);
+  );
+}
