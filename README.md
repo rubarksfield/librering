@@ -22,6 +22,7 @@
 <p align="center">
   <a href="https://github.com/rubarksfield/librering/releases/tag/v1.3.2">Release 1.3.2</a> ·
   <a href="#quick-start">Quick start</a> ·
+  <a href="#ring-compatibility">Ring compatibility</a> ·
   <a href="#what-the-r12-can-supply">Supported data</a> ·
   <a href="#screen-gallery">Screens</a> ·
   <a href="CHANGELOG.md">Changelog</a> ·
@@ -95,6 +96,32 @@ with a visible **Why this?** explanation. HRV and stress firmware indexes never
 drive those suggestions.
 
 [Full changelog](CHANGELOG.md) · [Refresh and haptics QA](docs/testing/refresh-haptics-2026-09-07.md) · [In-app explanation guide](docs/testing/in-app-explanations-2026-09-05.md)
+
+## Ring compatibility
+
+**Only the maintainer's COLMI R12 has been physically tested with LibreRing.**
+The current app is enabled for its verified firmware, `RT11CR_1.00.09_260424`.
+
+| Ring | LibreRing status |
+| --- | --- |
+| **COLMI R12**, verified firmware above | **Tested** — the current supported path; see the signal limits below |
+| **COLMI R02, R03, R06, R07, R09, R10** — QRing hardware variants | **Promising protocol-family candidates** — not tested or enabled in LibreRing |
+| **Yawell R05, R10, R11** — QRing hardware variants | **Related candidates** — not tested or enabled in LibreRing; Yawell and COLMI model numbers are not interchangeable |
+| Other R12 firmware, QRing rebrands or model variants | **Unverified** — assess the exact hardware and firmware first |
+
+Why these candidates? [Gadgetbridge's Yawell/COLMI documentation](https://gadgetbridge.org/gadgets/rings/yawell/)
+groups them in the related QRing family, and the
+[Colmi R02 Python client](https://github.com/tahnok/colmi_r02_client#compatibility)
+explicitly lists R02, R06 and R10. That makes protocol reuse plausible—not proof
+that this LibreRing release will connect or decode every metric correctly.
+**Driver enablement and device testing are still required.**
+
+Some rings sold under the same COLMI model name have different hardware and
+companion apps. QRing is a useful clue, not a compatibility guarantee. Please
+don't buy an untested ring on the assumption LibreRing already supports it.
+
+Own one of these rings? Help turn a candidate into verified support:
+[compatibility evidence and testing checklist](docs/COMPATIBILITY.md).
 
 ## What the R12 can supply
 

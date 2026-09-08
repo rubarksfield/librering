@@ -16,6 +16,11 @@ evidence, or carefully described device behaviour.
 
 ## Local setup
 
+Interested in another ring? Check the [tested-versus-candidate compatibility
+list](docs/COMPATIBILITY.md) and its privacy-safe reporting checklist first.
+Upstream QRing support is a research lead, not permission to bypass LibreRing's
+current R12 discovery or firmware gates.
+
 ```sh
 git clone https://github.com/rubarksfield/librering.git
 cd librering/apps/mobile
